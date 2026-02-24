@@ -1,0 +1,82 @@
+{% extends 'mobile/base_mobile.html' %}
+{% block title %}Vendors{% endblock %}
+{% block page_title %}Vendors{% endblock %}
+
+{% block topbar_actions %}
+<a href="{{ url_for('add_vendor') }}" class="m-icon-btn accent"><i class="bi bi-plus-lg"></i></a>
+{% endblock %}
+
+{% block content %}
+
+<form method="GET" action="{{ url_for('vendors') }}">
+  <div class="m-searchbar">
+    <i class="bi bi-search"></i>
+    <input type="text" name="search" value="{{ search }}" placeholder="Search vendor..." />
+  </div>
+</form>
+
+<div class="m-section-lbl">{{ vendors|length }} Vendor(s)</div>
+
+{% if vendors %}
+<div class="m-list">
+  {% for v in vendors %}
+  {% set colors = ['#7c3aed','#059669','#2563eb','#d97706','#dc2626'] %}
+  {% set clr = colors[loop.index0 % 5] %}
+  <div class="m-list-item">
+    <div class="m-list-avatar" style="background:{{ clr }};border-radius:12px;">{{ v.name[0]|upper }}</div>
+    <div class="m-list-main">
+      <div class="m-list-title">{{ v.name }}</div>
+      <div class="m-list-sub">{{ v.phone or v.gstin or '—' }}</div>
+    </div>
+    <div style="display:flex;gap:6px;">
+      <a href="{{ url_for('edit_vendor', vendor_id=v.id) }}"
+         class="m-icon-btn" style="width:32px;height:32px;font-size:15px;background:#eff6ff;color:#2563eb;">
+        <i class="bi bi-pencil"></i>
+      </a>
+      <button class="m-icon-btn" style="width:32px;height:32px;font-size:15px;background:#fef2f2;color:#dc2626;border:none;cursor:pointer;"
+              onclick="confirmDel({{ v.id }},'{{ v.name|e }}')">
+        <i class="bi bi-trash"></i>
+      </button>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<div class="m-empty">
+  <i class="bi bi-truck"></i>
+  <p>No vendors yet.</p>
+  <a href="{{ url_for('add_vendor') }}" class="m-btn m-btn-primary" style="width:auto;padding:12px 24px;">
+    <i class="bi bi-plus"></i> Add Vendor
+  </a>
+</div>
+{% endif %}
+
+<!-- Delete Sheet -->
+<div class="m-overlay" id="delSheet">
+  <div class="m-sheet">
+    <div class="m-sheet-handle"></div>
+    <div class="m-sheet-title" style="color:var(--danger);">
+      <i class="bi bi-trash me-2"></i>Delete Vendor?
+    </div>
+    <p style="font-size:14px;color:var(--text-muted);margin-bottom:20px;" id="delBody"></p>
+    <div style="display:flex;gap:10px;">
+      <button class="m-btn m-btn-outline" onclick="document.getElementById('delSheet').classList.remove('open')" style="flex:1;">Cancel</button>
+      <form id="delForm" method="POST" style="flex:2;">
+        <button type="submit" class="m-btn m-btn-danger">Delete</button>
+      </form>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+function confirmDel(id,name){
+  document.getElementById('delBody').innerHTML=`Delete vendor <strong>"${name}"</strong>? This cannot be undone.`;
+  document.getElementById('delForm').action=`/vendors/${id}/delete`;
+  document.getElementById('delSheet').classList.add('open');
+}
+document.getElementById('delSheet').addEventListener('click',function(e){if(e.target===this)this.classList.remove('open');});
+</script>
+{% endblock %}

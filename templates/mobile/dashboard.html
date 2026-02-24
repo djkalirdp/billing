@@ -1,0 +1,277 @@
+{% extends 'mobile/base_mobile.html' %}
+
+{% block title %}Dashboard{% endblock %}
+{% block page_title %}Dashboard{% endblock %}
+
+{% block topbar_actions %}
+<a href="{{ url_for('dashboard') }}" class="m-icon-btn" title="Refresh">
+  <i class="bi bi-arrow-clockwise"></i>
+</a>
+{% endblock %}
+
+{% block head %}
+<style>
+/* Greeting */
+.greet       { padding:12px 14px 2px; font-family:var(--font-head); font-size:17px; font-weight:700; }
+.greet span  { color:var(--accent); }
+.greet-sub   { padding:1px 14px 14px; font-size:13px; color:var(--text-muted); }
+
+/* Quick action grid */
+.quick-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; padding:0 14px 14px; }
+.qc {
+  background:white; border-radius:var(--radius-sm); box-shadow:var(--shadow);
+  padding:14px; display:flex; align-items:center; gap:10px;
+  text-decoration:none; color:var(--text-main);
+  -webkit-tap-highlight-color:transparent; transition:transform .1s;
+}
+.qc:active       { transform:scale(.97); }
+.qc-icon         { width:38px; height:38px; border-radius:10px; display:flex; align-items:center; justify-content:center; font-size:18px; flex-shrink:0; }
+.qc-label        { font-size:13px; font-weight:600; }
+.qc-sub          { font-size:11px; color:var(--text-muted); margin-top:2px; }
+
+/* Chart */
+.chart-wrap   { background:white; border-radius:var(--radius); box-shadow:var(--shadow); margin:0 14px 14px; overflow:hidden; }
+.chart-head   { padding:14px 16px 0; display:flex; align-items:center; justify-content:space-between; }
+.chart-title  { font-family:var(--font-head); font-size:14px; font-weight:700; }
+.chart-tabs   { display:flex; gap:4px; }
+.chart-tab    { padding:5px 12px; border-radius:8px; font-size:12px; font-weight:700; cursor:pointer; border:none; background:#f1f5f9; color:var(--text-muted); transition:all .18s; -webkit-tap-highlight-color:transparent; }
+.chart-tab.on { background:var(--accent); color:white; }
+.chart-body   { position:relative; height:190px; padding:12px 12px 8px; }
+
+/* Pure-CSS spinner (no Bootstrap needed) */
+.css-spin {
+  width:22px; height:22px;
+  border:2.5px solid #c7d2fe;
+  border-top-color:#2563eb;
+  border-radius:50%;
+  animation:csspin .75s linear infinite;
+  flex-shrink:0;
+}
+@keyframes csspin { to { transform:rotate(360deg); } }
+
+.chart-overlay {
+  position:absolute; inset:0;
+  display:flex; align-items:center; justify-content:center;
+  gap:10px; background:white;
+  font-size:13px; color:var(--text-muted);
+}
+.chart-overlay.hidden { display:none; }
+
+/* Low stock banner */
+.stock-warn {
+  margin:0 14px 14px; padding:12px 14px;
+  background:#fffbeb; border:1px solid #fde68a; border-radius:12px;
+  font-size:13px; color:#78350f;
+  display:flex; align-items:center; gap:10px;
+}
+.stock-warn a { margin-left:auto; color:#92400e; font-weight:700; white-space:nowrap; text-decoration:none; }
+</style>
+{% endblock %}
+
+{% block content %}
+
+<!-- Greeting -->
+<div class="greet">
+  {% set h = now.hour %}
+  {% if h < 12 %}Good Morning{% elif h < 17 %}Good Afternoon{% else %}Good Evening{% endif %},
+  <span>{{ username }}!</span>
+</div>
+<div class="greet-sub">{{ now.strftime('%A, %d %B %Y') }}</div>
+
+<!-- KPI tiles — variables: today_sales, total_due, total_profit, low_stock -->
+<div class="m-kpi-grid">
+  <div class="m-kpi">
+    <div class="m-kpi-icon" style="background:#eff6ff;color:#2563eb;">
+      <i class="bi bi-currency-rupee"></i>
+    </div>
+    <div class="m-kpi-val">₹{{ "%.0f"|format(today_sales or 0) }}</div>
+    <div class="m-kpi-lbl">Today's Sales</div>
+  </div>
+  <div class="m-kpi">
+    <div class="m-kpi-icon" style="background:#fef2f2;color:#dc2626;">
+      <i class="bi bi-hourglass-split"></i>
+    </div>
+    <div class="m-kpi-val">₹{{ "%.0f"|format(total_due or 0) }}</div>
+    <div class="m-kpi-lbl">Receivables</div>
+  </div>
+  <div class="m-kpi">
+    <div class="m-kpi-icon" style="background:#ecfdf5;color:#059669;">
+      <i class="bi bi-graph-up-arrow"></i>
+    </div>
+    <div class="m-kpi-val">₹{{ "%.0f"|format(total_profit or 0) }}</div>
+    <div class="m-kpi-lbl">Est. Profit</div>
+  </div>
+  <div class="m-kpi">
+    <div class="m-kpi-icon" style="background:#fef3c7;color:#d97706;">
+      <i class="bi bi-exclamation-triangle"></i>
+    </div>
+    <div class="m-kpi-val">{{ low_stock or 0 }}</div>
+    <div class="m-kpi-lbl">Low Stock</div>
+  </div>
+</div>
+
+<!-- Low stock alert -->
+{% if low_stock and low_stock > 0 %}
+<div class="stock-warn">
+  <i class="bi bi-exclamation-triangle-fill" style="font-size:20px;flex-shrink:0;"></i>
+  <div><strong>{{ low_stock }} item(s)</strong> need restocking soon.</div>
+  <a href="{{ url_for('products') }}">View →</a>
+</div>
+{% endif %}
+
+<!-- Quick Actions -->
+<div class="m-section-lbl">Quick Actions</div>
+<div class="quick-grid">
+  <a href="{{ url_for('billing') }}" class="qc">
+    <div class="qc-icon" style="background:#eff6ff;color:#2563eb;"><i class="bi bi-plus-circle"></i></div>
+    <div><div class="qc-label">New Invoice</div><div class="qc-sub">Create bill</div></div>
+  </a>
+  <a href="{{ url_for('buyers') }}" class="qc">
+    <div class="qc-icon" style="background:#ecfdf5;color:#059669;"><i class="bi bi-people"></i></div>
+    <div><div class="qc-label">Buyers</div><div class="qc-sub">Khata & dues</div></div>
+  </a>
+  <a href="{{ url_for('invoices') }}" class="qc">
+    <div class="qc-icon" style="background:#fef3c7;color:#d97706;"><i class="bi bi-file-text"></i></div>
+    <div><div class="qc-label">Invoices</div><div class="qc-sub">All bills</div></div>
+  </a>
+  <a href="{{ url_for('products') }}" class="qc">
+    <div class="qc-icon" style="background:#f3e8ff;color:#7c3aed;"><i class="bi bi-box-seam"></i></div>
+    <div><div class="qc-label">Stock</div><div class="qc-sub">Products</div></div>
+  </a>
+</div>
+
+<!-- Sales Chart -->
+<div class="chart-wrap">
+  <div class="chart-head">
+    <span class="chart-title">Sales Chart</span>
+    <div class="chart-tabs">
+      <button class="chart-tab on" id="tabW" onclick="loadChart('Weekly',this)">Week</button>
+      <button class="chart-tab"    id="tabM" onclick="loadChart('Monthly',this)">Month</button>
+      <button class="chart-tab"    id="tabY" onclick="loadChart('Yearly',this)">Year</button>
+    </div>
+  </div>
+  <div class="chart-body">
+    <canvas id="salesChart"></canvas>
+
+    <!-- Spinner overlay -->
+    <div class="chart-overlay" id="chartLoader">
+      <div class="css-spin"></div>
+      <span>Loading…</span>
+    </div>
+
+    <!-- No-data / error overlay -->
+    <div class="chart-overlay hidden" id="chartMsg">
+      <div style="text-align:center;">
+        <i class="bi bi-bar-chart" style="font-size:34px;display:block;margin-bottom:8px;opacity:.25;"></i>
+        <span id="chartMsgText">No sales data yet</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<!--
+  Chart.js loaded with onerror fallback.
+  If CDN fails, showChartError is called directly.
+-->
+<script>
+function showChartError(msg) {
+  var loader = document.getElementById('chartLoader');
+  var msgBox = document.getElementById('chartMsg');
+  var msgTxt = document.getElementById('chartMsgText');
+  if (loader) loader.classList.add('hidden');
+  if (msgTxt) msgTxt.textContent = msg || 'Could not load chart';
+  if (msgBox) msgBox.classList.remove('hidden');
+}
+</script>
+<script
+  src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"
+  onerror="showChartError('Chart library failed to load. Check internet connection.')">
+</script>
+<script>
+(function() {
+  var chartInstance = null;
+  var CHART_URL     = "{{ url_for('chart_data') }}";
+
+  // ── load chart data and render ────────────────────────────
+  async function loadChart(mode, btn) {
+    // Tab active state
+    document.querySelectorAll('.chart-tab').forEach(b => b.classList.remove('on'));
+    if (btn) btn.classList.add('on');
+
+    // Show spinner, hide message
+    document.getElementById('chartLoader').classList.remove('hidden');
+    document.getElementById('chartMsg').classList.add('hidden');
+
+    // Guard: Chart.js must be loaded
+    if (typeof Chart === 'undefined') {
+      showChartError('Chart library not available.');
+      return;
+    }
+
+    try {
+      var res = await fetch(CHART_URL + '?mode=' + mode, { credentials: 'same-origin' });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      var d = await res.json();
+
+      // Check empty data
+      if (!d.values || !d.values.length || d.values.every(function(v){ return v === 0; })) {
+        showChartError('No sales data for this period.');
+        return;
+      }
+
+      var canvas = document.getElementById('salesChart');
+      var ctx    = canvas.getContext('2d');
+      if (chartInstance) { chartInstance.destroy(); chartInstance = null; }
+
+      chartInstance = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: d.labels,
+          datasets: [{
+            data           : d.values,
+            backgroundColor: 'rgba(37,99,235,.75)',
+            hoverBackgroundColor: 'rgba(37,99,235,1)',
+            borderRadius   : 6,
+            borderSkipped  : false,
+          }]
+        },
+        options: {
+          responsive        : true,
+          maintainAspectRatio: false,
+          animation         : { duration: 400 },
+          plugins           : { legend: { display: false }, tooltip: {
+            callbacks: { label: function(c){ return ' ₹' + c.raw.toFixed(0); } }
+          }},
+          scales: {
+            x: { grid: { display:false }, ticks: { font:{ size:10 }, color:'#94a3b8' } },
+            y: { grid: { color:'#f1f5f9' }, ticks: {
+              font:{ size:10 }, color:'#94a3b8',
+              callback: function(v){ return '₹'+v; }
+            }}
+          }
+        }
+      });
+
+      // Hide spinner
+      document.getElementById('chartLoader').classList.add('hidden');
+
+    } catch(err) {
+      console.error('Chart error:', err);
+      showChartError('Could not load chart data.');
+    }
+  }
+
+  // Expose to onclick handlers
+  window.loadChart = loadChart;
+
+  // Auto-load on DOMContentLoaded (not 'load') for faster render
+  document.addEventListener('DOMContentLoaded', function() {
+    // Small delay to let page paint first
+    setTimeout(function(){ loadChart('Weekly', null); }, 100);
+  });
+})();
+</script>
+{% endblock %}

@@ -1,0 +1,522 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ action }} Product{% endblock %}
+{% block page_title %}{{ action }} Product{% endblock %}
+
+{% block head %}
+<style>
+  .form-layout {
+    display: grid;
+    grid-template-columns: 1fr 360px;
+    gap: 16px;
+    align-items: start;
+    max-width: 1100px;
+  }
+  @media (max-width: 960px) { .form-layout { grid-template-columns: 1fr; } }
+
+  .section-card {
+    background: white;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+    margin-bottom: 16px;
+  }
+  .section-card-header {
+    padding: 14px 20px;
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: 10px;
+  }
+  .section-card-title {
+    font-family: var(--font-head);
+    font-size: 14px; font-weight: 700;
+    color: var(--text-main);
+  }
+  .section-card-body { padding: 20px; }
+
+  /* Form grid */
+  .form-grid-2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+  }
+  @media (max-width: 600px) { .form-grid-2 { grid-template-columns: 1fr; } }
+
+  .form-group { display: flex; flex-direction: column; gap: 6px; }
+  .form-label {
+    font-size: 11.5px; font-weight: 700;
+    color: var(--text-muted);
+    text-transform: uppercase; letter-spacing: .05em;
+  }
+  .form-label .required { color: #dc2626; margin-left: 2px; }
+
+  .form-input, .form-select {
+    padding: 10px 13px;
+    border: 1.5px solid var(--border);
+    border-radius: 9px;
+    font-family: var(--font-body);
+    font-size: 13.5px;
+    color: var(--text-main);
+    background: #f8fafc;
+    outline: none;
+    transition: border-color .18s, box-shadow .18s, background .18s;
+    width: 100%;
+  }
+  .form-input:focus, .form-select:focus {
+    border-color: var(--accent);
+    background: white;
+    box-shadow: 0 0 0 3px rgba(37,99,235,.1);
+  }
+  .form-input::placeholder { color: #cbd5e1; }
+
+  /* Price input with ₹ prefix */
+  .price-input-wrap { position: relative; }
+  .price-input-wrap .prefix {
+    position: absolute; left: 12px; top: 50%; transform: translateY(-50%);
+    font-weight: 700; color: var(--text-muted); font-size: 14px;
+    pointer-events: none;
+  }
+  .price-input-wrap .form-input { padding-left: 28px; }
+
+  /* WAC Panel */
+  .wac-panel {
+    background: white;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+    position: sticky;
+    top: 0;
+  }
+
+  .wac-header {
+    padding: 14px 18px;
+    border-bottom: 1px solid var(--border);
+    background: #fffbeb;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .wac-title {
+    font-family: var(--font-head);
+    font-size: 13px; font-weight: 700;
+    color: #92400e;
+  }
+
+  /* Current stock display */
+  .current-stock-display {
+    padding: 16px 18px;
+    border-bottom: 1px solid var(--border);
+    display: grid; grid-template-columns: 1fr 1fr; gap: 12px;
+  }
+  .stock-stat {
+    background: #f8fafc;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 12px;
+    text-align: center;
+  }
+  .stock-stat-label { font-size: 10.5px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: .05em; margin-bottom: 4px; }
+  .stock-stat-val   { font-family: var(--font-head); font-size: 22px; font-weight: 800; color: var(--text-main); }
+  .stock-stat-unit  { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+
+  /* Add stock section */
+  .add-stock-section { padding: 16px 18px; }
+  .add-stock-title {
+    font-size: 11px; font-weight: 700;
+    text-transform: uppercase; letter-spacing: .06em;
+    color: var(--text-muted);
+    display: flex; align-items: center; gap: 6px;
+    margin-bottom: 14px;
+    padding-bottom: 10px;
+    border-bottom: 1px dashed var(--border);
+  }
+
+  /* WAC calculation display */
+  .wac-calc {
+    background: #f0fdf4;
+    border: 1px solid #bbf7d0;
+    border-radius: var(--radius-sm);
+    padding: 12px 14px;
+    margin-top: 14px;
+    display: none;
+  }
+  .wac-calc.show { display: block; }
+  .wac-calc-title {
+    font-size: 11px; font-weight: 700; color: #166534;
+    text-transform: uppercase; letter-spacing: .05em;
+    margin-bottom: 8px;
+  }
+  .wac-line {
+    display: flex; justify-content: space-between;
+    font-size: 12.5px; color: #166534; padding: 3px 0;
+  }
+  .wac-line.total {
+    border-top: 1px solid #86efac;
+    margin-top: 6px; padding-top: 8px;
+    font-weight: 700; font-size: 13px;
+  }
+
+  /* Hints */
+  .field-hint {
+    font-size: 11.5px; color: var(--text-muted);
+    margin-top: 4px;
+  }
+
+  /* Action bar */
+  .form-actions {
+    display: flex; gap: 10px;
+    padding: 16px 20px;
+    border-top: 1px solid var(--border);
+    background: #f8fafc;
+  }
+</style>
+{% endblock %}
+
+{% block topbar_actions %}
+<a href="{{ url_for('products') }}" class="btn-outline-custom">
+  <i class="bi bi-arrow-left"></i> Back to Products
+</a>
+{% endblock %}
+
+{% block content %}
+
+<div class="section-title">{{ action }} Product</div>
+<div class="section-sub">
+  {% if action == 'Edit' %}
+    Update product details and add new stock using Weighted Average Cost (WAC) method.
+  {% else %}
+    Add a new product to your inventory.
+  {% endif %}
+</div>
+
+<form method="POST"
+      action="{{ url_for('edit_product', product_id=product.id) if product else url_for('add_product') }}"
+      id="productForm">
+
+  <div class="form-layout">
+
+    <!-- ═══ LEFT: Product Fields ═══════════════════════════════ -->
+    <div>
+
+      <!-- Basic Info -->
+      <div class="section-card">
+        <div class="section-card-header">
+          <i class="bi bi-tag" style="color:var(--accent);"></i>
+          <span class="section-card-title">Product Information</span>
+        </div>
+        <div class="section-card-body">
+
+          <div class="form-group mb-3">
+            <label class="form-label">Product Name <span class="required">*</span></label>
+            <input type="text" name="name" class="form-input"
+                   value="{{ product.name if product else '' }}"
+                   placeholder="e.g. Cement 50kg Bag"
+                   required autofocus />
+          </div>
+
+          <div class="form-grid-2">
+
+            <div class="form-group">
+              <label class="form-label">HSN / SAC Code</label>
+              <input type="text" name="hsn" class="form-input"
+                     value="{{ product.hsn if product else '' }}"
+                     placeholder="e.g. 2523" />
+              <span class="field-hint">4–8 digit harmonized code</span>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">GST Rate (%) <span class="required">*</span></label>
+              <select name="gst_rate" class="form-select" required>
+                {% for rate in [0, 0.1, 0.25, 1, 1.5, 3, 5, 6, 7.5, 9, 12, 14, 18, 28] %}
+                <option value="{{ rate }}"
+                  {% if product and product.gst_rate == rate %}selected
+                  {% elif not product and rate == 18 %}selected{% endif %}>
+                  {{ rate }}%
+                </option>
+                {% endfor %}
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">Unit of Measurement</label>
+              <select name="unit" class="form-select">
+                {% set units = ['Pcs','Kg','Gm','Ltr','Ml','Box','Bag','Bale','Bundle','Can','Carton','Dozen','Drum','Meter','Mm','No','Nos','Pack','Pair','Roll','Set','Sheet','Sqft','Sqm','Tablet','Ton'] %}
+                {% for u in units %}
+                <option value="{{ u }}"
+                  {% if product and product.unit == u %}selected{% endif %}>
+                  {{ u }}
+                </option>
+                {% endfor %}
+              </select>
+            </div>
+
+          </div>
+        </div>
+      </div>
+
+      <!-- Pricing -->
+      <div class="section-card">
+        <div class="section-card-header">
+          <i class="bi bi-currency-rupee" style="color:var(--success);"></i>
+          <span class="section-card-title">Selling Prices</span>
+        </div>
+        <div class="section-card-body">
+          <div class="form-grid-2">
+
+            <div class="form-group">
+              <label class="form-label">Retail Selling Price (₹) <span class="required">*</span></label>
+              <div class="price-input-wrap">
+                <span class="prefix">₹</span>
+                <input type="number" name="selling_price" class="form-input"
+                       value="{{ '%.2f'|format(product.selling_price) if product else '' }}"
+                       step="0.01" min="0" placeholder="0.00" required />
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">Wholesale Price (₹)</label>
+              <div class="price-input-wrap">
+                <span class="prefix">₹</span>
+                <input type="number" name="wholesale_price" class="form-input"
+                       value="{{ '%.2f'|format(product.wholesale_price) if product else '' }}"
+                       step="0.01" min="0" placeholder="0.00" />
+              </div>
+              <span class="field-hint">Used when billing mode is Wholesale</span>
+            </div>
+
+          </div>
+        </div>
+      </div>
+
+      <!-- For New Product: initial stock -->
+      {% if not product %}
+      <div class="section-card">
+        <div class="section-card-header">
+          <i class="bi bi-boxes" style="color:var(--warning);"></i>
+          <span class="section-card-title">Initial Stock Entry</span>
+        </div>
+        <div class="section-card-body">
+          <div class="form-grid-2">
+
+            <div class="form-group">
+              <label class="form-label">Opening Stock Qty</label>
+              <input type="number" name="add_stock" id="addStockInput"
+                     class="form-input"
+                     value="0" step="0.001" min="0"
+                     placeholder="0"
+                     oninput="updateWAC()" />
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">Purchase / Cost Rate (₹)</label>
+              <div class="price-input-wrap">
+                <span class="prefix">₹</span>
+                <input type="number" name="purchase_rate" id="purchaseRateInput"
+                       class="form-input"
+                       value="0" step="0.01" min="0"
+                       placeholder="0.00"
+                       oninput="updateWAC()" />
+              </div>
+              <span class="field-hint">Used for profit calculation</span>
+            </div>
+
+          </div>
+        </div>
+      </div>
+      {% endif %}
+
+    </div><!-- /left -->
+
+    <!-- ═══ RIGHT: WAC Panel (Edit only) / Summary (Add) ═══════ -->
+    <div>
+
+      {% if product %}
+      <!-- WAC Stock Update Panel -->
+      <div class="wac-panel">
+        <div class="wac-header">
+          <i class="bi bi-calculator-fill" style="color:#d97706;"></i>
+          <span class="wac-title">Stock & WAC Update</span>
+        </div>
+
+        <!-- Current stats -->
+        <div class="current-stock-display">
+          <div class="stock-stat">
+            <div class="stock-stat-label">Current Stock</div>
+            <div class="stock-stat-val" id="displayCurrentStock">
+              {{ product.stock_qty }}
+            </div>
+            <div class="stock-stat-unit">{{ product.unit or 'units' }}</div>
+          </div>
+          <div class="stock-stat">
+            <div class="stock-stat-label">Avg Cost Price</div>
+            <div class="stock-stat-val" style="font-size:16px;">
+              ₹ {{ '%.2f'|format(product.rate) }}
+            </div>
+            <div class="stock-stat-unit">per {{ product.unit or 'unit' }}</div>
+          </div>
+        </div>
+
+        <!-- Add new stock -->
+        <div class="add-stock-section">
+          <div class="add-stock-title">
+            <i class="bi bi-plus-circle-fill" style="color:var(--success);"></i>
+            Add New Stock Batch
+          </div>
+
+          <div class="form-group mb-3">
+            <label class="form-label">New Quantity to Add</label>
+            <input type="number" name="add_stock" id="addStockInput"
+                   class="form-input"
+                   value="0" step="0.001" min="0"
+                   placeholder="e.g. 100"
+                   oninput="updateWAC()" />
+            <span class="field-hint">Leave 0 to update prices only</span>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Purchase Rate for New Stock (₹)</label>
+            <div class="price-input-wrap">
+              <span class="prefix">₹</span>
+              <input type="number" name="purchase_rate" id="purchaseRateInput"
+                     class="form-input"
+                     value="0" step="0.01" min="0"
+                     placeholder="0.00"
+                     oninput="updateWAC()" />
+            </div>
+          </div>
+
+          <!-- WAC Preview -->
+          <div class="wac-calc" id="wacCalc">
+            <div class="wac-calc-title">
+              <i class="bi bi-calculator me-1"></i>WAC Calculation Preview
+            </div>
+            <div class="wac-line">
+              <span>Old Stock Value</span>
+              <span id="wacOldVal">₹ 0</span>
+            </div>
+            <div class="wac-line">
+              <span>New Stock Value</span>
+              <span id="wacNewVal">₹ 0</span>
+            </div>
+            <div class="wac-line">
+              <span>Total Qty</span>
+              <span id="wacTotalQty">0</span>
+            </div>
+            <div class="wac-line total">
+              <span>New Avg Cost</span>
+              <span id="wacNewAvg">₹ 0.00</span>
+            </div>
+          </div>
+
+        </div>
+
+        <div style="padding:0 18px 16px;">
+          <div class="field-hint" style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:10px 12px;color:#1e40af;">
+            <i class="bi bi-info-circle me-1"></i>
+            <strong>WAC Formula:</strong> (Old Qty × Old Cost + New Qty × New Cost) ÷ Total Qty
+          </div>
+        </div>
+
+      </div><!-- /wac-panel -->
+
+      {% else %}
+      <!-- Add product summary -->
+      <div class="wac-panel">
+        <div class="wac-header">
+          <i class="bi bi-plus-circle-fill" style="color:#d97706;"></i>
+          <span class="wac-title">New Product Summary</span>
+        </div>
+        <div style="padding:16px 18px;">
+          <div class="wac-calc show" id="wacCalc" style="background:#eff6ff;border-color:#bfdbfe;">
+            <div class="wac-calc-title" style="color:#1e40af;">Initial Stock Preview</div>
+            <div class="wac-line" style="color:#1e40af;">
+              <span>Opening Qty</span>
+              <span id="wacTotalQty">0</span>
+            </div>
+            <div class="wac-line" style="color:#1e40af;">
+              <span>Cost Rate</span>
+              <span id="wacNewAvg">₹ 0.00</span>
+            </div>
+            <div class="wac-line total" style="color:#1e40af;border-color:#93c5fd;">
+              <span>Total Value</span>
+              <span id="wacOldVal">₹ 0.00</span>
+            </div>
+          </div>
+
+          <div class="field-hint mt-3" style="background:#ecfdf5;border:1px solid #a7f3d0;border-radius:8px;padding:10px 12px;color:#065f46;">
+            <i class="bi bi-check-circle me-1"></i>
+            Cost price is used to calculate estimated profit on the dashboard.
+          </div>
+        </div>
+      </div>
+      {% endif %}
+
+    </div><!-- /right -->
+
+  </div><!-- /form-layout -->
+
+  <!-- Form Actions -->
+  <div class="section-card" style="max-width:1100px;">
+    <div class="form-actions">
+      <button type="submit" class="btn-primary-custom" id="submitBtn">
+        <i class="bi bi-save2"></i>
+        {{ 'Update Product' if product else 'Save Product' }}
+      </button>
+      <a href="{{ url_for('products') }}" class="btn-outline-custom">
+        <i class="bi bi-x"></i> Cancel
+      </a>
+      {% if product %}
+      <div class="ms-auto" style="font-size:12px;color:var(--text-muted);display:flex;align-items:center;gap:6px;">
+        <i class="bi bi-shield-check text-success"></i>
+        Stock will be updated using Weighted Average Cost method
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+</form>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  // WAC data from server (for edit mode)
+  const currentStock = {{ product.stock_qty | float if product else 0 }};
+  const currentCost  = {{ product.rate | float if product else 0 }};
+  const isEdit = {{ 'true' if product else 'false' }};
+
+  function updateWAC() {
+    const addQty  = parseFloat(document.getElementById('addStockInput')?.value)  || 0;
+    const newRate = parseFloat(document.getElementById('purchaseRateInput')?.value) || 0;
+    const calc    = document.getElementById('wacCalc');
+
+    if (isEdit) {
+      if (addQty <= 0 || newRate <= 0) {
+        calc.classList.remove('show');
+        return;
+      }
+      calc.classList.add('show');
+
+      const oldVal   = currentStock * currentCost;
+      const newVal   = addQty * newRate;
+      const totalQty = currentStock + addQty;
+      const newAvg   = totalQty > 0 ? (oldVal + newVal) / totalQty : 0;
+
+      document.getElementById('wacOldVal').textContent   = '₹ ' + oldVal.toFixed(2);
+      document.getElementById('wacNewVal').textContent   = '₹ ' + newVal.toFixed(2);
+      document.getElementById('wacTotalQty').textContent = totalQty.toFixed(3).replace(/\.?0+$/, '');
+      document.getElementById('wacNewAvg').textContent   = '₹ ' + newAvg.toFixed(2);
+
+    } else {
+      // Add mode: show simple preview
+      const totalVal = addQty * newRate;
+      document.getElementById('wacTotalQty').textContent = addQty || '0';
+      document.getElementById('wacNewAvg').textContent   = '₹ ' + newRate.toFixed(2);
+      document.getElementById('wacOldVal').textContent   = '₹ ' + totalVal.toFixed(2);
+    }
+  }
+
+  // Submit button loading state
+  document.getElementById('productForm').addEventListener('submit', function() {
+    const btn = document.getElementById('submitBtn');
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Saving...';
+    btn.disabled = true;
+  });
+</script>
+{% endblock %}

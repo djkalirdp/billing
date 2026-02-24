@@ -1,0 +1,446 @@
+{% extends 'base.html' %}
+
+{% block title %}Invoices & Reports{% endblock %}
+{% block page_title %}Invoices & Reports{% endblock %}
+
+{% block head %}
+<style>
+  /* Filter Bar */
+  .filter-bar {
+    background: white;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 16px 20px;
+    margin-bottom: 20px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    align-items: flex-end;
+  }
+  .filter-group { display: flex; flex-direction: column; gap: 5px; }
+  .filter-group label {
+    font-size: 11px; font-weight: 700;
+    color: var(--text-muted);
+    text-transform: uppercase; letter-spacing: .05em;
+  }
+  .filter-group input,
+  .filter-group select {
+    padding: 8px 12px;
+    border: 1.5px solid var(--border);
+    border-radius: 8px;
+    font-family: var(--font-body);
+    font-size: 13px;
+    color: var(--text-main);
+    background: #f8fafc;
+    outline: none;
+    min-width: 150px;
+    transition: border-color .18s;
+  }
+  .filter-group input:focus,
+  .filter-group select:focus {
+    border-color: var(--accent);
+    background: white;
+    box-shadow: 0 0 0 3px rgba(37,99,235,.08);
+  }
+  .filter-actions { display: flex; gap: 8px; align-items: flex-end; margin-left: auto; }
+
+  /* Summary strip */
+  .summary-strip {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+    margin-bottom: 20px;
+  }
+  .summary-strip-card {
+    background: white;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 14px 18px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .strip-icon {
+    width: 40px; height: 40px;
+    border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 18px; flex-shrink: 0;
+  }
+  .strip-label { font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing:.05em; }
+  .strip-val   { font-family: var(--font-head); font-size: 18px; font-weight: 800; color: var(--text-main); }
+
+  /* Table */
+  .inv-table-wrap {
+    background: white;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+  }
+  .table-toolbar {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 20px;
+    border-bottom: 1px solid var(--border);
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+  .table-toolbar-title {
+    font-family: var(--font-head);
+    font-size: 14px; font-weight: 700;
+    color: var(--text-main);
+  }
+  .table-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+  .table-custom tbody .cancelled-row { opacity: .5; }
+  .cancelled-row td { text-decoration: line-through; }
+
+  /* Action buttons in table */
+  .action-btn {
+    padding: 4px 10px;
+    border-radius: 6px;
+    font-size: 12px; font-weight: 600;
+    border: none; cursor: pointer;
+    display: inline-flex; align-items: center; gap: 4px;
+    text-decoration: none;
+    transition: all .18s;
+  }
+  .action-btn-view   { background: #eff6ff; color: #2563eb; }
+  .action-btn-view:hover   { background: #2563eb; color: white; }
+  .action-btn-pdf    { background: #ecfdf5; color: #059669; }
+  .action-btn-pdf:hover    { background: #059669; color: white; }
+  .action-btn-cancel { background: #fef2f2; color: #dc2626; }
+  .action-btn-cancel:hover { background: #dc2626; color: white; }
+
+  /* Search box */
+  .search-box {
+    display: flex; align-items: center;
+    border: 1.5px solid var(--border);
+    border-radius: 8px;
+    background: #f8fafc;
+    overflow: hidden;
+    transition: border-color .18s;
+  }
+  .search-box:focus-within { border-color: var(--accent); background: white; }
+  .search-box i { padding: 0 10px; color: var(--text-muted); font-size: 14px; }
+  .search-box input {
+    border: none; background: transparent;
+    padding: 8px 10px 8px 0;
+    font-family: var(--font-body); font-size: 13px;
+    color: var(--text-main); outline: none; width: 180px;
+  }
+
+  /* Pagination */
+  .pagination-bar {
+    padding: 12px 20px;
+    border-top: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between;
+    font-size: 12.5px; color: var(--text-muted);
+  }
+
+  /* Empty state */
+  .empty-state {
+    padding: 60px 20px;
+    text-align: center;
+    color: var(--text-muted);
+  }
+  .empty-state i { font-size: 48px; display: block; margin-bottom: 12px; opacity: .3; }
+  .empty-state p { font-size: 14px; }
+
+  /* Modal */
+  .modal-overlay {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,.4);
+    z-index: 5000;
+    display: flex; align-items: center; justify-content: center;
+    opacity: 0; pointer-events: none;
+    transition: opacity .2s;
+  }
+  .modal-overlay.open { opacity: 1; pointer-events: all; }
+  .modal-box {
+    background: white;
+    border-radius: var(--radius);
+    padding: 28px;
+    max-width: 400px; width: 90%;
+    box-shadow: var(--shadow-lg);
+    transform: translateY(20px);
+    transition: transform .2s;
+  }
+  .modal-overlay.open .modal-box { transform: translateY(0); }
+  .modal-title {
+    font-family: var(--font-head);
+    font-size: 17px; font-weight: 700; margin-bottom: 10px; color: var(--text-main);
+  }
+  .modal-body { font-size: 14px; color: var(--text-muted); margin-bottom: 20px; line-height: 1.6; }
+  .modal-footer { display: flex; gap: 10px; justify-content: flex-end; }
+</style>
+{% endblock %}
+
+{% block topbar_actions %}
+<a href="{{ url_for('export_summary_pdf', start=start, end=end) }}"
+   class="btn-outline-custom" target="_blank">
+  <i class="bi bi-file-pdf"></i> Summary PDF
+</a>
+<a href="{{ url_for('export_detailed_pdf', start=start, end=end) }}"
+   class="btn-outline-custom" target="_blank">
+  <i class="bi bi-file-earmark-zip"></i> Detailed PDF
+</a>
+{% endblock %}
+
+{% block content %}
+
+<!-- ── Filter Bar ─────────────────────────────────────────────── -->
+<form method="GET" action="{{ url_for('invoices') }}" id="filterForm">
+  <div class="filter-bar">
+
+    <div class="filter-group">
+      <label>From Date</label>
+      <input type="date" name="start" value="{{ start }}" />
+    </div>
+
+    <div class="filter-group">
+      <label>To Date</label>
+      <input type="date" name="end" value="{{ end }}" />
+    </div>
+
+    <div class="filter-group">
+      <label>Buyer</label>
+      <select name="buyer_id">
+        <option value="">All Buyers</option>
+        {% for b in buyers %}
+          <option value="{{ b.id }}" {% if selected_buyer == b.id %}selected{% endif %}>
+            {{ b.name }}
+          </option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div class="filter-group">
+      <label>Search</label>
+      <input type="text" name="search" value="{{ search }}"
+             placeholder="Invoice no. or buyer..." />
+    </div>
+
+    <div class="filter-actions">
+      <button type="submit" class="btn-primary-custom">
+        <i class="bi bi-search"></i> Filter
+      </button>
+      <a href="{{ url_for('invoices') }}" class="btn-outline-custom">
+        <i class="bi bi-x"></i> Reset
+      </a>
+    </div>
+
+  </div>
+</form>
+
+<!-- ── Summary Strip ──────────────────────────────────────────── -->
+<div class="summary-strip">
+  <div class="summary-strip-card">
+    <div class="strip-icon" style="background:#eff6ff;color:#2563eb;">
+      <i class="bi bi-file-earmark-text"></i>
+    </div>
+    <div>
+      <div class="strip-label">Total Invoices</div>
+      {% set ns = namespace(active=0) %}
+      {% for inv in invoices %}{% if 'CANCELLED' not in inv.invoice_no %}{% set ns.active = ns.active + 1 %}{% endif %}{% endfor %}
+      <div class="strip-val">{{ ns.active }}</div>
+    </div>
+  </div>
+  <div class="summary-strip-card">
+    <div class="strip-icon" style="background:#ecfdf5;color:#059669;">
+      <i class="bi bi-currency-rupee"></i>
+    </div>
+    <div>
+      <div class="strip-label">Taxable Value</div>
+      <div class="strip-val">₹ {{ "%.0f" | format(total_taxable) }}</div>
+    </div>
+  </div>
+  <div class="summary-strip-card">
+    <div class="strip-icon" style="background:#fef3c7;color:#d97706;">
+      <i class="bi bi-graph-up"></i>
+    </div>
+    <div>
+      <div class="strip-label">Grand Total</div>
+      <div class="strip-val">₹ {{ "%.0f" | format(total_grand) }}</div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Invoices Table ─────────────────────────────────────────── -->
+<div class="inv-table-wrap">
+
+  <div class="table-toolbar">
+    <span class="table-toolbar-title">
+      <i class="bi bi-list-ul me-2"></i>
+      Invoice History
+      <span style="font-size:12px;color:var(--text-muted);font-family:var(--font-body);font-weight:400;margin-left:6px;">
+        ({{ invoices | length }} records)
+      </span>
+    </span>
+  </div>
+
+  {% if invoices %}
+  <div style="overflow-x:auto;">
+    <table class="table-custom" id="invTable">
+      <thead>
+        <tr>
+          <th>Invoice No.</th>
+          <th>Date</th>
+          <th>Buyer</th>
+          <th>GSTIN</th>
+          <th style="text-align:right;">Taxable (₹)</th>
+          <th style="text-align:right;">GST (₹)</th>
+          <th style="text-align:right;">Total (₹)</th>
+          <th>Mode</th>
+          <th style="text-align:center;">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for inv in invoices %}
+        {% set is_cancelled = 'CANCELLED' in inv.invoice_no %}
+        <tr class="{{ 'cancelled-row' if is_cancelled else '' }}">
+
+          <td>
+            <span style="font-family:var(--font-head);font-size:13px;font-weight:700;color:var(--accent);">
+              {{ inv.invoice_no }}
+            </span>
+            {% if is_cancelled %}
+            <span class="badge-custom badge-danger" style="margin-left:4px;font-size:10px;">Cancelled</span>
+            {% endif %}
+          </td>
+
+          <td style="color:var(--text-muted);font-size:13px;">
+            {{ inv.invoice_date }}
+          </td>
+
+          <td>
+            <div style="font-weight:600;font-size:13px;">{{ inv.buyer_name }}</div>
+          </td>
+
+          <td style="font-size:12px;color:var(--text-muted);">
+            {{ inv.buyer_gstin or '—' }}
+          </td>
+
+          <td style="text-align:right;font-size:13px;">
+            {{ "%.2f" | format(inv.taxable_value) }}
+          </td>
+
+          <td style="text-align:right;font-size:13px;color:var(--text-muted);">
+            {{ "%.2f" | format(inv.total_gst) }}
+          </td>
+
+          <td style="text-align:right;">
+            <strong style="font-size:13.5px;">₹ {{ "%.2f" | format(inv.grand_total) }}</strong>
+          </td>
+
+          <td>
+            <span class="badge-custom
+              {% if inv.get('payment_mode','') == 'Credit' %}badge-warning
+              {% elif inv.get('payment_mode','') == 'Cash' %}badge-success
+              {% else %}badge-info{% endif %}">
+              {{ inv.get('payment_mode','—') }}
+            </span>
+          </td>
+
+          <td style="text-align:center;">
+            <div style="display:flex;gap:5px;justify-content:center;flex-wrap:wrap;">
+
+              <a href="{{ url_for('view_invoice', invoice_id=inv.id) }}"
+                 class="action-btn action-btn-view">
+                <i class="bi bi-eye"></i> View
+              </a>
+
+              {% if not is_cancelled %}
+              <a href="{{ url_for('download_invoice_pdf', invoice_id=inv.id) }}"
+                 class="action-btn action-btn-pdf" target="_blank">
+                <i class="bi bi-file-pdf"></i> PDF
+              </a>
+
+              {% if user_role == 'Admin' %}
+              <button class="action-btn action-btn-cancel"
+                      onclick="confirmCancel({{ inv.id }}, '{{ inv.invoice_no }}')">
+                <i class="bi bi-x-circle"></i> Cancel
+              </button>
+              {% endif %}
+              {% endif %}
+
+            </div>
+          </td>
+
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="pagination-bar">
+    <span>Showing {{ invoices | length }} invoice(s) from <strong>{{ start }}</strong> to <strong>{{ end }}</strong></span>
+    <span>GST Total: <strong>₹ {{ "%.2f" | format(total_gst) }}</strong></span>
+  </div>
+
+  {% else %}
+  <div class="empty-state">
+    <i class="bi bi-file-earmark-x"></i>
+    <p>No invoices found for the selected filters.</p>
+    <a href="{{ url_for('billing') }}" class="btn-primary-custom mt-3" style="display:inline-flex;">
+      <i class="bi bi-plus"></i> Create First Invoice
+    </a>
+  </div>
+  {% endif %}
+
+</div>
+
+<!-- ── Cancel Confirmation Modal ─────────────────────────────── -->
+<div class="modal-overlay" id="cancelModal">
+  <div class="modal-box">
+    <div class="modal-title">
+      <i class="bi bi-exclamation-triangle-fill text-warning me-2"></i>
+      Cancel Invoice?
+    </div>
+    <div class="modal-body" id="cancelModalBody">
+      Are you sure you want to cancel this invoice?
+      Stock will be restored automatically.
+    </div>
+    <div class="modal-footer">
+      <button class="btn-outline-custom" onclick="closeModal()">
+        <i class="bi bi-x"></i> No, Keep It
+      </button>
+      <form id="cancelForm" method="POST">
+        <button type="submit" class="btn-danger-custom">
+          <i class="bi bi-x-circle"></i> Yes, Cancel
+        </button>
+      </form>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+  function confirmCancel(id, invNo) {
+    document.getElementById('cancelModalBody').innerHTML =
+      `Are you sure you want to cancel invoice <strong>${invNo}</strong>?<br><br>
+       <span style="color:#059669;"><i class="bi bi-check-circle"></i> Stock will be automatically restored.</span>`;
+    document.getElementById('cancelForm').action = `/invoices/${id}/cancel`;
+    document.getElementById('cancelModal').classList.add('open');
+  }
+
+  function closeModal() {
+    document.getElementById('cancelModal').classList.remove('open');
+  }
+
+  // Close modal on overlay click
+  document.getElementById('cancelModal').addEventListener('click', function(e) {
+    if (e.target === this) closeModal();
+  });
+
+  // Live search filter on table
+  document.addEventListener('DOMContentLoaded', () => {
+    const searchInput = document.querySelector('input[name="search"]');
+    if (searchInput) {
+      searchInput.addEventListener('keypress', e => {
+        if (e.key === 'Enter') document.getElementById('filterForm').submit();
+      });
+    }
+  });
+</script>
+{% endblock %}

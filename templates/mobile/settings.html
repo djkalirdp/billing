@@ -1,0 +1,261 @@
+{% extends 'mobile/base_mobile.html' %}
+{% block title %}Settings{% endblock %}
+{% block page_title %}Settings{% endblock %}
+
+{% block head %}
+<style>
+.m-accordion-item {
+  background: white;
+  border-radius: 14px;
+  box-shadow: var(--shadow);
+  margin: 0 14px 10px;
+  overflow: hidden;
+}
+.m-accordion-head {
+  padding: 15px 16px;
+  display: flex; align-items: center; gap: 12px;
+  cursor: pointer; border: none; background: none;
+  width: 100%; text-align: left;
+  transition: background .1s;
+}
+.m-accordion-head:active { background: #f8fafc; }
+.m-accordion-icon {
+  width: 38px; height: 38px; border-radius: 11px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 17px; flex-shrink: 0;
+}
+.m-accordion-lbl { flex: 1; font-weight: 700; font-size: 14.5px; }
+.m-accordion-chevron { color: var(--text-muted); font-size: 16px; transition: transform .25s; }
+.m-accordion-body { padding: 0 16px 16px; border-top: 1px solid var(--border); display: none; }
+.m-accordion-body.open { display: block; padding-top: 14px; }
+.m-accordion-chevron.open { transform: rotate(180deg); }
+</style>
+{% endblock %}
+
+{% block content %}
+
+<div class="m-section-lbl" style="padding-top:6px;">App Settings</div>
+
+<!-- ══ FORM 1: Company + Bank + Invoice ══════════════════════ -->
+<form method="POST" action="{{ url_for('settings') }}" id="settingsForm">
+
+  <!-- Company Info -->
+  <div class="m-accordion-item">
+    <button type="button" class="m-accordion-head" onclick="toggleAcc(this)">
+      <div class="m-accordion-icon" style="background:#eff6ff;color:#2563eb;">
+        <i class="bi bi-building"></i>
+      </div>
+      <span class="m-accordion-lbl">Company Info</span>
+      <i class="bi bi-chevron-down m-accordion-chevron"></i>
+    </button>
+    <div class="m-accordion-body open">
+      {% set c = settings.get('company_info', {}) %}
+      <div class="m-fg">
+        <label class="m-label">Company Name</label>
+        <input type="text" name="name" class="m-input"
+               value="{{ c.get('name','') }}" placeholder="Your Business Name" />
+      </div>
+      <div class="m-fg">
+        <label class="m-label">GSTIN</label>
+        <input type="text" name="gstin" class="m-input" maxlength="15"
+               value="{{ c.get('gstin','') }}" placeholder="27AAAPZ2323J1ZN" />
+      </div>
+      <div class="m-fg">
+        <label class="m-label">PAN</label>
+        <input type="text" name="pan" class="m-input" maxlength="10"
+               value="{{ c.get('pan','') }}" placeholder="AAAPZ2323J" />
+      </div>
+      <div class="m-fg">
+        <label class="m-label">Address Line 1</label>
+        <input type="text" name="address_line1" class="m-input"
+               value="{{ c.get('address_line1','') }}" placeholder="Shop / Street" />
+      </div>
+      <div class="m-fg">
+        <label class="m-label">Address Line 2</label>
+        <input type="text" name="address_line2" class="m-input"
+               value="{{ c.get('address_line2','') }}" placeholder="City, PIN" />
+      </div>
+      <div class="m-fg">
+        <label class="m-label">State</label>
+        <select name="state" class="m-select">
+          {% set states = ['Andaman & Nicobar','Andhra Pradesh','Arunachal Pradesh','Assam','Bihar','Chandigarh','Chhattisgarh','Dadra & Nagar Haveli','Daman & Diu','Delhi','Goa','Gujarat','Haryana','Himachal Pradesh','Jammu & Kashmir','Jharkhand','Karnataka','Kerala','Ladakh','Lakshadweep','Madhya Pradesh','Maharashtra','Manipur','Meghalaya','Mizoram','Nagaland','Odisha','Puducherry','Punjab','Rajasthan','Sikkim','Tamil Nadu','Telangana','Tripura','Uttar Pradesh','Uttarakhand','West Bengal'] %}
+          {% for s in states %}
+          <option value="{{ s }}" {% if c.get('state') == s %}selected{% endif %}>{{ s }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="m-fg">
+        <label class="m-label">Phone</label>
+        <input type="tel" name="phone" class="m-input"
+               value="{{ c.get('phone','') }}" placeholder="9876543210" />
+      </div>
+      <div class="m-fg">
+        <label class="m-label">Email</label>
+        <input type="email" name="email" class="m-input"
+               value="{{ c.get('email','') }}" placeholder="info@company.com" />
+      </div>
+      <div class="m-fg">
+        <label class="m-label">Website</label>
+        <input type="text" name="website" class="m-input"
+               value="{{ c.get('website','') }}" placeholder="www.yourcompany.com" />
+      </div>
+    </div>
+  </div>
+
+  <!-- Bank Details -->
+  <div class="m-accordion-item">
+    <button type="button" class="m-accordion-head" onclick="toggleAcc(this)">
+      <div class="m-accordion-icon" style="background:#ecfdf5;color:#059669;">
+        <i class="bi bi-bank"></i>
+      </div>
+      <span class="m-accordion-lbl">Bank Details</span>
+      <i class="bi bi-chevron-down m-accordion-chevron"></i>
+    </button>
+    <div class="m-accordion-body">
+      {% set b = settings.get('bank_details', {}) %}
+      <div class="m-fg">
+        <label class="m-label">Bank Name</label>
+        <input type="text" name="bank_name" class="m-input"
+               value="{{ b.get('bank_name','') }}" placeholder="State Bank of India" />
+      </div>
+      <div class="m-fg">
+        <label class="m-label">Account Number</label>
+        <input type="text" name="account_no" class="m-input"
+               value="{{ b.get('account_no','') }}" placeholder="1234567890123456" />
+      </div>
+      <div class="m-fg">
+        <label class="m-label">IFSC Code</label>
+        <input type="text" name="ifsc_code" class="m-input"
+               value="{{ b.get('ifsc_code','') }}" placeholder="SBIN0001234" />
+      </div>
+      <div class="m-fg">
+        <label class="m-label">Branch</label>
+        <input type="text" name="branch" class="m-input"
+               value="{{ b.get('branch','') }}" placeholder="Mumbai Main Branch" />
+      </div>
+    </div>
+  </div>
+
+  <!-- Invoice Settings -->
+  <div class="m-accordion-item">
+    <button type="button" class="m-accordion-head" onclick="toggleAcc(this)">
+      <div class="m-accordion-icon" style="background:#f3e8ff;color:#7c3aed;">
+        <i class="bi bi-receipt"></i>
+      </div>
+      <span class="m-accordion-lbl">Invoice Settings</span>
+      <i class="bi bi-chevron-down m-accordion-chevron"></i>
+    </button>
+    <div class="m-accordion-body">
+      {% set inv = settings.get('invoice_settings', {}) %}
+      <div class="m-fg">
+        <label class="m-label">Invoice Prefix</label>
+        <input type="text" name="invoice_prefix" class="m-input"
+               value="{{ inv.get('invoice_prefix','INV-') }}" placeholder="INV-" />
+        <span style="font-size:12px;color:var(--text-muted);margin-top:4px;display:block;">
+          e.g. <strong>INV-</strong> → INV-0001 | <strong>GST-</strong> → GST-0001
+        </span>
+      </div>
+      <div class="m-fg">
+        <label class="m-label">Terms & Conditions</label>
+        <textarea name="terms_and_conditions" class="m-input" rows="3"
+                  style="resize:none;"
+                  placeholder="1. Goods once sold will not be taken back.">{{ inv.get('terms_and_conditions','') }}</textarea>
+      </div>
+    </div>
+  </div>
+
+  <!-- Save Button -->
+  <div style="padding:4px 14px 12px;">
+    <button type="submit" class="m-btn m-btn-primary" id="saveBtn">
+      <i class="bi bi-save2"></i> Save All Settings
+    </button>
+  </div>
+
+</form>
+<!-- ══ END main settings form ══ -->
+
+
+<!-- ══ FORM 2: Logo (SEPARATE — never nest inside another form) ══ -->
+<form method="POST" action="{{ url_for('upload_logo') }}"
+      enctype="multipart/form-data" id="logoForm">
+  <div class="m-accordion-item" style="margin-bottom:10px;">
+    <button type="button" class="m-accordion-head" onclick="toggleAcc(this)">
+      <div class="m-accordion-icon" style="background:#fef3c7;color:#d97706;">
+        <i class="bi bi-image"></i>
+      </div>
+      <span class="m-accordion-lbl">Company Logo</span>
+      <i class="bi bi-chevron-down m-accordion-chevron"></i>
+    </button>
+    <div class="m-accordion-body">
+      {% if settings.get('company_info',{}).get('logo_path') %}
+      <div style="margin-bottom:14px;">
+        <label class="m-label">Current Logo</label>
+        <img src="/{{ settings.company_info.logo_path }}"
+             style="max-height:70px;max-width:180px;border-radius:10px;border:1px solid var(--border);" alt="Logo" />
+      </div>
+      {% endif %}
+      <label style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;
+                    border:2px dashed var(--border);border-radius:14px;padding:24px;
+                    background:#f8fafc;cursor:pointer;" for="logoFile">
+        <i class="bi bi-cloud-arrow-up" style="font-size:30px;color:var(--text-muted);"></i>
+        <span style="font-size:13px;color:var(--text-muted);text-align:center;">
+          Tap to upload logo<br><small>(PNG, JPG — max 2MB)</small>
+        </span>
+      </label>
+      <input type="file" id="logoFile" name="logo" accept=".png,.jpg,.jpeg"
+             style="display:none;" onchange="uploadLogo(this)" />
+      <div id="uploadStatus"
+           style="display:none;margin-top:10px;font-size:13px;color:var(--text-muted);
+                  align-items:center;gap:8px;">
+        <span class="spinner-border spinner-border-sm"></span> Uploading...
+      </div>
+    </div>
+  </div>
+</form>
+<!-- ══ END logo form ══ -->
+
+
+<!-- Users Link -->
+<div class="m-accordion-item">
+  <a href="{{ url_for('manage_users') }}" class="m-accordion-head" style="text-decoration:none;color:inherit;">
+    <div class="m-accordion-icon" style="background:#f1f5f9;color:var(--text-muted);">
+      <i class="bi bi-people"></i>
+    </div>
+    <span class="m-accordion-lbl">Manage Users</span>
+    <i class="bi bi-chevron-right m-accordion-chevron"></i>
+  </a>
+</div>
+
+<!-- Logout -->
+<div style="padding:16px 14px 24px;">
+  <a href="{{ url_for('logout') }}" class="m-btn"
+     style="background:#fef2f2;color:#dc2626;border:1.5px solid #fecaca;">
+    <i class="bi bi-box-arrow-right"></i> Logout
+  </a>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+function toggleAcc(btn) {
+  const body    = btn.nextElementSibling;
+  const chevron = btn.querySelector('.m-accordion-chevron');
+  const isOpen  = body.classList.contains('open');
+  body.classList.toggle('open', !isOpen);
+  chevron.classList.toggle('open', !isOpen);
+}
+
+function uploadLogo(input) {
+  if (!input.files || !input.files[0]) return;
+  document.getElementById('uploadStatus').style.display = 'flex';
+  document.getElementById('logoForm').submit();
+}
+
+document.getElementById('settingsForm').addEventListener('submit', function () {
+  const btn = document.getElementById('saveBtn');
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Saving...';
+  btn.disabled = true;
+});
+</script>
+{% endblock %}

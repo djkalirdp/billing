@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no"/>
+  <meta name="theme-color" content="#1e40af"/>
+  <title>Server Error</title>
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=DM+Sans:wght@400;600&display=swap" rel="stylesheet"/>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0;}
+    body{
+      font-family:'DM Sans',sans-serif;
+      background:#0f172a;color:white;
+      min-height:100vh;display:flex;flex-direction:column;
+      align-items:center;justify-content:center;
+      padding:28px;text-align:center;
+    }
+    .code{
+      font-family:'Syne',sans-serif;font-size:90px;font-weight:800;
+      line-height:1;color:#dc2626;
+      text-shadow:0 0 60px rgba(220,38,38,.4);
+      margin-bottom:12px;
+    }
+    .title{font-family:'Syne',sans-serif;font-size:22px;font-weight:700;margin-bottom:10px;}
+    .sub{font-size:14px;color:#94a3b8;line-height:1.6;max-width:300px;margin:0 auto 32px;}
+    a{
+      display:inline-flex;align-items:center;gap:8px;
+      padding:14px 28px;border-radius:14px;
+      background:#2563eb;color:white;text-decoration:none;
+      font-weight:700;font-size:15px;
+      box-shadow:0 4px 20px rgba(37,99,235,.35);
+    }
+  </style>
+</head>
+<body>
+  <div class="code">500</div>
+  <div class="title">Something Went Wrong</div>
+  <p class="sub">An internal error occurred. Please try again or contact your administrator.</p>
+  <a href="/dashboard">← Go to Dashboard</a>
+</body>
+</html>

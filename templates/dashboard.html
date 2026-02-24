@@ -1,0 +1,405 @@
+{% extends 'base.html' %}
+
+{% block title %}Dashboard{% endblock %}
+{% block page_title %}Business Dashboard{% endblock %}
+
+{% block head %}
+<style>
+  /* KPI Cards */
+  .kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+    margin-bottom: 24px;
+  }
+  @media (max-width: 1100px) { .kpi-grid { grid-template-columns: repeat(2,1fr); } }
+  @media (max-width: 600px)  { .kpi-grid { grid-template-columns: 1fr; } }
+
+  .kpi-card {
+    background: white;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 20px;
+    position: relative;
+    overflow: hidden;
+    transition: transform var(--transition), box-shadow var(--transition);
+    cursor: default;
+  }
+  .kpi-card:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow);
+  }
+  .kpi-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 3px;
+    background: var(--kpi-color);
+  }
+  .kpi-icon {
+    width: 44px; height: 44px;
+    border-radius: 12px;
+    background: var(--kpi-bg);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 20px;
+    color: var(--kpi-color);
+    margin-bottom: 14px;
+  }
+  .kpi-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    margin-bottom: 6px;
+  }
+  .kpi-value {
+    font-family: var(--font-head);
+    font-size: 26px;
+    font-weight: 800;
+    color: var(--text-main);
+    line-height: 1;
+  }
+  .kpi-sub {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-top: 6px;
+  }
+
+  /* Chart card */
+  .chart-card {
+    background: white;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 20px;
+    margin-bottom: 24px;
+  }
+  .chart-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 20px;
+  }
+  .chart-title {
+    font-family: var(--font-head);
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--text-main);
+  }
+  .chart-sub { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+
+  .mode-btns { display: flex; gap: 6px; }
+  .mode-btn {
+    padding: 6px 14px;
+    border: 1.5px solid var(--border);
+    border-radius: 8px;
+    background: white;
+    font-family: var(--font-body);
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: all var(--transition);
+  }
+  .mode-btn.active, .mode-btn:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: var(--accent-light);
+  }
+
+  #salesChart { max-height: 300px; }
+
+  /* Bottom grid */
+  .bottom-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+  }
+  @media (max-width: 900px) { .bottom-grid { grid-template-columns: 1fr; } }
+
+  /* Low stock table */
+  .low-stock-badge {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 2px 10px;
+    border-radius: 99px;
+    font-size: 11.5px;
+    font-weight: 600;
+    background: #fef3c7;
+    color: #92400e;
+  }
+  .stock-critical { background: #fee2e2; color: #7f1d1d; }
+
+  /* Quick actions */
+  .quick-action {
+    display: flex; align-items: center; gap: 14px;
+    padding: 14px 16px;
+    border-radius: var(--radius-sm);
+    border: 1.5px solid var(--border);
+    text-decoration: none;
+    color: var(--text-main);
+    transition: all var(--transition);
+    margin-bottom: 10px;
+  }
+  .quick-action:hover {
+    border-color: var(--accent);
+    background: var(--accent-light);
+    color: var(--accent);
+    transform: translateX(4px);
+  }
+  .quick-action .qa-icon {
+    width: 38px; height: 38px;
+    border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 18px;
+    flex-shrink: 0;
+  }
+  .quick-action .qa-title { font-weight: 600; font-size: 13.5px; }
+  .quick-action .qa-sub   { font-size: 12px; color: var(--text-muted); }
+</style>
+{% endblock %}
+
+{% block topbar_actions %}
+<button class="btn-outline-custom btn-sm" onclick="refreshDashboard()">
+  <i class="bi bi-arrow-clockwise"></i> Refresh
+</button>
+{% endblock %}
+
+{% block content %}
+
+<div class="section-title">Good {{ 'Morning' if now.hour < 12 else ('Afternoon' if now.hour < 17 else 'Evening') }}, {{ username }} 👋</div>
+<div class="section-sub">Here's what's happening with your business today.</div>
+
+<!-- KPI Cards -->
+<div class="kpi-grid">
+
+  <div class="kpi-card" style="--kpi-color:#059669; --kpi-bg:#ecfdf5;">
+    <div class="kpi-icon"><i class="bi bi-currency-rupee"></i></div>
+    <div class="kpi-label">Today's Sales</div>
+    <div class="kpi-value" id="kpiSales">₹ {{ "%.0f"|format(today_sales) }}</div>
+    <div class="kpi-sub">All invoices today</div>
+  </div>
+
+  <div class="kpi-card" style="--kpi-color:#dc2626; --kpi-bg:#fef2f2;">
+    <div class="kpi-icon"><i class="bi bi-hourglass-split"></i></div>
+    <div class="kpi-label">Total Receivables</div>
+    <div class="kpi-value" id="kpiDue">₹ {{ "%.0f"|format(total_due) }}</div>
+    <div class="kpi-sub">Outstanding dues</div>
+  </div>
+
+  <div class="kpi-card" style="--kpi-color:#7c3aed; --kpi-bg:#ede9fe;">
+    <div class="kpi-icon"><i class="bi bi-graph-up-arrow"></i></div>
+    <div class="kpi-label">Est. Net Profit</div>
+    <div class="kpi-value" id="kpiProfit">₹ {{ "%.0f"|format(total_profit) }}</div>
+    <div class="kpi-sub">Selling − Cost price</div>
+  </div>
+
+  <div class="kpi-card" style="--kpi-color:#d97706; --kpi-bg:#fffbeb;">
+    <div class="kpi-icon"><i class="bi bi-exclamation-triangle"></i></div>
+    <div class="kpi-label">Low Stock Alert</div>
+    <div class="kpi-value" id="kpiStock">{{ low_stock }}</div>
+    <div class="kpi-sub">Items with stock ≤ 10</div>
+  </div>
+
+</div>
+
+<!-- Sales Chart -->
+<div class="chart-card">
+  <div class="chart-header">
+    <div>
+      <div class="chart-title">Sales Trend</div>
+      <div class="chart-sub">Revenue over time</div>
+    </div>
+    <div class="mode-btns">
+      <button class="mode-btn active" onclick="loadChart('Weekly', this)">Weekly</button>
+      <button class="mode-btn"       onclick="loadChart('Monthly', this)">Monthly</button>
+      <button class="mode-btn"       onclick="loadChart('Yearly', this)">Yearly</button>
+    </div>
+  </div>
+  <canvas id="salesChart"></canvas>
+</div>
+
+<!-- Bottom Grid -->
+<div class="bottom-grid">
+
+  <!-- Low Stock Products -->
+  <div class="card">
+    <div class="card-header-custom">
+      <span class="card-title"><i class="bi bi-exclamation-triangle me-2 text-warning"></i>Low Stock Items</span>
+      {% if user_role == 'Admin' %}
+      <a href="{{ url_for('products') }}" class="btn-outline-custom" style="padding:5px 12px;font-size:12px;">
+        View All
+      </a>
+      {% endif %}
+    </div>
+    <div style="overflow:hidden;">
+      {% if low_stock == 0 %}
+        <div style="padding:32px;text-align:center;color:var(--text-muted);">
+          <i class="bi bi-check-circle fs-2 text-success d-block mb-2"></i>
+          All stock levels are healthy!
+        </div>
+      {% else %}
+        <div id="lowStockTable">
+          <div style="padding:20px;text-align:center;color:var(--text-muted);font-size:13px;">
+            <i class="bi bi-arrow-clockwise me-1"></i> Loading...
+          </div>
+        </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Quick Actions -->
+  <div class="card">
+    <div class="card-header-custom">
+      <span class="card-title"><i class="bi bi-lightning me-2 text-warning"></i>Quick Actions</span>
+    </div>
+    <div class="card-body-custom">
+
+      <a href="{{ url_for('billing') }}" class="quick-action">
+        <div class="qa-icon" style="background:#eff6ff;color:#2563eb;">
+          <i class="bi bi-plus-circle"></i>
+        </div>
+        <div>
+          <div class="qa-title">Create New Invoice</div>
+          <div class="qa-sub">Start billing a customer</div>
+        </div>
+        <i class="bi bi-chevron-right ms-auto" style="color:var(--text-muted);"></i>
+      </a>
+
+      <a href="{{ url_for('buyers') }}" class="quick-action">
+        <div class="qa-icon" style="background:#ecfdf5;color:#059669;">
+          <i class="bi bi-people"></i>
+        </div>
+        <div>
+          <div class="qa-title">Buyers / Khata</div>
+          <div class="qa-sub">View outstanding dues</div>
+        </div>
+        <i class="bi bi-chevron-right ms-auto" style="color:var(--text-muted);"></i>
+      </a>
+
+      <a href="{{ url_for('invoices') }}" class="quick-action">
+        <div class="qa-icon" style="background:#fef3c7;color:#d97706;">
+          <i class="bi bi-file-earmark-text"></i>
+        </div>
+        <div>
+          <div class="qa-title">View Invoices</div>
+          <div class="qa-sub">Reports & history</div>
+        </div>
+        <i class="bi bi-chevron-right ms-auto" style="color:var(--text-muted);"></i>
+      </a>
+
+      {% if user_role == 'Admin' %}
+      <a href="{{ url_for('products') }}" class="quick-action">
+        <div class="qa-icon" style="background:#f3e8ff;color:#7c3aed;">
+          <i class="bi bi-box-seam"></i>
+        </div>
+        <div>
+          <div class="qa-title">Manage Products</div>
+          <div class="qa-sub">Add stock / update prices</div>
+        </div>
+        <i class="bi bi-chevron-right ms-auto" style="color:var(--text-muted);"></i>
+      </a>
+      {% endif %}
+
+    </div>
+  </div>
+
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script>
+  let chart = null;
+
+  // Chart.js defaults
+  Chart.defaults.font.family = "'DM Sans', sans-serif";
+  Chart.defaults.color = '#64748b';
+
+  async function loadChart(mode, btn) {
+    // Toggle active button
+    document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
+    if (btn) btn.classList.add('active');
+
+    const res  = await fetch(`/dashboard/chart-data?mode=${mode}`);
+    const data = await res.json();
+
+    const ctx = document.getElementById('salesChart').getContext('2d');
+
+    if (chart) chart.destroy();
+
+    chart = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels: data.labels,
+        datasets: [{
+          label: 'Sales (₹)',
+          data: data.values,
+          backgroundColor: data.values.map(v =>
+            v > 0 ? 'rgba(37,99,235,0.15)' : 'rgba(226,232,240,0.5)'
+          ),
+          borderColor: data.values.map(v =>
+            v > 0 ? '#2563eb' : '#e2e8f0'
+          ),
+          borderWidth: 2,
+          borderRadius: 8,
+          borderSkipped: false,
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: true,
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            callbacks: {
+              label: ctx => ` ₹ ${Number(ctx.raw).toLocaleString('en-IN', {maximumFractionDigits:0})}`
+            }
+          }
+        },
+        scales: {
+          y: {
+            beginAtZero: true,
+            grid: { color: '#f1f5f9' },
+            ticks: {
+              callback: v => '₹' + Number(v).toLocaleString('en-IN', {notation:'compact'})
+            }
+          },
+          x: { grid: { display: false } }
+        }
+      }
+    });
+  }
+
+  // Load low stock table
+  async function loadLowStock() {
+    {% if low_stock > 0 and user_role == 'Admin' %}
+    const res  = await fetch('/products/search?q=');
+    const data = await res.json();
+    const low  = data.filter(p => p.stock <= 10);
+    let html = '<table class="table-custom" style="width:100%;">';
+    html += '<thead><tr><th>Product</th><th>Unit</th><th>Stock</th></tr></thead><tbody>';
+    low.forEach(p => {
+      const cls = p.stock <= 5 ? 'stock-critical' : '';
+      html += `<tr>
+        <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${p.name}</td>
+        <td>${p.unit || '—'}</td>
+        <td><span class="low-stock-badge ${cls}">${p.stock}</span></td>
+      </tr>`;
+    });
+    html += '</tbody></table>';
+    const el = document.getElementById('lowStockTable');
+    if (el) el.innerHTML = html;
+    {% endif %}
+  }
+
+  function refreshDashboard() {
+    location.reload();
+  }
+
+  document.addEventListener('DOMContentLoaded', () => {
+    loadChart('Weekly', document.querySelector('.mode-btn'));
+    loadLowStock();
+  });
+</script>
+{% endblock %}

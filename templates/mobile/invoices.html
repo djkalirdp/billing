@@ -1,0 +1,176 @@
+{% extends 'mobile/base_mobile.html' %}
+{% block title %}Invoices{% endblock %}
+{% block page_title %}Invoices{% endblock %}
+
+{% block topbar_actions %}
+<button class="m-icon-btn" onclick="openFilter()"><i class="bi bi-funnel"></i></button>
+<a href="{{ url_for('export_summary_pdf') }}" class="m-icon-btn"><i class="bi bi-file-pdf"></i></a>
+{% endblock %}
+
+{% block head %}
+<style>
+.m-inv-card{
+  background:white;border-radius:14px;box-shadow:var(--shadow);
+  margin:0 14px 10px;overflow:hidden;
+  border-left:4px solid var(--accent);
+  text-decoration:none;color:inherit;display:block;
+  transition:transform .1s;
+}
+.m-inv-card:active{transform:scale(.99);}
+.m-inv-card.cancelled{border-left-color:#e2e8f0;opacity:.6;}
+.m-inv-header{padding:12px 14px 8px;display:flex;align-items:flex-start;justify-content:space-between;gap:8px;}
+.m-inv-no{font-family:var(--font-head);font-size:14px;font-weight:700;}
+.m-inv-buyer{font-size:13px;color:var(--text-muted);margin-top:2px;}
+.m-inv-amount{font-family:var(--font-head);font-size:16px;font-weight:800;color:var(--accent);white-space:nowrap;}
+.m-inv-footer{padding:8px 14px;background:#f8fafc;border-top:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;}
+.m-inv-date{font-size:12px;color:var(--text-muted);}
+.m-inv-actions{display:flex;gap:6px;}
+.m-filter-row{display:flex;gap:8px;overflow-x:auto;padding:6px 14px 10px;-webkit-overflow-scrolling:touch;}
+.m-filter-chip{
+  padding:7px 14px;border-radius:99px;white-space:nowrap;
+  font-size:13px;font-weight:600;border:1.5px solid var(--border);
+  background:white;color:var(--text-muted);cursor:pointer;flex-shrink:0;
+  transition:all .18s;
+}
+.m-filter-chip.active{background:var(--accent);color:white;border-color:var(--accent);}
+.m-stats-strip{display:flex;gap:10px;padding:0 14px 12px;overflow-x:auto;}
+.m-stat-pill{
+  background:white;border-radius:10px;padding:10px 14px;
+  box-shadow:var(--shadow);white-space:nowrap;flex-shrink:0;
+}
+.m-stat-pill-val{font-family:var(--font-head);font-size:17px;font-weight:800;}
+.m-stat-pill-lbl{font-size:11px;color:var(--text-muted);margin-top:2px;}
+</style>
+{% endblock %}
+
+{% block content %}
+
+<!-- Stats strip -->
+{% set ns = namespace(active=0, total_gst=0, total_grand=0) %}
+{% for inv in invoices %}
+  {% if 'CANCELLED' not in inv.invoice_no %}
+    {% set ns.active      = ns.active      + 1 %}
+    {% set ns.total_gst   = ns.total_gst   + (inv.total_gst   or 0) %}
+    {% set ns.total_grand = ns.total_grand + (inv.grand_total  or 0) %}
+  {% endif %}
+{% endfor %}
+{% set total_gst   = ns.total_gst %}
+{% set total_grand = ns.total_grand %}
+
+<div class="m-stats-strip">
+  <div class="m-stat-pill">
+    <div class="m-stat-pill-val">{{ ns.active }}</div>
+    <div class="m-stat-pill-lbl">Invoices</div>
+  </div>
+  <div class="m-stat-pill">
+    <div class="m-stat-pill-val" style="color:var(--accent);">₹{{ "%.0f"|format(total_grand) }}</div>
+    <div class="m-stat-pill-lbl">Grand Total</div>
+  </div>
+  <div class="m-stat-pill">
+    <div class="m-stat-pill-val" style="color:var(--success);">₹{{ "%.0f"|format(total_gst) }}</div>
+    <div class="m-stat-pill-lbl">GST Collected</div>
+  </div>
+</div>
+
+<!-- Search -->
+<form method="GET" action="{{ url_for('invoices') }}">
+  <div class="m-searchbar">
+    <i class="bi bi-search"></i>
+    <input type="text" name="search" value="{{ search }}" placeholder="Search invoice / buyer..." />
+    <input type="hidden" name="start"    value="{{ start }}" />
+    <input type="hidden" name="end"      value="{{ end }}" />
+    <input type="hidden" name="buyer_id" value="{{ buyer_id }}" />
+  </div>
+</form>
+
+<!-- Filter chips (payment mode quick filter) -->
+<div class="m-filter-row">
+  <a href="{{ url_for('invoices', start=start, end=end) }}" class="m-filter-chip {% if not search and not buyer_id %}active{% endif %}">All</a>
+  <a href="{{ url_for('invoices', start=start, end=end, search='Cash') }}" class="m-filter-chip">Cash</a>
+  <a href="{{ url_for('invoices', start=start, end=end, search='UPI') }}" class="m-filter-chip">UPI</a>
+  <a href="{{ url_for('invoices', start=start, end=end, search='Credit') }}" class="m-filter-chip">Credit</a>
+</div>
+
+<!-- Invoice list -->
+{% if invoices %}
+  {% for inv in invoices %}
+  {% set cancelled = 'CANCELLED' in inv.invoice_no %}
+  <a href="{{ url_for('view_invoice', invoice_id=inv.id) }}"
+     class="m-inv-card {{ 'cancelled' if cancelled }}">
+    <div class="m-inv-header">
+      <div>
+        <div class="m-inv-no">
+          {% if cancelled %}<i class="bi bi-x-circle-fill text-danger me-1"></i>{% endif %}
+          {{ inv.invoice_no }}
+        </div>
+        <div class="m-inv-buyer">{{ inv.buyer_name }}</div>
+      </div>
+      <div class="m-inv-amount">₹{{ "%.0f"|format(inv.grand_total) }}</div>
+    </div>
+    <div class="m-inv-footer">
+      <span class="m-inv-date"><i class="bi bi-calendar3 me-1"></i>{{ inv.invoice_date }}</span>
+      <div style="display:flex;align-items:center;gap:6px;">
+        <span class="m-badge m-badge-info" style="font-size:10px;">{{ inv.payment_mode or 'Cash' }}</span>
+        {% if cancelled %}
+        <span class="m-badge m-badge-danger" style="font-size:10px;">Cancelled</span>
+        {% endif %}
+        <a href="{{ url_for('download_invoice_pdf', invoice_id=inv.id) }}"
+           onclick="event.stopPropagation();"
+           class="m-icon-btn" style="width:28px;height:28px;font-size:14px;background:#ecfdf5;color:#059669;">
+          <i class="bi bi-file-pdf"></i>
+        </a>
+      </div>
+    </div>
+  </a>
+  {% endfor %}
+{% else %}
+<div class="m-empty">
+  <i class="bi bi-file-text"></i>
+  <p>No invoices found{% if search %} for "{{ search }}"{% endif %}.</p>
+  <a href="{{ url_for('billing') }}" class="m-btn m-btn-primary" style="width:auto;padding:12px 24px;">
+    <i class="bi bi-plus"></i> Create First Invoice
+  </a>
+</div>
+{% endif %}
+
+<!-- Filter Bottom Sheet -->
+<div class="m-overlay" id="filterSheet">
+  <div class="m-sheet">
+    <div class="m-sheet-handle"></div>
+    <div class="m-sheet-title">Filter Invoices</div>
+    <form method="GET" action="{{ url_for('invoices') }}">
+      <div class="m-fg">
+        <label class="m-label">From Date</label>
+        <input type="date" name="start" class="m-input" value="{{ start }}" />
+      </div>
+      <div class="m-fg">
+        <label class="m-label">To Date</label>
+        <input type="date" name="end" class="m-input" value="{{ end }}" />
+      </div>
+      <div class="m-fg">
+        <label class="m-label">Buyer</label>
+        <select name="buyer_id" class="m-select">
+          <option value="">All Buyers</option>
+          {% for b in buyers %}
+          <option value="{{ b.id }}" {% if buyer_id|string == b.id|string %}selected{% endif %}>{{ b.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div style="display:flex;gap:10px;margin-top:6px;">
+        <a href="{{ url_for('invoices') }}" class="m-btn m-btn-outline" style="flex:1;">Clear</a>
+        <button type="submit" class="m-btn m-btn-primary" style="flex:2;">Apply Filter</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+function openFilter(){ document.getElementById('filterSheet').classList.add('open'); }
+document.getElementById('filterSheet').addEventListener('click', function(e){
+  if(e.target===this) this.classList.remove('open');
+});
+</script>
+{% endblock %}

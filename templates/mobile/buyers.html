@@ -1,0 +1,100 @@
+{% extends 'mobile/base_mobile.html' %}
+{% block title %}Buyers{% endblock %}
+{% block page_title %}Buyers{% endblock %}
+
+{% block topbar_actions %}
+<a href="{{ url_for('add_buyer') }}" class="m-icon-btn accent"><i class="bi bi-person-plus"></i></a>
+{% endblock %}
+
+{% block head %}
+<style>
+.due-banner{
+  margin:0 14px 12px;padding:12px 14px;
+  background:#fef2f2;border:1px solid #fecaca;border-radius:12px;
+  display:flex;align-items:center;gap:10px;font-size:13px;color:#7f1d1d;
+}
+.buyer-avatar{
+  width:42px;height:42px;border-radius:13px;
+  display:flex;align-items:center;justify-content:center;
+  font-family:var(--font-head);font-size:18px;font-weight:800;
+  color:white;flex-shrink:0;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+
+<!-- Stats -->
+{% set total_due = namespace(val=0) %}
+{% set due_count = namespace(val=0) %}
+{% for b in buyers %}
+  {% if b.balance > 0 %}
+    {% set total_due.val = total_due.val + b.balance %}
+    {% set due_count.val = due_count.val + 1 %}
+  {% endif %}
+{% endfor %}
+
+<div class="m-kpi-grid">
+  <div class="m-kpi">
+    <div class="m-kpi-icon" style="background:#eff6ff;color:#2563eb;"><i class="bi bi-people"></i></div>
+    <div class="m-kpi-val">{{ buyers|length }}</div>
+    <div class="m-kpi-lbl">Total Buyers</div>
+  </div>
+  <div class="m-kpi">
+    <div class="m-kpi-icon" style="background:#fef2f2;color:#dc2626;"><i class="bi bi-currency-rupee"></i></div>
+    <div class="m-kpi-val" style="font-size:17px;">₹{{ "%.0f"|format(total_due.val) }}</div>
+    <div class="m-kpi-lbl">Outstanding</div>
+  </div>
+</div>
+
+{% if due_count.val > 0 %}
+<div class="due-banner">
+  <i class="bi bi-exclamation-circle-fill" style="font-size:18px;flex-shrink:0;"></i>
+  <span><strong>{{ due_count.val }} buyer(s)</strong> have pending dues</span>
+</div>
+{% endif %}
+
+<!-- Search -->
+<form method="GET" action="{{ url_for('buyers') }}">
+  <div class="m-searchbar">
+    <i class="bi bi-search"></i>
+    <input type="text" name="search" value="{{ search }}" placeholder="Search buyer..." />
+  </div>
+</form>
+
+<div class="m-section-lbl">{{ buyers|length }} Buyer(s){% if search %} · "{{ search }}"{% endif %}</div>
+
+{% if buyers %}
+<div class="m-list">
+  {% for b in buyers %}
+  {% set colors = ['#2563eb','#059669','#7c3aed','#d97706','#dc2626'] %}
+  {% set clr = colors[loop.index0 % 5] %}
+  <a href="{{ url_for('buyer_ledger', buyer_id=b.id) }}" class="m-list-item">
+    <div class="buyer-avatar" style="background:{{ clr }};">{{ b.name[0]|upper }}</div>
+    <div class="m-list-main">
+      <div class="m-list-title">{{ b.name }}</div>
+      <div class="m-list-sub">{{ b.phone or b.state or '—' }}</div>
+    </div>
+    <div class="m-list-right">
+      {% if b.balance > 0 %}
+      <div class="m-list-amount text-danger">₹{{ "%.0f"|format(b.balance) }}</div>
+      <div style="font-size:11px;color:var(--danger);">Due</div>
+      {% else %}
+      <span class="m-badge m-badge-success"><i class="bi bi-check-circle me-1"></i>Clear</span>
+      {% endif %}
+    </div>
+    <i class="bi bi-chevron-right m-list-chevron"></i>
+  </a>
+  {% endfor %}
+</div>
+{% else %}
+<div class="m-empty">
+  <i class="bi bi-people"></i>
+  <p>No buyers found{% if search %} for "{{ search }}"{% endif %}.</p>
+  <a href="{{ url_for('add_buyer') }}" class="m-btn m-btn-primary" style="width:auto;padding:12px 24px;">
+    <i class="bi bi-person-plus"></i> Add Buyer
+  </a>
+</div>
+{% endif %}
+
+{% endblock %}

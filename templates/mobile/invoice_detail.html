@@ -1,0 +1,230 @@
+{% extends 'mobile/base_mobile.html' %}
+{% block title %}{{ invoice.invoice_no }}{% endblock %}
+{% block page_title %}Invoice Detail{% endblock %}
+
+{% block topbar_actions %}
+<a href="{{ url_for('invoices') }}" class="m-icon-btn"><i class="bi bi-arrow-left"></i></a>
+<a href="{{ url_for('download_invoice_pdf', invoice_id=invoice.id) }}" class="m-icon-btn accent">
+  <i class="bi bi-file-pdf"></i>
+</a>
+{% endblock %}
+
+{% block head %}
+<style>
+.inv-hero{
+  margin:0 14px 12px;
+  background:linear-gradient(135deg,#2563eb,#4f46e5);
+  border-radius:var(--radius);padding:20px;color:white;
+}
+.inv-hero-no{font-family:var(--font-head);font-size:20px;font-weight:800;}
+.inv-hero-buyer{font-size:15px;opacity:.85;margin-top:4px;}
+.inv-hero-amount{font-family:var(--font-head);font-size:32px;font-weight:800;margin-top:12px;}
+.inv-hero-sub{font-size:12px;opacity:.7;margin-top:2px;}
+.inv-hero-badges{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;}
+.inv-hero-badge{
+  padding:4px 12px;border-radius:99px;font-size:12px;font-weight:700;
+  background:rgba(255,255,255,.2);color:white;
+}
+.party-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:0 14px 12px;}
+.party-card{background:white;border-radius:12px;box-shadow:var(--shadow);padding:12px;}
+.party-label{font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px;}
+.party-name{font-weight:700;font-size:13px;margin-bottom:2px;}
+.party-info{font-size:11.5px;color:var(--text-muted);line-height:1.5;}
+.m-item-line{
+  padding:12px 14px;border-bottom:1px solid var(--border);
+  display:flex;align-items:flex-start;justify-content:space-between;gap:10px;
+}
+.m-item-line:last-child{border-bottom:none;}
+.item-name{font-weight:600;font-size:14px;}
+.item-detail{font-size:12px;color:var(--text-muted);margin-top:2px;}
+.item-amount{font-family:var(--font-head);font-size:15px;font-weight:700;color:var(--accent);white-space:nowrap;}
+.words-box{
+  background:#eff6ff;border-radius:12px;
+  margin:0 14px 12px;padding:12px 14px;
+  font-size:13px;font-style:italic;color:#1e40af;
+  border-left:3px solid var(--accent);
+}
+</style>
+{% endblock %}
+
+{% block content %}
+
+{% if 'CANCELLED' in invoice.invoice_no %}
+<div class="m-flash m-flash-danger" style="margin:0 14px 12px;">
+  <i class="bi bi-x-circle-fill"></i>
+  This invoice is CANCELLED. Stock has been restored.
+</div>
+{% endif %}
+
+<!-- Hero Card -->
+<div class="inv-hero">
+  <div class="inv-hero-no">{{ invoice.invoice_no }}</div>
+  <div class="inv-hero-buyer">{{ invoice.buyer_name }}</div>
+  <div class="inv-hero-amount">₹{{ "%.2f"|format(invoice.grand_total) }}</div>
+  <div class="inv-hero-sub">{{ invoice.invoice_date }}</div>
+  <div class="inv-hero-badges">
+    <span class="inv-hero-badge"><i class="bi bi-wallet me-1"></i>{{ invoice.payment_mode or 'Cash' }}</span>
+    {% if invoice.total_igst and invoice.total_igst > 0 %}
+    <span class="inv-hero-badge">IGST</span>
+    {% else %}
+    <span class="inv-hero-badge">CGST+SGST</span>
+    {% endif %}
+    {% if invoice.order_ref %}
+    <span class="inv-hero-badge">Ref: {{ invoice.order_ref }}</span>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Parties -->
+<div class="party-grid">
+  <div class="party-card">
+    <div class="party-label">Seller</div>
+    <div class="party-name">{{ settings.get('company_info',{}).get('name','—') }}</div>
+    <div class="party-info">
+      GSTIN: {{ settings.get('company_info',{}).get('gstin','—') }}<br/>
+      {{ settings.get('company_info',{}).get('state','—') }}
+    </div>
+  </div>
+  <div class="party-card">
+    <div class="party-label">Buyer</div>
+    <div class="party-name">{{ invoice.buyer_name }}</div>
+    <div class="party-info">
+      GSTIN: {{ invoice.buyer_gstin or '—' }}<br/>
+      {{ invoice.buyer_state or '—' }}
+    </div>
+  </div>
+</div>
+
+<!-- Items -->
+<div class="m-section-lbl">Items</div>
+<div class="m-card" style="margin:0 14px 12px;">
+  {% for item in items %}
+  <div class="m-item-line">
+    <div style="flex:1;min-width:0;">
+      <div class="item-name">{{ item.description }}</div>
+      <div class="item-detail">
+        {{ item.quantity }} × ₹{{ "%.2f"|format(item.rate) }}
+        {% if item.discount_percent %} | Disc: {{ item.discount_percent }}%{% endif %}
+        | HSN: {{ item.hsn or '—' }} | GST: {{ item.gst_rate }}%
+      </div>
+    </div>
+    <div class="item-amount">₹{{ "%.2f"|format(item.amount) }}</div>
+  </div>
+  {% endfor %}
+</div>
+
+<!-- Amount in Words -->
+{% set gt = invoice.grand_total | int %}
+<div class="words-box">
+  <strong>Amount in Words:</strong><br/>
+  {{ gt | format_words }}
+</div>
+
+<!-- GST Summary -->
+<div class="m-section-lbl">GST Summary</div>
+<div class="m-card" style="margin:0 14px 12px;">
+  <div class="m-card-body">
+    <div class="m-sum-row"><span class="m-sum-lbl">Subtotal</span><span class="m-sum-val">₹{{ "%.2f"|format(invoice.subtotal or 0) }}</span></div>
+    {% if (invoice.total_discount or 0) > 0 %}
+    <div class="m-sum-row"><span class="m-sum-lbl">Discount</span><span class="m-sum-val text-danger">-₹{{ "%.2f"|format(invoice.total_discount) }}</span></div>
+    {% endif %}
+    <div class="m-sum-row"><span class="m-sum-lbl">Taxable Value</span><span class="m-sum-val">₹{{ "%.2f"|format(invoice.taxable_value or 0) }}</span></div>
+    {% if invoice.total_igst and invoice.total_igst > 0 %}
+    <div class="m-sum-row"><span class="m-sum-lbl">IGST</span><span class="m-sum-val">₹{{ "%.2f"|format(invoice.total_igst) }}</span></div>
+    {% else %}
+    <div class="m-sum-row"><span class="m-sum-lbl">CGST</span><span class="m-sum-val">₹{{ "%.2f"|format(invoice.total_cgst or 0) }}</span></div>
+    <div class="m-sum-row"><span class="m-sum-lbl">SGST</span><span class="m-sum-val">₹{{ "%.2f"|format(invoice.total_sgst or 0) }}</span></div>
+    {% endif %}
+    {% if (invoice.freight or 0) > 0 %}
+    <div class="m-sum-row"><span class="m-sum-lbl">Freight</span><span class="m-sum-val">₹{{ "%.2f"|format(invoice.freight) }}</span></div>
+    {% endif %}
+    <div class="m-sum-row grand">
+      <span class="m-sum-lbl">Grand Total</span>
+      <span class="m-sum-val">₹{{ "%.2f"|format(invoice.grand_total) }}</span>
+    </div>
+
+    {% if paid_amount is defined and paid_amount > 0 %}
+    <div class="m-sum-row" style="margin-top:4px;">
+      <span class="m-sum-lbl" style="color:#059669;font-weight:700;">Paid at Billing</span>
+      <span class="m-sum-val" style="color:#059669;">-₹{{ "%.2f"|format(paid_amount) }}</span>
+    </div>
+    {% set bal_due = invoice.grand_total - paid_amount %}
+    <div class="m-sum-row" style="background:#fff7ed;border-radius:10px;padding:10px 14px;margin-top:4px;">
+      <span class="m-sum-lbl" style="color:#c2410c;font-weight:700;">Balance Due</span>
+      <span class="m-sum-val" style="color:#c2410c;">₹{{ "%.2f"|format(bal_due if bal_due > 0 else 0) }}</span>
+    </div>
+    {% if previous_balance is defined and previous_balance > 0 %}
+    <div class="m-sum-row" style="margin-top:4px;">
+      <span class="m-sum-lbl" style="color:#7c3aed;">Previous Balance</span>
+      <span class="m-sum-val" style="color:#7c3aed;">₹{{ "%.2f"|format(previous_balance) }}</span>
+    </div>
+    {% set tot_out = bal_due + previous_balance %}
+    <div class="m-sum-row" style="background:#faf5ff;border-radius:10px;padding:10px 14px;margin-top:4px;">
+      <span class="m-sum-lbl" style="color:#7c3aed;font-weight:700;">Total Outstanding</span>
+      <span class="m-sum-val" style="color:#7c3aed;font-weight:800;">₹{{ "%.2f"|format(tot_out if tot_out > 0 else 0) }}</span>
+    </div>
+    {% endif %}
+    {% elif paid_amount is defined and paid_amount == 0 and invoice.payment_mode == 'Credit' %}
+    <div class="m-sum-row" style="background:#fff7ed;border-radius:10px;padding:10px 14px;margin-top:4px;">
+      <span class="m-sum-lbl" style="color:#c2410c;font-weight:700;">Balance Due</span>
+      <span class="m-sum-val" style="color:#c2410c;">₹{{ "%.2f"|format(invoice.grand_total) }}</span>
+    </div>
+    {% if previous_balance is defined and previous_balance > 0 %}
+    {% set tot_out = invoice.grand_total + previous_balance %}
+    <div class="m-sum-row" style="background:#faf5ff;border-radius:10px;padding:10px 14px;margin-top:4px;">
+      <span class="m-sum-lbl" style="color:#7c3aed;font-weight:700;">Total Outstanding</span>
+      <span class="m-sum-val" style="color:#7c3aed;font-weight:800;">₹{{ "%.2f"|format(tot_out) }}</span>
+    </div>
+    {% endif %}
+    {% endif %}
+  </div>
+</div>
+
+<!-- Actions -->
+<div style="padding:0 14px 24px;display:flex;flex-direction:column;gap:10px;">
+  <a href="{{ url_for('download_invoice_pdf', invoice_id=invoice.id) }}"
+     class="m-btn m-btn-primary">
+    <i class="bi bi-file-pdf"></i> Download PDF
+  </a>
+  <a href="{{ url_for('buyer_ledger', buyer_id=invoice.buyer_id) }}"
+     class="m-btn m-btn-outline">
+    <i class="bi bi-journal-text"></i> View Buyer Khata
+  </a>
+  {% if user_role == 'Admin' and 'CANCELLED' not in invoice.invoice_no %}
+  <button class="m-btn m-btn-danger" onclick="openCancelSheet()">
+    <i class="bi bi-x-circle"></i> Cancel Invoice
+  </button>
+  {% endif %}
+</div>
+
+<!-- Cancel Sheet -->
+{% if user_role == 'Admin' %}
+<div class="m-overlay" id="cancelSheet">
+  <div class="m-sheet">
+    <div class="m-sheet-handle"></div>
+    <div class="m-sheet-title" style="color:var(--danger);">
+      <i class="bi bi-exclamation-triangle me-2"></i>Cancel Invoice?
+    </div>
+    <p style="font-size:14px;color:var(--text-muted);margin-bottom:20px;">
+      <strong>{{ invoice.invoice_no }}</strong> will be cancelled and stock will be restored. This cannot be undone.
+    </p>
+    <div style="display:flex;gap:10px;">
+      <button class="m-btn m-btn-outline" onclick="document.getElementById('cancelSheet').classList.remove('open')" style="flex:1;">No, Keep</button>
+      <form method="POST" action="{{ url_for('cancel_invoice', invoice_id=invoice.id) }}" style="flex:2;">
+        <button type="submit" class="m-btn m-btn-danger">Yes, Cancel</button>
+      </form>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+function openCancelSheet(){ document.getElementById('cancelSheet')?.classList.add('open'); }
+document.getElementById('cancelSheet')?.addEventListener('click',function(e){
+  if(e.target===this)this.classList.remove('open');
+});
+</script>
+{% endblock %}

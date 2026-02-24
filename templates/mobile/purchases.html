@@ -1,0 +1,215 @@
+{% extends 'mobile/base_mobile.html' %}
+{% block title %}Purchases{% endblock %}
+{% block page_title %}Purchases{% endblock %}
+
+{% block topbar_actions %}
+<button class="m-icon-btn accent" onclick="openAddSheet()"><i class="bi bi-plus-lg"></i></button>
+{% endblock %}
+
+{% block head %}
+<style>
+.purch-card{
+  background:white;border-radius:14px;box-shadow:var(--shadow);
+  margin:0 14px 10px;padding:14px;
+  border-left:4px solid var(--border);
+}
+.purch-card.unpaid{border-left-color:var(--danger);}
+.purch-card.partial{border-left-color:var(--warning);}
+.purch-card.paid{border-left-color:var(--success);}
+.purch-vendor{font-weight:700;font-size:14px;}
+.purch-bill{font-size:12px;color:var(--text-muted);}
+.purch-footer{display:flex;align-items:center;justify-content:space-between;margin-top:10px;}
+.purch-amount{font-family:var(--font-head);font-size:18px;font-weight:800;}
+.m-pay-bar{height:5px;border-radius:99px;background:#f1f5f9;margin-top:6px;overflow:hidden;}
+.m-pay-bar-fill{height:100%;border-radius:99px;}
+</style>
+{% endblock %}
+
+{% block content %}
+
+<!-- Stats -->
+{% set total_due = namespace(val=0) %}
+{% for p in purchases %}{% set total_due.val = total_due.val + (p.total_amount - p.amount_paid) %}{% endfor %}
+
+<div class="m-kpi-grid">
+  <div class="m-kpi">
+    <div class="m-kpi-icon" style="background:#eff6ff;color:#2563eb;"><i class="bi bi-cart3"></i></div>
+    <div class="m-kpi-val">{{ purchases|length }}</div>
+    <div class="m-kpi-lbl">Total Bills</div>
+  </div>
+  <div class="m-kpi">
+    <div class="m-kpi-icon" style="background:#fef2f2;color:#dc2626;"><i class="bi bi-currency-rupee"></i></div>
+    <div class="m-kpi-val" style="font-size:17px;">₹{{ "%.0f"|format(total_due.val) }}</div>
+    <div class="m-kpi-lbl">Payable</div>
+  </div>
+</div>
+
+<div class="m-section-lbl">Purchase Bills</div>
+
+{% if purchases %}
+  {% for p in purchases %}
+  {% set due = p.total_amount - p.amount_paid %}
+  {% set pct = ((p.amount_paid / p.total_amount) * 100) | round if p.total_amount > 0 else 0 %}
+  <div class="purch-card {{ p.payment_status | lower }}">
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;">
+      <div>
+        <div class="purch-vendor">{{ p.name }}</div>
+        <div class="purch-bill">Bill: {{ p.bill_no or '—' }} · {{ p.purchase_date }}</div>
+      </div>
+      <span class="m-badge {{ 'm-badge-success' if p.payment_status=='Paid' else ('m-badge-warning' if p.payment_status=='Partial' else 'm-badge-danger') }}">
+        {{ p.payment_status }}
+      </span>
+    </div>
+    <div class="m-pay-bar">
+      <div class="m-pay-bar-fill"
+           style="width:{{ pct }}%;background:{{ '#059669' if pct==100 else ('#d97706' if pct>0 else '#dc2626') }};"></div>
+    </div>
+    <div class="purch-footer">
+      <div>
+        <div class="purch-amount">₹{{ "%.0f"|format(p.total_amount) }}</div>
+        {% if due > 0 %}
+        <div style="font-size:12px;color:var(--danger);">Due: ₹{{ "%.0f"|format(due) }}</div>
+        {% endif %}
+      </div>
+      {% if p.payment_status != 'Paid' %}
+      <button class="m-btn m-btn-success" style="width:auto;padding:9px 16px;font-size:13px;"
+              onclick="openPaySheet({{ p.id }}, '{{ p.name|e }}', '{{ p.bill_no or '' }}', {{ due }})">
+        <i class="bi bi-cash"></i> Pay
+      </button>
+      {% else %}
+      <span style="font-size:13px;color:var(--success);font-weight:700;">
+        <i class="bi bi-check-circle-fill me-1"></i>Paid
+      </span>
+      {% endif %}
+    </div>
+  </div>
+  {% endfor %}
+{% else %}
+<div class="m-empty">
+  <i class="bi bi-cart-x"></i>
+  <p>No purchase bills yet.</p>
+  <button class="m-btn m-btn-primary" style="width:auto;padding:12px 24px;" onclick="openAddSheet()">
+    <i class="bi bi-plus"></i> Add Purchase
+  </button>
+</div>
+{% endif %}
+
+<!-- Add Purchase Sheet -->
+<div class="m-overlay" id="addSheet">
+  <div class="m-sheet">
+    <div class="m-sheet-handle"></div>
+    <div class="m-sheet-title"><i class="bi bi-cart-plus me-2" style="color:var(--accent);"></i>Add Purchase Bill</div>
+    <form method="POST" action="{{ url_for('add_purchase') }}" id="addForm">
+      <div class="m-fg">
+        <label class="m-label">Vendor <span style="color:red">*</span></label>
+        <select name="vendor_id" class="m-select" required>
+          <option value="">— Select Vendor —</option>
+          {% for v in vendors %}
+          <option value="{{ v.id }}">{{ v.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+        <div class="m-fg">
+          <label class="m-label">Bill No.</label>
+          <input type="text" name="bill_no" class="m-input" placeholder="BILL-001" />
+        </div>
+        <div class="m-fg">
+          <label class="m-label">Date</label>
+          <input type="date" name="purchase_date" class="m-input" value="{{ now.strftime('%Y-%m-%d') }}" />
+        </div>
+        <div class="m-fg">
+          <label class="m-label">Total (₹) <span style="color:red">*</span></label>
+          <input type="number" name="total_amount" class="m-input" step="0.01" min="0" required placeholder="0.00" />
+        </div>
+        <div class="m-fg">
+          <label class="m-label">Paid (₹)</label>
+          <input type="number" name="amount_paid" class="m-input" step="0.01" min="0" value="0" placeholder="0.00" />
+        </div>
+      </div>
+      <div style="display:flex;gap:10px;margin-top:4px;">
+        <button type="button" class="m-btn m-btn-outline"
+                onclick="document.getElementById('addSheet').classList.remove('open')" style="flex:1;">
+          Cancel
+        </button>
+        <button type="submit" class="m-btn m-btn-primary" style="flex:2;" id="addBtn">
+          <i class="bi bi-save2"></i> Save
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Pay Sheet -->
+<div class="m-overlay" id="paySheet">
+  <div class="m-sheet">
+    <div class="m-sheet-handle"></div>
+    <div class="m-sheet-title" style="color:var(--success);"><i class="bi bi-cash-coin me-2"></i>Record Payment</div>
+    <div id="payInfo" style="background:#f8fafc;border-radius:10px;padding:10px;margin-bottom:14px;font-size:13px;color:var(--text-muted);"></div>
+    <form method="POST" id="payForm">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+        <div class="m-fg">
+          <label class="m-label">Date</label>
+          <input type="date" name="payment_date" class="m-input" value="{{ now.strftime('%Y-%m-%d') }}" />
+        </div>
+        <div class="m-fg">
+          <label class="m-label">Amount (₹)</label>
+          <input type="number" name="amount" class="m-input" id="payAmt" step="0.01" min="0.01" required />
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+        <div class="m-fg">
+          <label class="m-label">Mode</label>
+          <select name="payment_mode" class="m-select">
+            <option>Cash</option><option>Bank Transfer</option><option>UPI</option><option>Cheque</option>
+          </select>
+        </div>
+        <div class="m-fg">
+          <label class="m-label">Ref No.</label>
+          <input type="text" name="reference_no" class="m-input" placeholder="UTR / Cheque" />
+        </div>
+      </div>
+      <div style="display:flex;gap:10px;">
+        <button type="button" class="m-btn m-btn-outline"
+                onclick="document.getElementById('paySheet').classList.remove('open')" style="flex:1;">
+          Cancel
+        </button>
+        <button type="submit" class="m-btn m-btn-success" style="flex:2;" id="payBtn">
+          <i class="bi bi-check-circle"></i> Record
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+function openAddSheet(){ document.getElementById('addSheet').classList.add('open'); }
+
+function openPaySheet(id, vendor, billNo, due){
+  document.getElementById('payInfo').innerHTML=`<strong>${vendor}</strong> | Bill: ${billNo||'—'}<br><span style="color:var(--danger);font-weight:700;">Due: ₹${due.toFixed(2)}</span>`;
+  document.getElementById('payForm').action=`/purchases/${id}/payment`;
+  document.getElementById('payAmt').value=due.toFixed(2);
+  document.getElementById('paySheet').classList.add('open');
+}
+
+['addSheet','paySheet'].forEach(id=>{
+  document.getElementById(id).addEventListener('click',function(e){
+    if(e.target===this)this.classList.remove('open');
+  });
+});
+
+document.getElementById('addForm').addEventListener('submit',function(){
+  const btn=document.getElementById('addBtn');
+  btn.innerHTML='<span class="spinner-border spinner-border-sm me-2"></span>Saving...';
+  btn.disabled=true;
+});
+document.getElementById('payForm').addEventListener('submit',function(){
+  const btn=document.getElementById('payBtn');
+  btn.innerHTML='<span class="spinner-border spinner-border-sm me-2"></span>Recording...';
+  btn.disabled=true;
+});
+</script>
+{% endblock %}

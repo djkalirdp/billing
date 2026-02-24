@@ -1,0 +1,15 @@
+# ─────────────────────────────────────────────────────────
+#  requirements.txt — Professional Billing Web App (Flask)
+#  Install: pip install -r requirements.txt
+# ─────────────────────────────────────────────────────────
+
+# Web Framework
+Flask==3.0.3
+Werkzeug==3.0.3          # Password hashing + file utils (bundled with Flask)
+
+# PDF Generation (same as desktop version — no changes needed)
+reportlab==4.2.0
+num2words==0.5.13
+
+# Already built-in (no install needed):
+# sqlite3, json, os, io, shutil, datetime

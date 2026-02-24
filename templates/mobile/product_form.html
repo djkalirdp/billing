@@ -1,0 +1,205 @@
+{% extends 'mobile/base_mobile.html' %}
+{% block title %}{{ action }} Product{% endblock %}
+{% block page_title %}{{ action }} Product{% endblock %}
+
+{% block topbar_actions %}
+<a href="{{ url_for('products') }}" class="m-icon-btn"><i class="bi bi-arrow-left"></i></a>
+{% endblock %}
+
+{% block content %}
+
+<form method="POST"
+      action="{{ url_for('edit_product', product_id=product.id) if product else url_for('add_product') }}"
+      id="productForm">
+
+  <!-- Product Info -->
+  <div class="m-card" style="margin:0 14px 12px;">
+    <div class="m-card-header">
+      <i class="bi bi-box-seam" style="color:var(--accent);font-size:18px;"></i>
+      <span class="m-card-title">Product Info</span>
+    </div>
+    <div class="m-card-body">
+      <div class="m-fg">
+        <label class="m-label">Product Name <span style="color:red">*</span></label>
+        <input type="text" name="name" class="m-input" required autofocus
+               value="{{ product.name if product else '' }}"
+               placeholder="e.g. Cement 50kg Bag" />
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+        <div class="m-fg">
+          <label class="m-label">HSN Code</label>
+          <input type="text" name="hsn" class="m-input"
+                 value="{{ product.hsn if product else '' }}" placeholder="20002" />
+        </div>
+        <div class="m-fg">
+          <label class="m-label">GST Rate</label>
+          <select name="gst_rate" class="m-select">
+            {% for rate in [0, 0.1, 0.25, 1, 1.5, 3, 5, 6, 7.5, 9, 12, 14, 18, 28] %}
+            <option value="{{ rate }}" {% if product and product.gst_rate|float == rate %}selected{% elif not product and rate == 18 %}selected{% endif %}>
+              {{ rate }}%
+            </option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="m-fg">
+          <label class="m-label">Unit</label>
+          <select name="unit" class="m-select">
+            {% for u in ['Pcs','Kg','Gm','Ltr','Ml','Box','Bag','Carton','Dozen','Meter','Pack','Set'] %}
+            <option value="{{ u }}" {% if product and product.unit == u %}selected{% endif %}>{{ u }}</option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Prices -->
+  <div class="m-card" style="margin:0 14px 12px;">
+    <div class="m-card-header">
+      <i class="bi bi-tag" style="color:var(--success);font-size:18px;"></i>
+      <span class="m-card-title">Selling Prices</span>
+    </div>
+    <div class="m-card-body">
+      <div class="m-fg">
+        <label class="m-label">Retail Price (₹) <span style="color:red">*</span></label>
+        <input type="number" name="selling_price" class="m-input" step="0.01" min="0" required
+               value="{{ '%.2f'|format(product.selling_price) if product else '' }}"
+               placeholder="0.00" />
+      </div>
+      <div class="m-fg">
+        <label class="m-label">Wholesale Price (₹)</label>
+        <input type="number" name="wholesale_price" class="m-input" step="0.01" min="0"
+               value="{{ '%.2f'|format(product.wholesale_price) if product and product.wholesale_price else '' }}"
+               placeholder="0.00 (optional)" />
+      </div>
+    </div>
+  </div>
+
+  {% if not product %}
+  <!-- Opening Stock (Add mode only) -->
+  <div class="m-card" style="margin:0 14px 12px;">
+    <div class="m-card-header">
+      <i class="bi bi-layers" style="color:var(--warning);font-size:18px;"></i>
+      <span class="m-card-title">Opening Stock</span>
+    </div>
+    <div class="m-card-body">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+        <div class="m-fg">
+          <label class="m-label">Qty</label>
+          <input type="number" name="add_stock" class="m-input" step="0.001" min="0" value="0" id="openQty" oninput="updatePreview()" />
+        </div>
+        <div class="m-fg">
+          <label class="m-label">Cost Rate (₹)</label>
+          <input type="number" name="purchase_rate" class="m-input" step="0.01" min="0" value="0" id="openRate" oninput="updatePreview()" />
+        </div>
+      </div>
+      <div id="stockPreview" style="display:none;background:#ecfdf5;border-radius:10px;padding:10px 12px;margin-top:4px;font-size:13px;color:#065f46;">
+        <strong>Total Stock Value:</strong> ₹<span id="previewTotal">0</span>
+      </div>
+    </div>
+  </div>
+
+  {% else %}
+  <!-- WAC (Edit mode) -->
+  <div class="m-card" style="margin:0 14px 12px;">
+    <div class="m-card-header">
+      <i class="bi bi-calculator" style="color:var(--accent);font-size:18px;"></i>
+      <span class="m-card-title">Add Stock (WAC)</span>
+    </div>
+    <div class="m-card-body">
+      <!-- Current stock display -->
+      <div style="display:flex;gap:10px;margin-bottom:14px;">
+        <div style="flex:1;background:#f8fafc;border-radius:10px;padding:10px;text-align:center;">
+          <div style="font-family:var(--font-head);font-size:18px;font-weight:800;">{{ product.stock_qty }}</div>
+          <div style="font-size:11px;color:var(--text-muted);">Current Stock</div>
+        </div>
+        <div style="flex:1;background:#f8fafc;border-radius:10px;padding:10px;text-align:center;">
+          <div style="font-family:var(--font-head);font-size:18px;font-weight:800;">₹{{ "%.2f"|format(product.cost_price or 0) }}</div>
+          <div style="font-size:11px;color:var(--text-muted);">Avg Cost</div>
+        </div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+        <div class="m-fg">
+          <label class="m-label">Add Qty</label>
+          <input type="number" name="add_stock" class="m-input" step="0.001" min="0" value="0"
+                 id="addQty" oninput="calcWAC()" />
+        </div>
+        <div class="m-fg">
+          <label class="m-label">Purchase Rate (₹)</label>
+          <input type="number" name="purchase_rate" class="m-input" step="0.01" min="0" value="0"
+                 id="newRate" oninput="calcWAC()" />
+        </div>
+      </div>
+
+      <div id="wacPreview" style="display:none;background:#eff6ff;border-radius:10px;padding:12px;margin-top:4px;font-size:13px;color:#1e40af;">
+        <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
+          <span>Old Value</span><span id="wacOld">₹0</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
+          <span>New Value</span><span id="wacNew">₹0</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-weight:700;border-top:1px solid #bfdbfe;padding-top:6px;margin-top:2px;">
+          <span>New Avg Cost</span><span id="wacAvg">₹0</span>
+        </div>
+      </div>
+
+      <div style="margin-top:10px;background:#fef3c7;border-radius:10px;padding:10px;font-size:12px;color:#78350f;">
+        <i class="bi bi-info-circle me-1"></i>
+        (Old Qty × Old Cost + New Qty × New Cost) ÷ Total Qty
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  <div style="padding:0 14px 24px;display:flex;flex-direction:column;gap:10px;">
+    <button type="submit" class="m-btn m-btn-primary" id="saveBtn">
+      <i class="bi bi-save2"></i> {{ 'Update Product' if product else 'Save Product' }}
+    </button>
+    <a href="{{ url_for('products') }}" class="m-btn m-btn-outline">
+      <i class="bi bi-x"></i> Cancel
+    </a>
+  </div>
+
+</form>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+{% if not product %}
+function updatePreview(){
+  const qty  = parseFloat(document.getElementById('openQty')?.value)  || 0;
+  const rate = parseFloat(document.getElementById('openRate')?.value) || 0;
+  const total = qty * rate;
+  const preview = document.getElementById('stockPreview');
+  preview.style.display = qty > 0 && rate > 0 ? 'block' : 'none';
+  document.getElementById('previewTotal').textContent = total.toFixed(2);
+}
+{% else %}
+const curStock = {{ product.stock_qty | float }};
+const curCost  = {{ product.cost_price | float if product.cost_price else 0 }};
+
+function calcWAC(){
+  const addQty  = parseFloat(document.getElementById('addQty')?.value)  || 0;
+  const newRate = parseFloat(document.getElementById('newRate')?.value) || 0;
+  const preview = document.getElementById('wacPreview');
+  if (addQty <= 0 || newRate <= 0) { preview.style.display='none'; return; }
+  const oldVal   = curStock * curCost;
+  const newVal   = addQty  * newRate;
+  const totalQty = curStock + addQty;
+  const avgCost  = totalQty > 0 ? (oldVal + newVal) / totalQty : 0;
+  document.getElementById('wacOld').textContent = '₹' + oldVal.toFixed(2);
+  document.getElementById('wacNew').textContent = '₹' + newVal.toFixed(2);
+  document.getElementById('wacAvg').textContent = '₹' + avgCost.toFixed(3);
+  preview.style.display = 'block';
+}
+{% endif %}
+
+document.getElementById('productForm').addEventListener('submit',function(){
+  const btn=document.getElementById('saveBtn');
+  btn.innerHTML='<span class="spinner-border spinner-border-sm me-2"></span>Saving...';
+  btn.disabled=true;
+});
+</script>
+{% endblock %}

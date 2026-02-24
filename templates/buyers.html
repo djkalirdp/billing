@@ -1,0 +1,280 @@
+{% extends 'base.html' %}
+
+{% block title %}Buyers{% endblock %}
+{% block page_title %}Buyers & Khata{% endblock %}
+
+{% block head %}
+<style>
+  .buyers-toolbar {
+    display: flex; align-items: center;
+    justify-content: space-between;
+    gap: 12px; flex-wrap: wrap;
+    margin-bottom: 20px;
+  }
+  .search-wrap {
+    display: flex; align-items: center;
+    border: 1.5px solid var(--border);
+    border-radius: 9px; background: white;
+    overflow: hidden; transition: border-color .18s;
+  }
+  .search-wrap:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(37,99,235,.08); }
+  .search-wrap i  { padding: 0 12px; color: var(--text-muted); font-size: 14px; }
+  .search-wrap input {
+    border: none; background: transparent; outline: none;
+    padding: 9px 12px 9px 0;
+    font-family: var(--font-body); font-size: 13.5px;
+    width: 240px; color: var(--text-main);
+  }
+
+  /* Stats */
+  .stats-row {
+    display: grid; grid-template-columns: repeat(3,1fr);
+    gap: 12px; margin-bottom: 20px;
+  }
+  @media(max-width:700px){ .stats-row{grid-template-columns:1fr;} }
+  .stat-card {
+    background: white; border: 1px solid var(--border);
+    border-radius: var(--radius-sm); padding: 14px 18px;
+    display: flex; align-items: center; gap: 12px;
+  }
+  .stat-icon {
+    width: 40px; height: 40px; border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 18px; flex-shrink: 0;
+  }
+  .stat-label { font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing:.05em; }
+  .stat-val   { font-family: var(--font-head); font-size: 20px; font-weight: 800; color: var(--text-main); }
+
+  /* Table */
+  .table-wrap {
+    background: white; border: 1px solid var(--border);
+    border-radius: var(--radius); overflow: hidden;
+  }
+  .table-head-bar {
+    padding: 14px 20px; border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .table-head-title {
+    font-family: var(--font-head); font-size: 14px; font-weight: 700;
+  }
+
+  /* Balance col */
+  .balance-pos { color: #dc2626; font-weight: 700; }
+  .balance-zero { color: #059669; font-weight: 600; }
+
+  /* Action btns */
+  .tbl-btn {
+    padding: 4px 10px; border-radius: 6px;
+    font-size: 12px; font-weight: 600; border: none;
+    cursor: pointer; text-decoration: none;
+    display: inline-flex; align-items: center; gap: 4px;
+    transition: all .18s;
+  }
+  .tbl-btn-ledger { background: #ecfdf5; color: #059669; }
+  .tbl-btn-ledger:hover { background: #059669; color: white; }
+  .tbl-btn-edit   { background: #eff6ff; color: #2563eb; }
+  .tbl-btn-edit:hover { background: #2563eb; color: white; }
+  .tbl-btn-del    { background: #fef2f2; color: #dc2626; }
+  .tbl-btn-del:hover  { background: #dc2626; color: white; }
+
+  .empty-state {
+    padding: 60px; text-align: center; color: var(--text-muted);
+  }
+  .empty-state i { font-size: 48px; display: block; margin-bottom: 12px; opacity: .3; }
+
+  /* Modal */
+  .modal-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,.4);
+    z-index: 5000; display: flex; align-items: center; justify-content: center;
+    opacity: 0; pointer-events: none; transition: opacity .2s;
+  }
+  .modal-overlay.open { opacity: 1; pointer-events: all; }
+  .modal-box {
+    background: white; border-radius: var(--radius); padding: 28px;
+    max-width: 380px; width: 90%; box-shadow: var(--shadow-lg);
+    transform: translateY(20px); transition: transform .2s;
+  }
+  .modal-overlay.open .modal-box { transform: translateY(0); }
+</style>
+{% endblock %}
+
+{% block topbar_actions %}
+<a href="{{ url_for('add_buyer') }}" class="btn-primary-custom">
+  <i class="bi bi-person-plus"></i> Add Buyer
+</a>
+{% endblock %}
+
+{% block content %}
+
+<!-- Toolbar -->
+<div class="buyers-toolbar">
+  <div>
+    <div class="section-title">Buyers & Khata</div>
+    <div class="section-sub">Manage customers and track outstanding balances</div>
+  </div>
+  <form method="GET" action="{{ url_for('buyers') }}" style="display:flex;gap:8px;">
+    <div class="search-wrap">
+      <i class="bi bi-search"></i>
+      <input type="text" name="search" value="{{ search }}"
+             placeholder="Search buyer name..." />
+    </div>
+    <button type="submit" class="btn-primary-custom" style="padding:9px 16px;">Search</button>
+    {% if search %}
+    <a href="{{ url_for('buyers') }}" class="btn-outline-custom" style="padding:9px 12px;">
+      <i class="bi bi-x"></i>
+    </a>
+    {% endif %}
+  </form>
+</div>
+
+<!-- Stats -->
+{% set total_due = buyers | map(attribute='balance') | select('gt', 0) | sum %}
+{% set due_count = buyers | selectattr('balance', 'gt', 0) | list | length %}
+<div class="stats-row">
+  <div class="stat-card">
+    <div class="stat-icon" style="background:#eff6ff;color:#2563eb;">
+      <i class="bi bi-people"></i>
+    </div>
+    <div>
+      <div class="stat-label">Total Buyers</div>
+      <div class="stat-val">{{ buyers | length }}</div>
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon" style="background:#fef2f2;color:#dc2626;">
+      <i class="bi bi-hourglass-split"></i>
+    </div>
+    <div>
+      <div class="stat-label">Total Outstanding</div>
+      <div class="stat-val">₹ {{ "%.0f"|format(total_due) }}</div>
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon" style="background:#fffbeb;color:#d97706;">
+      <i class="bi bi-person-exclamation"></i>
+    </div>
+    <div>
+      <div class="stat-label">Buyers With Dues</div>
+      <div class="stat-val">{{ due_count }}</div>
+    </div>
+  </div>
+</div>
+
+<!-- Table -->
+<div class="table-wrap">
+  <div class="table-head-bar">
+    <span class="table-head-title">
+      <i class="bi bi-list-ul me-2"></i>Buyer List
+      <span style="font-size:12px;color:var(--text-muted);font-family:var(--font-body);font-weight:400;margin-left:6px;">
+        ({{ buyers | length }})
+      </span>
+    </span>
+  </div>
+
+  {% if buyers %}
+  <div style="overflow-x:auto;">
+    <table class="table-custom">
+      <thead>
+        <tr>
+          <th>Buyer Name</th>
+          <th>GSTIN</th>
+          <th>Phone</th>
+          <th>State</th>
+          <th>Address</th>
+          <th style="text-align:right;">Outstanding (₹)</th>
+          <th style="text-align:center;">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for b in buyers %}
+        <tr>
+          <td>
+            <div style="font-weight:700;font-size:13.5px;">{{ b.name }}</div>
+            {% if b.email %}
+            <div style="font-size:12px;color:var(--text-muted);">{{ b.email }}</div>
+            {% endif %}
+          </td>
+          <td style="font-size:12px;color:var(--text-muted);">{{ b.gstin or '—' }}</td>
+          <td style="font-size:13px;">{{ b.phone or '—' }}</td>
+          <td style="font-size:13px;">{{ b.state or '—' }}</td>
+          <td style="font-size:12.5px;color:var(--text-muted);max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+            {{ b.address or '—' }}
+          </td>
+          <td style="text-align:right;">
+            {% if b.balance > 0 %}
+              <span class="balance-pos">₹ {{ "%.2f"|format(b.balance) }}</span>
+            {% else %}
+              <span class="balance-zero">
+                <i class="bi bi-check-circle me-1"></i>Cleared
+              </span>
+            {% endif %}
+          </td>
+          <td style="text-align:center;">
+            <div style="display:flex;gap:5px;justify-content:center;flex-wrap:wrap;">
+              <a href="{{ url_for('buyer_ledger', buyer_id=b.id) }}"
+                 class="tbl-btn tbl-btn-ledger">
+                <i class="bi bi-journal-text"></i> Khata
+              </a>
+              <a href="{{ url_for('edit_buyer', buyer_id=b.id) }}"
+                 class="tbl-btn tbl-btn-edit">
+                <i class="bi bi-pencil"></i>
+              </a>
+              {% if user_role == 'Admin' %}
+              <button class="tbl-btn tbl-btn-del"
+                      onclick="confirmDelete({{ b.id }}, '{{ b.name | e }}')">
+                <i class="bi bi-trash"></i>
+              </button>
+              {% endif %}
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <div style="padding:12px 20px;border-top:1px solid var(--border);font-size:12.5px;color:var(--text-muted);">
+    {{ buyers|length }} buyer(s) shown
+    {% if search %} · Search: "<strong>{{ search }}</strong>"{% endif %}
+  </div>
+  {% else %}
+  <div class="empty-state">
+    <i class="bi bi-people"></i>
+    <p>{% if search %}No buyers found for "<strong>{{ search }}</strong>".{% else %}No buyers added yet.{% endif %}</p>
+    <a href="{{ url_for('add_buyer') }}" class="btn-primary-custom mt-3" style="display:inline-flex;">
+      <i class="bi bi-plus"></i> Add First Buyer
+    </a>
+  </div>
+  {% endif %}
+</div>
+
+<!-- Delete Modal -->
+<div class="modal-overlay" id="delModal">
+  <div class="modal-box">
+    <div style="font-family:var(--font-head);font-size:17px;font-weight:700;margin-bottom:10px;">
+      <i class="bi bi-person-x-fill text-danger me-2"></i>Delete Buyer?
+    </div>
+    <div style="font-size:14px;color:var(--text-muted);margin-bottom:20px;" id="delBody">
+      This will remove the buyer and all associated records.
+    </div>
+    <div style="display:flex;gap:10px;justify-content:flex-end;">
+      <button class="btn-outline-custom" onclick="document.getElementById('delModal').classList.remove('open')">Cancel</button>
+      <form id="delForm" method="POST">
+        <button type="submit" class="btn-danger-custom"><i class="bi bi-trash"></i> Delete</button>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function confirmDelete(id, name) {
+  document.getElementById('delBody').innerHTML = `Delete buyer <strong>"${name}"</strong>? This cannot be undone.`;
+  document.getElementById('delForm').action = `/buyers/${id}/delete`;
+  document.getElementById('delModal').classList.add('open');
+}
+document.getElementById('delModal').addEventListener('click', function(e) {
+  if (e.target === this) this.classList.remove('open');
+});
+</script>
+{% endblock %}

@@ -1,0 +1,826 @@
+{% extends 'mobile/base_mobile.html' %}
+{% block title %}New Invoice{% endblock %}
+{% block page_title %}New Invoice{% endblock %}
+
+{% block topbar_actions %}
+<a href="{{ url_for('invoices') }}" class="m-icon-btn"><i class="bi bi-x-lg"></i></a>
+{% endblock %}
+
+{% block head %}
+<style>
+/* ── Step tabs ─────────────────────── */
+.stabs{display:flex;background:white;border-bottom:1px solid var(--border);position:sticky;top:var(--topbar-h);z-index:200;}
+.stab{flex:1;padding:10px 2px;font-size:10.5px;font-weight:700;color:var(--text-muted);text-align:center;border:none;background:none;cursor:pointer;border-bottom:2.5px solid transparent;-webkit-tap-highlight-color:transparent;}
+.stab i{display:block;font-size:17px;margin-bottom:2px;}
+.stab.active{color:var(--accent);border-bottom-color:var(--accent);}
+.stab.done{color:#059669;}
+.spanel{display:none;padding:14px 14px 80px;}
+.spanel.active{display:block;}
+
+/* ── Mode bar ──────────────────────── */
+.modebar{display:flex;background:#f1f5f9;border-radius:10px;padding:3px;margin-bottom:16px;}
+.modebtn{flex:1;padding:9px;border-radius:8px;font-size:13px;font-weight:700;border:none;background:none;color:var(--text-muted);cursor:pointer;transition:all .18s;-webkit-tap-highlight-color:transparent;}
+.modebtn.on{background:white;color:var(--accent);box-shadow:var(--shadow);}
+
+/* ── Autocomplete ──────────────────── */
+.acw{position:relative;}
+.aclist{
+  position:absolute;top:calc(100% + 2px);left:0;right:0;z-index:9999;
+  background:white;border:1.5px solid var(--accent);border-radius:12px;
+  max-height:220px;overflow-y:auto;-webkit-overflow-scrolling:touch;
+  overscroll-behavior:contain;touch-action:pan-y;
+  box-shadow:0 8px 28px rgba(0,0,0,.18);display:none;
+}
+.acitem{padding:13px 16px;border-bottom:1px solid #f1f5f9;cursor:pointer;user-select:none;-webkit-user-select:none;transition:background .06s;}
+.acitem:last-child{border-bottom:none;}
+.acitem.hi{background:#eff6ff;}
+.acitem.add-new{background:#fffbeb;border-top:1px solid #fde68a;}
+.acname{font-weight:600;font-size:14px;}
+.acsub{font-size:12px;color:var(--text-muted);margin-top:2px;}
+
+/* ── Buyer display card (existing) ── */
+.bcard{background:#f0fdf4;border:1.5px solid #86efac;border-radius:13px;padding:14px;margin-top:10px;display:none;}
+.bcard.show{display:block;animation:fi .2s ease;}
+@keyframes fi{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+.bcard-name{font-weight:700;font-size:14px;color:#14532d;margin-bottom:6px;}
+.bcard-row{font-size:13px;color:#166534;line-height:1.8;}
+.bcard-tags{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;}
+
+/* ── New buyer box ─────────────────── */
+.nbb{background:#fffbeb;border:1.5px solid #fde68a;border-radius:13px;padding:14px;margin-top:10px;display:none;}
+.nbb.show{display:block;}
+.nbb-title{font-size:13px;font-weight:700;color:#92400e;margin-bottom:12px;display:flex;align-items:center;gap:6px;}
+.nbb-note{font-size:12px;color:#a16207;margin-bottom:12px;background:#fef9c3;border-radius:8px;padding:8px 10px;}
+
+/* ── Item card ─────────────────────── */
+.icard{background:white;border-radius:14px;box-shadow:var(--shadow);margin-bottom:12px;overflow:hidden;border-left:3px solid var(--accent);}
+.icard-head{background:#f8fafc;padding:10px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;}
+.icard-num{font-family:var(--font-head);font-weight:700;font-size:13px;color:var(--accent);}
+.icard-body{padding:13px 14px;}
+.igrid2{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+.iamount{margin-top:10px;background:#eff6ff;border-radius:10px;padding:10px;text-align:center;font-family:var(--font-head);font-size:18px;font-weight:800;color:var(--accent);}
+.igst-lbl{font-size:11px;color:var(--text-muted);margin-top:3px;text-align:center;}
+
+/* ── Totals ────────────────────────── */
+.rrow{display:flex;justify-content:space-between;padding:9px 0;border-bottom:1px solid #f1f5f9;font-size:14px;}
+.rrow:last-child{border-bottom:none;}
+.rrow.grand{font-family:var(--font-head);font-size:17px;margin-top:4px;}
+.rrow.grand .rval{color:var(--accent);font-size:20px;}
+.rlbl{color:var(--text-muted);}
+.rval{font-weight:700;}
+
+/* ── Nav buttons ───────────────────── */
+.navrow{display:flex;gap:10px;margin-top:14px;}
+
+/* ── Spinner ───────────────────────── */
+.cspin{width:16px;height:16px;border:2px solid rgba(255,255,255,.4);border-top-color:white;border-radius:50%;animation:sp .7s linear infinite;display:inline-block;vertical-align:middle;margin-right:6px;}
+@keyframes sp{to{transform:rotate(360deg);}}
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- NOTE: NO <form> tag here — form is below, inside each step the inputs live, 
+     hiddenFields div gets populated before JS calls form.submit() -->
+<div id="billingWrap">
+
+  <!-- Step tabs -->
+  <div class="stabs">
+    <button type="button" class="stab active" id="tab1" onclick="goStep(1)"><i class="bi bi-person"></i>Buyer</button>
+    <button type="button" class="stab" id="tab2" onclick="goStep(2)"><i class="bi bi-file-text"></i>Details</button>
+    <button type="button" class="stab" id="tab3" onclick="goStep(3)"><i class="bi bi-cart-plus"></i>Items</button>
+    <button type="button" class="stab" id="tab4" onclick="goStep(4)"><i class="bi bi-check2-circle"></i>Review</button>
+  </div>
+
+  <!-- ══ STEP 1 — BUYER ══════════════════════════════════════════ -->
+  <div class="spanel active" id="step1">
+
+    <div class="modebar">
+      <button type="button" class="modebtn on" id="mR" onclick="setMode('Retail')">Retail</button>
+      <button type="button" class="modebtn"    id="mW" onclick="setMode('Wholesale')">Wholesale</button>
+    </div>
+
+    <!-- Buyer search -->
+    <div class="m-fg">
+      <label class="m-label">Buyer Name <span style="color:red">*</span></label>
+      <div class="acw">
+        <input type="text" id="buyerInput" class="m-input"
+               placeholder="Type name to search…"
+               autocomplete="off" spellcheck="false" autocorrect="off"
+               oninput="onBuyerType(this.value)" />
+        <div class="aclist" id="buyerList"></div>
+      </div>
+      <!-- "Add new" trigger button — shown when typed name is not in database -->
+      <div id="addNewBtn" style="display:none;margin-top:8px;">
+        <button type="button" class="m-btn m-btn-outline" style="width:auto;padding:9px 16px;font-size:13px;"
+                onclick="showNewBuyerForm()">
+          <i class="bi bi-person-plus"></i> Add "<span id="addNewName"></span>" as New Buyer
+        </button>
+      </div>
+    </div>
+
+    <!-- Existing buyer card -->
+    <div class="bcard" id="buyerCard">
+      <div class="bcard-name" id="bcName"></div>
+      <div class="bcard-row">
+        <div id="bcAddr"></div>
+        <div id="bcGstin"></div>
+        <div id="bcState"></div>
+      </div>
+      <div class="bcard-tags">
+        <span id="bcGstType" class="m-badge"></span>
+        <span id="bcBal" class="m-badge"></span>
+      </div>
+    </div>
+
+    <!-- New buyer form -->
+    <div class="nbb" id="newBuyerBox">
+      <div class="nbb-title"><i class="bi bi-person-plus-fill"></i> New Buyer</div>
+      <div class="nbb-note">
+        ✏️ Fill details below. GSTIN and address are optional — you can edit the buyer profile later.
+      </div>
+      <div class="m-fg">
+        <label class="m-label">State</label>
+        <select id="inpState" class="m-select" onchange="onNewBuyerState(this.value)" style="background:white;">
+          <option value="">— Select State (optional) —</option>
+          {% for s in ['Andhra Pradesh','Assam','Bihar','Chhattisgarh','Delhi','Goa','Gujarat','Haryana','Himachal Pradesh','Jharkhand','Karnataka','Kerala','Madhya Pradesh','Maharashtra','Manipur','Meghalaya','Odisha','Punjab','Rajasthan','Tamil Nadu','Telangana','Uttar Pradesh','Uttarakhand','West Bengal','Jammu & Kashmir','Ladakh'] %}
+          <option value="{{ s }}">{{ s }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="m-fg">
+        <label class="m-label">GSTIN <span style="font-size:11px;font-weight:400;color:#a16207;">(optional)</span></label>
+        <input type="text" id="inpGstin" class="m-input" maxlength="15"
+               placeholder="22AAAAA0000A1Z5" style="background:white;" />
+      </div>
+      <div class="m-fg">
+        <label class="m-label">Address <span style="font-size:11px;font-weight:400;color:#a16207;">(optional)</span></label>
+        <textarea id="inpAddress" class="m-input" rows="2"
+                  style="resize:none;background:white;"
+                  placeholder="Shop name / street / city"></textarea>
+      </div>
+      <div class="m-fg">
+        <label class="m-label">Phone <span style="font-size:11px;font-weight:400;color:#a16207;">(optional)</span></label>
+        <input type="tel" id="inpPhone" class="m-input" placeholder="9876543210" style="background:white;" />
+      </div>
+      <div id="newGstTag" style="margin-top:4px;"></div>
+    </div>
+
+    <div class="navrow" style="margin-top:18px;">
+      <button type="button" class="m-btn m-btn-primary" onclick="step1Next()" style="flex:1;">
+        Invoice Details <i class="bi bi-arrow-right ms-1"></i>
+      </button>
+    </div>
+  </div>
+
+  <!-- ══ STEP 2 — DETAILS ════════════════════════════════════════ -->
+  <div class="spanel" id="step2">
+    <div class="m-fg">
+      <label class="m-label">Invoice No.</label>
+      <input type="text" id="f_invNo" class="m-input"
+             value="{{ inv_no }}" readonly style="background:#f1f5f9;color:var(--text-muted);" />
+    </div>
+    <div class="m-fg">
+      <label class="m-label">Invoice Date <span style="color:red">*</span></label>
+      <input type="date" id="f_invDate" class="m-input" value="{{ today }}" />
+    </div>
+    <div class="m-fg">
+      <label class="m-label">Payment Mode</label>
+      <select id="f_payMode" class="m-select" onchange="onPayMode(this.value)">
+        <option value="Credit">Credit</option>
+        <option value="Cash">Cash</option>
+        <option value="UPI">UPI</option>
+        <option value="Bank Transfer">Bank Transfer</option>
+        <option value="Cheque">Cheque</option>
+      </select>
+    </div>
+    <div class="m-fg">
+      <label class="m-label">Order Ref. (optional)</label>
+      <input type="text" id="f_orderRef" class="m-input" placeholder="PO / order number" />
+    </div>
+    <div class="m-fg">
+      <label class="m-label">Dispatch Info (optional)</label>
+      <input type="text" id="f_dispatch" class="m-input" placeholder="Lorry / courier" />
+    </div>
+    <div class="navrow">
+      <button type="button" class="m-btn m-btn-outline" onclick="goStep(1)" style="flex:1;"><i class="bi bi-arrow-left"></i> Back</button>
+      <button type="button" class="m-btn m-btn-primary" onclick="goStep(3)" style="flex:2;">Add Items <i class="bi bi-arrow-right ms-1"></i></button>
+    </div>
+  </div>
+
+  <!-- ══ STEP 3 — ITEMS ══════════════════════════════════════════ -->
+  <div class="spanel" id="step3">
+    <div id="itemsWrap"></div>
+    <button type="button" class="m-btn m-btn-outline" onclick="addItem()" style="margin-bottom:14px;">
+      <i class="bi bi-plus-circle"></i> Add Another Item
+    </button>
+    <div class="navrow">
+      <button type="button" class="m-btn m-btn-outline" onclick="goStep(2)" style="flex:1;"><i class="bi bi-arrow-left"></i> Back</button>
+      <button type="button" class="m-btn m-btn-primary" onclick="goStep(4)" style="flex:2;">Review <i class="bi bi-arrow-right ms-1"></i></button>
+    </div>
+  </div>
+
+  <!-- ══ STEP 4 — REVIEW & SAVE ══════════════════════════════════ -->
+  <div class="spanel" id="step4">
+    <div class="m-card" style="margin:0 0 12px;">
+      <div class="m-card-body" id="reviewInfo">
+        <div style="font-size:13px;color:var(--text-muted);">Complete steps 1–3 first.</div>
+      </div>
+    </div>
+    <div class="m-card" style="margin:0 0 12px;">
+      <div class="m-card-body">
+        <div class="rrow"><span class="rlbl">Subtotal</span>      <span class="rval" id="rvSub">₹0.00</span></div>
+        <div class="rrow"><span class="rlbl">Discount</span>      <span class="rval text-danger" id="rvDisc">₹0.00</span></div>
+        <div class="rrow"><span class="rlbl">Taxable Value</span> <span class="rval" id="rvTax">₹0.00</span></div>
+        <div class="rrow" id="rowCgst"><span class="rlbl">CGST</span><span class="rval" id="rvCgst">₹0.00</span></div>
+        <div class="rrow" id="rowSgst"><span class="rlbl">SGST</span><span class="rval" id="rvSgst">₹0.00</span></div>
+        <div class="rrow" id="rowIgst" style="display:none"><span class="rlbl">IGST</span><span class="rval" id="rvIgst">₹0.00</span></div>
+        <div class="m-fg" style="margin:10px 0 4px;">
+          <label class="m-label">Freight / Extra (₹)</label>
+          <input type="number" id="f_freight" class="m-input" value="0" step="0.01" min="0" oninput="recalc()" />
+        </div>
+        <div class="rrow grand"><span class="rlbl">Grand Total</span><span class="rval" id="rvGrand">₹0.00</span></div>
+        <div class="m-fg" style="margin-top:12px;">
+          <label class="m-label">Amount Paid Now (₹)</label>
+          <input type="number" id="f_paid" class="m-input" value="0" step="0.01" min="0" />
+        </div>
+      </div>
+    </div>
+    <div class="navrow">
+      <button type="button" class="m-btn m-btn-outline" onclick="goStep(3)" style="flex:1;"><i class="bi bi-arrow-left"></i> Back</button>
+      <button type="button" id="saveBtn" class="m-btn m-btn-primary" onclick="saveInvoice()" style="flex:2;">
+        <i class="bi bi-save2"></i> Save Invoice
+      </button>
+    </div>
+  </div>
+
+</div><!-- /billingWrap -->
+
+<!-- THE ACTUAL FORM — hidden, populated and submitted by JS -->
+<form method="POST" action="{{ url_for('billing') }}" id="realForm" style="display:none;">
+</form>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// ═══════════════════════════════════════════════════════════════════
+//  CONSTANTS  (Jinja → JS)
+// ═══════════════════════════════════════════════════════════════════
+const ALL_BUYERS    = {{ buyers | tojson }};
+const COMPANY_STATE = {{ (settings.get('company_info',{}).get('state') or '') | tojson }}.trim().toLowerCase();
+const BUYER_API     = "{{ url_for('buyer_info_api') }}";
+const PROD_API      = "{{ url_for('product_search_api') }}";
+
+// ═══════════════════════════════════════════════════════════════════
+//  APP STATE
+// ═══════════════════════════════════════════════════════════════════
+let mode       = 'Retail';   // billing mode
+let isIgst     = false;      // GST type (from buyer state)
+let isNewBuyer = false;      // true → new buyer being added
+let rowCount   = 0;
+let rows       = {};         // { idx: { product_id, gst_rate, _prod } }
+
+// ═══════════════════════════════════════════════════════════════════
+//  STEP NAVIGATION
+// ═══════════════════════════════════════════════════════════════════
+function goStep(n) {
+  [1,2,3,4].forEach(i => {
+    document.getElementById('step'+i).classList.toggle('active', i===n);
+    const t = document.getElementById('tab'+i);
+    t.classList.toggle('active', i===n);
+    t.classList.toggle('done', i < n);
+  });
+  if (n === 4) buildReview();
+  window.scrollTo({top:0, behavior:'smooth'});
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  BILLING MODE TOGGLE
+// ═══════════════════════════════════════════════════════════════════
+function setMode(m) {
+  mode = m;
+  document.getElementById('mR').classList.toggle('on', m==='Retail');
+  document.getElementById('mW').classList.toggle('on', m==='Wholesale');
+  // Refresh rates on existing rows
+  Object.keys(rows).forEach(idx => {
+    const p = rows[idx]._prod;
+    if (!p) return;
+    const price = m === 'Wholesale'
+      ? (parseFloat(p.wholesale_price) || parseFloat(p.selling_price) || 0)
+      : (parseFloat(p.selling_price) || 0);
+    const el = document.getElementById('pRate_'+idx);
+    if (el) { el.value = price; recalcRow(idx); }
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  GST TYPE
+// ═══════════════════════════════════════════════════════════════════
+function setGstType(buyerState) {
+  const bs = (buyerState || '').trim().toLowerCase();
+  isIgst   = bs !== '' && COMPANY_STATE !== '' && bs !== COMPANY_STATE;
+  recalc();
+  return isIgst;
+}
+
+function gstBadge(igst) {
+  return igst
+    ? '<span class="m-badge m-badge-info">IGST — Inter-State</span>'
+    : '<span class="m-badge m-badge-success">CGST + SGST — Intra-State</span>';
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  AUTOCOMPLETE CORE
+//  mousedown+preventDefault: stops input blur before click fires.
+//  Works on desktop (mouse) and mobile (touch→synthesised mouse).
+//  touch-action:pan-y on list allows scrolling without selection.
+// ═══════════════════════════════════════════════════════════════════
+function buildAcList(listEl, items, onSelect) {
+  listEl.innerHTML = '';
+  if (!items.length) { listEl.style.display = 'none'; return; }
+
+  items.forEach(item => {
+    const d = document.createElement('div');
+    d.className = 'acitem' + (item.isNew ? ' add-new' : '');
+    d.innerHTML = `<div class="acname">${esc(item.label)}</div>`
+      + (item.sub ? `<div class="acsub">${esc(item.sub)}</div>` : '');
+
+    d.addEventListener('mousedown', e => e.preventDefault()); // KEY
+    d.addEventListener('click', () => {
+      d.classList.add('hi');
+      listEl.style.display = 'none';
+      onSelect(item.data);
+    });
+    listEl.appendChild(d);
+  });
+  listEl.style.display = 'block';
+}
+
+// Close dropdown when clicking outside
+document.addEventListener('click', e => {
+  if (!e.target.closest('.acw'))
+    document.querySelectorAll('.aclist').forEach(l => l.style.display = 'none');
+});
+
+// ═══════════════════════════════════════════════════════════════════
+//  BUYER AUTOCOMPLETE
+// ═══════════════════════════════════════════════════════════════════
+let _buyerTyped = '';
+
+function onBuyerType(q) {
+  _buyerTyped = q.trim();
+  const list  = document.getElementById('buyerList');
+
+  // Reset display
+  document.getElementById('buyerCard').classList.remove('show');
+  document.getElementById('newBuyerBox').classList.remove('show');
+  document.getElementById('addNewBtn').style.display = 'none';
+  isNewBuyer = false;
+
+  if (!_buyerTyped) { list.style.display = 'none'; return; }
+
+  const matches = ALL_BUYERS.filter(b =>
+    b.name.toLowerCase().includes(_buyerTyped.toLowerCase())
+  ).slice(0, 10);
+
+  // Build dropdown items
+  const items = matches.map(b => ({
+    label: b.name,
+    sub  : [b.state, b.phone].filter(Boolean).join(' · '),
+    data : { mode:'existing', buyer:b }
+  }));
+
+  // Show "Add new" option only when no exact match
+  const exact = ALL_BUYERS.find(b => b.name.toLowerCase() === _buyerTyped.toLowerCase());
+  if (!exact) {
+    items.push({
+      label : '➕  Add "' + _buyerTyped + '" as new buyer',
+      sub   : 'Fill GSTIN, address, state below',
+      isNew : true,
+      data  : { mode:'new', name:_buyerTyped }
+    });
+
+    // Also show "Add new" button below the input (always visible alternative)
+    const btn = document.getElementById('addNewBtn');
+    document.getElementById('addNewName').textContent = _buyerTyped;
+    btn.style.display = 'block';
+  }
+
+  buildAcList(list, items, onBuyerPick);
+}
+
+async function onBuyerPick(data) {
+  if (data.mode === 'new') {
+    showNewBuyerForm(data.name || _buyerTyped);
+    return;
+  }
+
+  // ── EXISTING BUYER ──────────────────────────────────────────
+  isNewBuyer = false;
+  document.getElementById('buyerInput').value = data.buyer.name;
+  document.getElementById('addNewBtn').style.display = 'none';
+  document.getElementById('newBuyerBox').classList.remove('show');
+
+  const card = document.getElementById('buyerCard');
+  card.classList.add('show');
+  document.getElementById('bcName').textContent = data.buyer.name;
+  document.getElementById('bcAddr').textContent = 'Loading…';
+  document.getElementById('bcGstin').textContent = '';
+  document.getElementById('bcState').textContent = '';
+  document.getElementById('bcGstType').innerHTML = '';
+  document.getElementById('bcBal').innerHTML = '';
+
+  try {
+    const res = await fetch(BUYER_API + '?name=' + encodeURIComponent(data.buyer.name));
+    const d   = await res.json();
+    if (d.found) {
+      document.getElementById('bcAddr').textContent  = d.address || '(no address saved)';
+      document.getElementById('bcGstin').textContent = d.gstin ? 'GSTIN: ' + d.gstin : 'GSTIN: —';
+      document.getElementById('bcState').textContent = d.state  ? 'State: ' + d.state  : 'State: —';
+
+      const igst = setGstType(d.state);
+      document.getElementById('bcGstType').innerHTML = gstBadge(igst);
+      document.getElementById('bcBal').innerHTML = d.balance > 0
+        ? `<span class="m-badge m-badge-danger">Due: ₹${d.balance.toFixed(2)}</span>`
+        : `<span class="m-badge m-badge-success">✓ Clear</span>`;
+    }
+  } catch(e) {
+    document.getElementById('bcAddr').textContent = '(could not load details)';
+  }
+}
+
+function showNewBuyerForm(name) {
+  isNewBuyer = true;
+  if (name) document.getElementById('buyerInput').value = name;
+  document.getElementById('addNewName').textContent = name || _buyerTyped;
+  document.getElementById('addNewBtn').style.display = 'block';
+  document.getElementById('buyerCard').classList.remove('show');
+  document.getElementById('newBuyerBox').classList.add('show');
+  document.getElementById('buyerList').style.display = 'none';
+  // Scroll to the form
+  setTimeout(() => document.getElementById('newBuyerBox').scrollIntoView({behavior:'smooth', block:'start'}), 100);
+}
+
+function onNewBuyerState(state) {
+  const igst = setGstType(state);
+  document.getElementById('newGstTag').innerHTML = gstBadge(igst);
+}
+
+// Step 1 → Step 2 validation
+function step1Next() {
+  const buyer = document.getElementById('buyerInput').value.trim();
+  if (!buyer) {
+    alert('Please enter buyer name first.');
+    return;
+  }
+  goStep(2);
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  PRODUCT AUTOCOMPLETE (per item row)
+// ═══════════════════════════════════════════════════════════════════
+const _prodTimers = {};
+
+function onProdType(q, idx) {
+  clearTimeout(_prodTimers[idx]);
+  const el = document.getElementById('pList_'+idx);
+  if (!q.trim()) { if (el) el.style.display = 'none'; return; }
+  _prodTimers[idx] = setTimeout(() => fetchProds(q, idx), 220);
+}
+
+async function fetchProds(q, idx) {
+  const el = document.getElementById('pList_'+idx);
+  if (!el) return;
+  try {
+    const url = PROD_API + '?q=' + encodeURIComponent(q) + '&mode=' + mode;
+    const res = await fetch(url, {credentials:'same-origin'});
+    if (!res.ok) throw new Error('HTTP '+res.status);
+    const list = await res.json();
+
+    buildAcList(
+      el,
+      list.map(p => ({
+        label : p.name,
+        sub   : [
+          p.selling_price  ? '₹'+p.selling_price  : null,
+          p.stock_qty != null ? 'Stock: '+p.stock_qty+(p.unit?' '+p.unit:'') : null,
+          p.gst_rate  != null ? 'GST: '+p.gst_rate+'%' : null
+        ].filter(Boolean).join('  |  '),
+        data  : p
+      })),
+      p => onProdPick(idx, p)
+    );
+  } catch(err) {
+    console.error('Product fetch error:', err);
+  }
+}
+
+function onProdPick(idx, p) {
+  // Store product object for mode switch
+  rows[idx]._prod      = p;
+  rows[idx].product_id = p.id;
+  rows[idx].gst_rate   = parseFloat(p.gst_rate) || 0;
+
+  const price = mode === 'Wholesale'
+    ? (parseFloat(p.wholesale_price) || parseFloat(p.selling_price) || 0)
+    : (parseFloat(p.selling_price)   || 0);
+
+  // Fill all fields
+  const el = n => document.getElementById(n+'_'+idx);
+  if (el('pName'))  el('pName').value  = p.name;
+  if (el('pHsn'))   el('pHsn').value   = p.hsn      || '';
+  if (el('pGst'))   el('pGst').value   = p.gst_rate != null ? p.gst_rate : 0;
+  if (el('pRate'))  el('pRate').value  = price;
+  if (el('pUnit'))  el('pUnit').value  = p.unit      || '';
+
+  // GST label update
+  const lbl = document.getElementById('pGstLbl_'+idx);
+  if (lbl) {
+    const g = parseFloat(p.gst_rate) || 0;
+    lbl.textContent = g > 0
+      ? `GST ${g}% auto-filled from product`
+      : 'Product has 0% GST';
+    lbl.style.color = g > 0 ? '#059669' : '#94a3b8';
+  }
+
+  recalcRow(idx);
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  ITEM ROWS
+// ═══════════════════════════════════════════════════════════════════
+function addItem() {
+  const idx = rowCount++;
+  rows[idx] = { product_id:'', gst_rate:0, _prod:null };
+
+  const card = document.createElement('div');
+  card.className = 'icard';
+  card.id = 'row_'+idx;
+  card.innerHTML = `
+    <div class="icard-head">
+      <span class="icard-num">Item ${idx+1}</span>
+      <button type="button" onclick="removeItem(${idx})"
+        style="background:#fef2f2;border:none;border-radius:8px;padding:6px 12px;color:#dc2626;font-size:13px;cursor:pointer;font-weight:600;">
+        <i class="bi bi-trash"></i>
+      </button>
+    </div>
+    <div class="icard-body">
+      <div class="m-fg">
+        <label class="m-label">Product <span style="color:red">*</span></label>
+        <div class="acw">
+          <input type="text" id="pName_${idx}" class="m-input"
+                 placeholder="Type product name to search…"
+                 autocomplete="off" spellcheck="false"
+                 oninput="onProdType(this.value,${idx})"
+                 onfocus="if(this.value.length>1) onProdType(this.value,${idx})" />
+          <div class="aclist" id="pList_${idx}"></div>
+        </div>
+      </div>
+      <div class="igrid2">
+        <div class="m-fg">
+          <label class="m-label">Qty <span style="color:red">*</span></label>
+          <input type="number" id="pQty_${idx}" class="m-input"
+                 value="1" min="0.001" step="0.001" oninput="recalcRow(${idx})" />
+        </div>
+        <div class="m-fg">
+          <label class="m-label">Rate ₹ <span style="color:red">*</span></label>
+          <input type="number" id="pRate_${idx}" class="m-input"
+                 value="0" step="0.01" min="0" oninput="recalcRow(${idx})" />
+        </div>
+        <div class="m-fg">
+          <label class="m-label">Disc %</label>
+          <input type="number" id="pDisc_${idx}" class="m-input"
+                 value="0" step="0.01" min="0" max="100" oninput="recalcRow(${idx})" />
+        </div>
+        <div class="m-fg">
+          <label class="m-label">GST %</label>
+          <input type="number" id="pGst_${idx}" class="m-input"
+                 value="0" step="0.01" min="0"
+                 oninput="rows[${idx}].gst_rate=parseFloat(this.value)||0;recalcRow(${idx})" />
+        </div>
+        <div class="m-fg">
+          <label class="m-label">HSN</label>
+          <input type="text" id="pHsn_${idx}" class="m-input" placeholder="HSN code" />
+        </div>
+        <div class="m-fg">
+          <label class="m-label">Unit</label>
+          <input type="text" id="pUnit_${idx}" class="m-input" placeholder="Pcs / Kg…" />
+        </div>
+      </div>
+      <div class="iamount" id="pAmt_${idx}">₹ 0.00</div>
+      <div class="igst-lbl" id="pGstLbl_${idx}">Select product — rate & GST auto-fill</div>
+    </div>`;
+  document.getElementById('itemsWrap').appendChild(card);
+}
+
+function removeItem(idx) {
+  document.getElementById('row_'+idx)?.remove();
+  delete rows[idx];
+  recalc();
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  CALCULATIONS
+// ═══════════════════════════════════════════════════════════════════
+function recalcRow(idx) {
+  const qty  = parseFloat(document.getElementById('pQty_'+idx)?.value)  || 0;
+  const rate = parseFloat(document.getElementById('pRate_'+idx)?.value) || 0;
+  const disc = parseFloat(document.getElementById('pDisc_'+idx)?.value) || 0;
+  const gst  = parseFloat(document.getElementById('pGst_'+idx)?.value)  || 0;
+
+  rows[idx].gst_rate = gst;
+  const taxable = qty * rate * (1 - disc/100);
+  const gstAmt  = taxable * gst / 100;
+
+  const a = document.getElementById('pAmt_'+idx);
+  if (a) a.textContent = '₹ ' + taxable.toFixed(2);
+
+  const lbl = document.getElementById('pGstLbl_'+idx);
+  if (lbl && !rows[idx]._prod) {
+    lbl.textContent = gst > 0 ? `GST ${gst}% = ₹${gstAmt.toFixed(2)}` : '';
+  } else if (lbl && gst > 0) {
+    lbl.textContent = `GST ${gst}% = ₹${gstAmt.toFixed(2)}`;
+  }
+
+  recalc();
+}
+
+function recalc() {
+  let sub=0, disc=0, gstTotal=0;
+  Object.keys(rows).forEach(idx => {
+    if (!document.getElementById('row_'+idx)) return;
+    const qty  = parseFloat(document.getElementById('pQty_'+idx)?.value)  || 0;
+    const rate = parseFloat(document.getElementById('pRate_'+idx)?.value) || 0;
+    const d    = parseFloat(document.getElementById('pDisc_'+idx)?.value) || 0;
+    const g    = parseFloat(document.getElementById('pGst_'+idx)?.value)  || 0;
+    const base = qty * rate;
+    const da   = base * d / 100;
+    sub      += base;
+    disc     += da;
+    gstTotal += (base - da) * g / 100;
+  });
+  const freight = parseFloat(document.getElementById('f_freight')?.value) || 0;
+  const taxable = sub - disc;
+  const grand   = taxable + gstTotal + freight;
+
+  _s('rvSub',  fmt(sub));
+  _s('rvDisc', fmt(disc));
+  _s('rvTax',  fmt(taxable));
+  _s('rvGrand',fmt(grand));
+
+  if (isIgst) {
+    _show('rowIgst'); _hide('rowCgst'); _hide('rowSgst');
+    _s('rvIgst', fmt(gstTotal));
+  } else {
+    _hide('rowIgst'); _show('rowCgst'); _show('rowSgst');
+    _s('rvCgst', fmt(gstTotal/2));
+    _s('rvSgst', fmt(gstTotal/2));
+  }
+}
+
+const fmt  = n => '₹' + parseFloat(n||0).toFixed(2);
+const _s   = (id,v) => { const e=document.getElementById(id); if(e) e.textContent=v; };
+const _show= id => { const e=document.getElementById(id); if(e) e.style.display=''; };
+const _hide= id => { const e=document.getElementById(id); if(e) e.style.display='none'; };
+
+// ═══════════════════════════════════════════════════════════════════
+//  PAYMENT MODE
+// ═══════════════════════════════════════════════════════════════════
+function onPayMode(m) {
+  if (m !== 'Credit') {
+    const grand = parseFloat(
+      (document.getElementById('rvGrand')?.textContent||'0').replace(/[₹,]/g,'')
+    ) || 0;
+    document.getElementById('f_paid').value = grand.toFixed(2);
+  } else {
+    document.getElementById('f_paid').value = '0';
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  REVIEW
+// ═══════════════════════════════════════════════════════════════════
+function buildReview() {
+  recalc();
+  const buyer = document.getElementById('buyerInput').value || '—';
+  const invNo = document.getElementById('f_invNo')?.value   || '—';
+  const invDt = document.getElementById('f_invDate')?.value  || '—';
+  const pm    = document.getElementById('f_payMode')?.value  || '';
+  const active = Object.keys(rows).filter(i => document.getElementById('row_'+i));
+
+  let html = `<div style="font-weight:700;font-size:15px;">${esc(buyer)}</div>
+    <div style="font-size:12px;color:var(--text-muted);margin-top:3px;">${esc(invNo)} · ${invDt} · ${esc(pm)}</div>`;
+
+  if (active.length) {
+    html += '<div style="margin-top:10px;border-top:1px solid var(--border);padding-top:8px;">';
+    active.forEach(idx => {
+      const nm  = document.getElementById('pName_'+idx)?.value || '—';
+      const qty = document.getElementById('pQty_'+idx)?.value  || 0;
+      const amt = document.getElementById('pAmt_'+idx)?.textContent || '₹0';
+      html += `<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #f8fafc;font-size:13px;">
+        <span>${esc(nm)} × ${qty}</span><strong>${esc(amt)}</strong></div>`;
+    });
+    html += '</div>';
+  } else {
+    html += '<div style="margin-top:10px;font-size:13px;color:var(--text-muted);">No items added yet.</div>';
+  }
+  document.getElementById('reviewInfo').innerHTML = html;
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  SAVE INVOICE — THE FIX
+//  Using a hidden <form> + explicit form.submit() instead of
+//  onclick="return prepareSubmit()" on a submit button, which fails
+//  in Safari/iOS when btn.disabled=true is set before return true.
+// ═══════════════════════════════════════════════════════════════════
+function saveInvoice() {
+  // ── Validate ───────────────────────────────────────────────
+  const buyer  = document.getElementById('buyerInput').value.trim();
+  const active = Object.keys(rows).filter(i => document.getElementById('row_'+i));
+
+  if (!buyer) {
+    alert('Step 1: Please enter a buyer name.');
+    goStep(1); return;
+  }
+  if (!active.length) {
+    alert('Step 3: Please add at least one item.');
+    goStep(3); return;
+  }
+  for (const idx of active) {
+    const nm   = (document.getElementById('pName_'+idx)?.value || '').trim();
+    const qty  = parseFloat(document.getElementById('pQty_'+idx)?.value) || 0;
+    const rate = parseFloat(document.getElementById('pRate_'+idx)?.value) || 0;
+    if (!nm)     { alert(`Item ${+idx+1}: Enter product name.`); goStep(3); return; }
+    if (qty <= 0){ alert(`Item ${+idx+1}: Quantity must be > 0.`); goStep(3); return; }
+    if (rate<= 0){ alert(`Item ${+idx+1}: Rate must be > 0.`); goStep(3); return; }
+  }
+
+  // ── Update UI immediately ─────────────────────────────────
+  const btn = document.getElementById('saveBtn');
+  btn.innerHTML = '<span class="cspin"></span> Saving…';
+  btn.disabled  = true;
+
+  // ── Build form fields ─────────────────────────────────────
+  const form = document.getElementById('realForm');
+  form.innerHTML = '';  // clear previous
+
+  const add = (name, val) => {
+    const inp = document.createElement('input');
+    inp.type='hidden'; inp.name=name; inp.value=(val===null||val===undefined)?'':val;
+    form.appendChild(inp);
+  };
+
+  // Buyer info
+  add('buyer_name',   buyer);
+  add('billing_mode', mode);
+
+  // New buyer extra fields
+  if (isNewBuyer) {
+    add('buyer_state',   document.getElementById('inpState')?.value   || '');
+    add('buyer_gstin',   document.getElementById('inpGstin')?.value   || '');
+    add('buyer_address', document.getElementById('inpAddress')?.value || '');
+    add('buyer_phone',   document.getElementById('inpPhone')?.value   || '');
+  }
+
+  // Invoice details
+  add('invoice_no',   document.getElementById('f_invNo')?.value   || '');
+  add('invoice_date', document.getElementById('f_invDate')?.value  || '');
+  add('payment_mode', document.getElementById('f_payMode')?.value  || 'Credit');
+  add('order_ref',    document.getElementById('f_orderRef')?.value || '');
+  add('dispatch_info',document.getElementById('f_dispatch')?.value || '');
+  add('freight',      document.getElementById('f_freight')?.value  || '0');
+  add('paid_amount',  document.getElementById('f_paid')?.value     || '0');
+
+  // Items
+  active.forEach(idx => {
+    const qty  = parseFloat(document.getElementById('pQty_'+idx)?.value)  || 0;
+    const rate = parseFloat(document.getElementById('pRate_'+idx)?.value) || 0;
+    const disc = parseFloat(document.getElementById('pDisc_'+idx)?.value) || 0;
+    const gst  = parseFloat(document.getElementById('pGst_'+idx)?.value)  || 0;
+    const amt  = qty * rate * (1 - disc/100);
+
+    add('description[]',       document.getElementById('pName_'+idx)?.value || '');
+    add('product_id[]',        rows[idx].product_id || '0');
+    add('hsn[]',               document.getElementById('pHsn_'+idx)?.value  || '');
+    add('gst_rate[]',          gst);
+    add('quantity[]',          qty);
+    add('rate[]',              rate);
+    add('discount_percent[]',  disc);
+    add('amount[]',            amt.toFixed(4));
+    add('unit[]',              document.getElementById('pUnit_'+idx)?.value  || '');
+  });
+
+  // ── SUBMIT — explicit call, no onclick interference ───────
+  form.submit();
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  UTILS
+// ═══════════════════════════════════════════════════════════════════
+function esc(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// ── INIT ─────────────────────────────────────────────────────────
+addItem();
+</script>
+{% endblock %}

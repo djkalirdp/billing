@@ -1,0 +1,553 @@
+{% extends 'base.html' %}
+
+{% block title %}Invoice {{ invoice.invoice_no }}{% endblock %}
+{% block page_title %}Invoice Details{% endblock %}
+
+{% block head %}
+<style>
+  .inv-detail-layout {
+    display: grid;
+    grid-template-columns: 1fr 300px;
+    gap: 16px;
+    align-items: start;
+  }
+  @media (max-width: 1024px) { .inv-detail-layout { grid-template-columns: 1fr; } }
+
+  /* Invoice card */
+  .inv-card {
+    background: white;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+  }
+
+  /* Invoice top header */
+  .inv-top {
+    padding: 20px 24px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+  .inv-no {
+    font-family: var(--font-head);
+    font-size: 22px; font-weight: 800;
+    color: var(--text-main);
+  }
+  .inv-date-badge {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 4px 12px;
+    border-radius: 99px;
+    background: #eff6ff; color: #1d4ed8;
+    font-size: 12.5px; font-weight: 600;
+  }
+
+  /* Parties grid */
+  .parties-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .party-block {
+    padding: 18px 24px;
+  }
+  .party-block:first-child { border-right: 1px solid var(--border); }
+  .party-label {
+    font-size: 10px; font-weight: 700;
+    color: var(--text-muted);
+    text-transform: uppercase; letter-spacing: .08em;
+    margin-bottom: 8px;
+  }
+  .party-name {
+    font-family: var(--font-head);
+    font-size: 15px; font-weight: 700;
+    color: var(--text-main); margin-bottom: 4px;
+  }
+  .party-info { font-size: 13px; color: var(--text-muted); line-height: 1.7; }
+
+  /* Items table */
+  .items-section { padding: 0; }
+  .items-table {
+    width: 100%; border-collapse: collapse;
+  }
+  .items-table thead th {
+    background: #f8fafc;
+    padding: 10px 16px;
+    font-size: 11px; font-weight: 700;
+    color: var(--text-muted);
+    text-transform: uppercase; letter-spacing: .05em;
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+  }
+  .items-table tbody td {
+    padding: 12px 16px;
+    border-bottom: 1px solid #f1f5f9;
+    font-size: 13.5px;
+    vertical-align: middle;
+  }
+  .items-table tbody tr:last-child td { border-bottom: none; }
+  .items-table tbody tr:hover { background: #fafafa; }
+  .items-table tfoot td {
+    padding: 12px 16px;
+    border-top: 2px solid var(--border);
+    font-weight: 700;
+    font-size: 14px;
+  }
+
+  /* GST breakdown */
+  .gst-row {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 8px 24px;
+    font-size: 13px; color: var(--text-muted);
+    border-bottom: 1px solid #f1f5f9;
+  }
+  .gst-row .gst-val { font-weight: 600; color: var(--text-main); }
+  .gst-row.grand {
+    padding: 14px 24px;
+    background: #f8fafc;
+    font-family: var(--font-head);
+    font-size: 16px; font-weight: 800;
+    color: var(--text-main);
+    border-top: 2px solid var(--border);
+    border-bottom: none;
+  }
+  .gst-row.grand .gst-val { color: var(--accent); font-size: 20px; }
+
+  /* Sidebar cards */
+  .side-card {
+    background: white;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+    margin-bottom: 12px;
+  }
+  .side-card-title {
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border);
+    font-family: var(--font-head);
+    font-size: 13px; font-weight: 700;
+    color: var(--text-main);
+    display: flex; align-items: center; gap: 8px;
+  }
+  .side-card-body { padding: 14px 16px; }
+
+  .info-row {
+    display: flex; justify-content: space-between;
+    padding: 6px 0;
+    font-size: 13px;
+    border-bottom: 1px solid #f8fafc;
+  }
+  .info-row:last-child { border-bottom: none; }
+  .info-row .ir-label { color: var(--text-muted); }
+  .info-row .ir-val   { font-weight: 600; color: var(--text-main); text-align: right; }
+
+  /* Action buttons */
+  .action-group {
+    display: flex; flex-direction: column; gap: 8px;
+  }
+
+  /* Status banner for cancelled */
+  .cancelled-banner {
+    background: #fef2f2;
+    border: 1px solid #fecaca;
+    border-radius: var(--radius-sm);
+    padding: 12px 18px;
+    display: flex; align-items: center; gap: 10px;
+    color: #7f1d1d; font-size: 13.5px; font-weight: 600;
+    margin-bottom: 16px;
+  }
+
+  .amount-words {
+    padding: 14px 24px;
+    background: #fffbeb;
+    border-top: 1px solid var(--border);
+    font-size: 13px;
+    color: #78350f;
+  }
+  .amount-words strong { color: #92400e; }
+</style>
+{% endblock %}
+
+{% block topbar_actions %}
+<a href="{{ url_for('invoices') }}" class="btn-outline-custom">
+  <i class="bi bi-arrow-left"></i> Back to List
+</a>
+{% endblock %}
+
+{% block content %}
+
+{% set is_cancelled = 'CANCELLED' in invoice.invoice_no %}
+
+{% if is_cancelled %}
+<div class="cancelled-banner">
+  <i class="bi bi-slash-circle-fill fs-5"></i>
+  This invoice has been CANCELLED. Stock has been restored.
+</div>
+{% endif %}
+
+<div class="inv-detail-layout">
+
+  <!-- ═══ LEFT: Invoice View ══════════════════════════════════ -->
+  <div>
+    <div class="inv-card">
+
+      <!-- Header -->
+      <div class="inv-top">
+        <div>
+          <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px;">
+            TAX INVOICE
+          </div>
+          <div class="inv-no">{{ invoice.invoice_no }}</div>
+          <div class="inv-date-badge mt-2">
+            <i class="bi bi-calendar3"></i>
+            {{ invoice.invoice_date }}
+          </div>
+        </div>
+        <div style="text-align:right;">
+          <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px;">
+            Payment Mode
+          </div>
+          <span class="badge-custom
+            {% if invoice.payment_mode == 'Credit' %}badge-warning
+            {% elif invoice.payment_mode == 'Cash' %}badge-success
+            {% else %}badge-info{% endif %}"
+            style="font-size:13px;padding:5px 14px;">
+            {{ invoice.payment_mode }}
+          </span>
+          {% if invoice.order_ref %}
+          <div style="font-size:12px;color:var(--text-muted);margin-top:8px;">
+            Ref: {{ invoice.order_ref }}
+          </div>
+          {% endif %}
+          {% if invoice.dispatch_info %}
+          <div style="font-size:12px;color:var(--text-muted);margin-top:4px;">
+            Dispatch: {{ invoice.dispatch_info }}
+          </div>
+          {% endif %}
+        </div>
+      </div>
+
+      <!-- Seller & Buyer -->
+      <div class="parties-grid">
+        <div class="party-block">
+          <div class="party-label">Seller</div>
+          <div class="party-name">{{ settings.company_info.name if settings else 'Your Company' }}</div>
+          <div class="party-info">
+            {% if settings %}
+              {{ settings.company_info.get('address_line1','') }}<br>
+              GSTIN: {{ settings.company_info.get('gstin','—') }}<br>
+              State: {{ settings.company_info.get('state','—') }}
+            {% endif %}
+          </div>
+        </div>
+        <div class="party-block">
+          <div class="party-label">Bill To</div>
+          <div class="party-name">{{ invoice.buyer_name }}</div>
+          <div class="party-info">
+            {{ invoice.buyer_address or '—' }}<br>
+            GSTIN: {{ invoice.buyer_gstin or '—' }}<br>
+            State: {{ invoice.buyer_state or '—' }}
+          </div>
+        </div>
+      </div>
+
+      <!-- Items Table -->
+      <div class="items-section">
+        <table class="items-table">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Description</th>
+              <th>HSN/SAC</th>
+              <th style="text-align:center;">GST%</th>
+              <th style="text-align:right;">Qty</th>
+              <th style="text-align:right;">Rate (₹)</th>
+              <th style="text-align:center;">Disc%</th>
+              <th style="text-align:right;">Amount (₹)</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for item in items %}
+            <tr>
+              <td style="color:var(--text-muted);">{{ loop.index }}</td>
+              <td><strong>{{ item.description }}</strong></td>
+              <td style="color:var(--text-muted);font-size:12px;">{{ item.hsn or '—' }}</td>
+              <td style="text-align:center;">
+                <span class="badge-custom badge-info">{{ item.gst_rate }}%</span>
+              </td>
+              <td style="text-align:right;">{{ item.quantity }}</td>
+              <td style="text-align:right;">{{ "%.2f"|format(item.rate) }}</td>
+              <td style="text-align:center;color:var(--text-muted);">{{ item.discount_percent or 0 }}%</td>
+              <td style="text-align:right;font-weight:600;">{{ "%.2f"|format(item.amount) }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+          <tfoot>
+            <tr>
+              <td colspan="6" style="color:var(--text-muted);font-weight:400;font-size:12px;">
+                Total {{ items|length }} item(s)
+              </td>
+              <td></td>
+              <td style="text-align:right;">
+                ₹ {{ "%.2f"|format(invoice.subtotal) }}
+              </td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+
+      <!-- Amount in words -->
+      <div class="amount-words">
+        <i class="bi bi-card-text me-1"></i>
+        Amount in Words: <strong>{{ invoice.grand_total | int | format_words }}</strong>
+      </div>
+
+      <!-- GST Breakdown + Totals -->
+      <div style="border-top: 1px solid var(--border);">
+        <div class="gst-row">
+          <span>Subtotal</span>
+          <span class="gst-val">₹ {{ "%.2f"|format(invoice.subtotal) }}</span>
+        </div>
+        {% if invoice.total_discount %}
+        <div class="gst-row">
+          <span>Total Discount</span>
+          <span class="gst-val" style="color:#dc2626;">- ₹ {{ "%.2f"|format(invoice.total_discount) }}</span>
+        </div>
+        {% endif %}
+        <div class="gst-row">
+          <span>Taxable Value</span>
+          <span class="gst-val">₹ {{ "%.2f"|format(invoice.taxable_value) }}</span>
+        </div>
+
+        {% if invoice.total_igst > 0 %}
+        <div class="gst-row">
+          <span>IGST</span>
+          <span class="gst-val">₹ {{ "%.2f"|format(invoice.total_igst) }}</span>
+        </div>
+        {% else %}
+        <div class="gst-row">
+          <span>CGST</span>
+          <span class="gst-val">₹ {{ "%.2f"|format(invoice.total_cgst) }}</span>
+        </div>
+        <div class="gst-row">
+          <span>SGST</span>
+          <span class="gst-val">₹ {{ "%.2f"|format(invoice.total_sgst) }}</span>
+        </div>
+        {% endif %}
+
+        {% if invoice.freight and invoice.freight > 0 %}
+        <div class="gst-row">
+          <span>Freight</span>
+          <span class="gst-val">₹ {{ "%.2f"|format(invoice.freight) }}</span>
+        </div>
+        {% endif %}
+
+        {% if invoice.round_off and invoice.round_off != 0 %}
+        <div class="gst-row">
+          <span>Round Off</span>
+          <span class="gst-val">{{ "%.2f"|format(invoice.round_off) }}</span>
+        </div>
+        {% endif %}
+
+        <div class="gst-row grand">
+          <span>GRAND TOTAL</span>
+          <span class="gst-val">₹ {{ "%.2f"|format(invoice.grand_total) }}</span>
+        </div>
+
+        {% if paid_amount is defined and paid_amount > 0 %}
+        <div class="gst-row" style="margin-top:6px;">
+          <span style="color:#059669;font-weight:600;">Paid at Billing</span>
+          <span class="gst-val" style="color:#059669;">-₹ {{ "%.2f"|format(paid_amount) }}</span>
+        </div>
+        {% set balance_due = invoice.grand_total - paid_amount %}
+        <div class="gst-row grand" style="background:#fff7ed;padding:6px 8px;border-radius:8px;margin-top:4px;">
+          <span style="color:#c2410c;">Balance Due</span>
+          <span class="gst-val" style="color:#c2410c;">₹ {{ "%.2f"|format(balance_due if balance_due > 0 else 0) }}</span>
+        </div>
+        {% if previous_balance is defined and previous_balance > 0 %}
+        <div class="gst-row" style="margin-top:4px;border-top:1px dashed #e2e8f0;padding-top:6px;">
+          <span style="color:#7c3aed;">Previous Balance</span>
+          <span class="gst-val" style="color:#7c3aed;">₹ {{ "%.2f"|format(previous_balance) }}</span>
+        </div>
+        {% set total_outstanding = balance_due + previous_balance %}
+        <div class="gst-row grand" style="background:#faf5ff;padding:6px 8px;border-radius:8px;margin-top:4px;">
+          <span style="color:#7c3aed;">Total Outstanding</span>
+          <span class="gst-val" style="color:#7c3aed;">₹ {{ "%.2f"|format(total_outstanding if total_outstanding > 0 else 0) }}</span>
+        </div>
+        {% endif %}
+        {% elif paid_amount is defined and paid_amount == 0 and invoice.payment_mode == 'Credit' %}
+        <div class="gst-row grand" style="background:#fff7ed;padding:6px 8px;border-radius:8px;margin-top:6px;">
+          <span style="color:#c2410c;">Balance Due</span>
+          <span class="gst-val" style="color:#c2410c;">₹ {{ "%.2f"|format(invoice.grand_total) }}</span>
+        </div>
+        {% if previous_balance is defined and previous_balance > 0 %}
+        {% set total_outstanding = invoice.grand_total + previous_balance %}
+        <div class="gst-row grand" style="background:#faf5ff;padding:6px 8px;border-radius:8px;margin-top:4px;">
+          <span style="color:#7c3aed;">Total Outstanding</span>
+          <span class="gst-val" style="color:#7c3aed;">₹ {{ "%.2f"|format(total_outstanding) }}</span>
+        </div>
+        {% endif %}
+        {% endif %}
+      </div>
+
+    </div><!-- /inv-card -->
+  </div><!-- /left -->
+
+  <!-- ═══ RIGHT: Sidebar ═══════════════════════════════════════ -->
+  <div>
+
+    <!-- Actions -->
+    <div class="side-card">
+      <div class="side-card-title">
+        <i class="bi bi-lightning-charge"></i> Actions
+      </div>
+      <div class="side-card-body">
+        <div class="action-group">
+
+          {% if not is_cancelled %}
+          <a href="{{ url_for('download_invoice_pdf', invoice_id=invoice.id) }}"
+             class="btn-primary-custom" style="justify-content:center;" target="_blank">
+            <i class="bi bi-download"></i> Download PDF
+          </a>
+          {% endif %}
+
+          <a href="{{ url_for('buyer_ledger', buyer_id=invoice.buyer_id) }}"
+             class="btn-success-custom" style="justify-content:center;">
+            <i class="bi bi-journal-text"></i> View Buyer Ledger
+          </a>
+
+          {% if user_role == 'Admin' and not is_cancelled %}
+          <button class="btn-danger-custom" style="justify-content:center;"
+                  onclick="confirmCancel({{ invoice.id }}, '{{ invoice.invoice_no }}')">
+            <i class="bi bi-x-circle"></i> Cancel Invoice
+          </button>
+          {% endif %}
+
+          <a href="{{ url_for('invoices') }}" class="btn-outline-custom" style="justify-content:center;">
+            <i class="bi bi-arrow-left"></i> Back to List
+          </a>
+
+        </div>
+      </div>
+    </div>
+
+    <!-- Invoice Info -->
+    <div class="side-card">
+      <div class="side-card-title">
+        <i class="bi bi-info-circle"></i> Invoice Info
+      </div>
+      <div class="side-card-body">
+        <div class="info-row">
+          <span class="ir-label">Invoice No.</span>
+          <span class="ir-val" style="color:var(--accent);font-family:var(--font-head);">
+            {{ invoice.invoice_no }}
+          </span>
+        </div>
+        <div class="info-row">
+          <span class="ir-label">Date</span>
+          <span class="ir-val">{{ invoice.invoice_date }}</span>
+        </div>
+        <div class="info-row">
+          <span class="ir-label">Payment Mode</span>
+          <span class="ir-val">{{ invoice.payment_mode }}</span>
+        </div>
+        <div class="info-row">
+          <span class="ir-label">GST Type</span>
+          <span class="ir-val">
+            {% if invoice.total_igst > 0 %}
+              <span class="badge-custom badge-info">IGST (Inter-State)</span>
+            {% else %}
+              <span class="badge-custom badge-success">CGST+SGST (Intra)</span>
+            {% endif %}
+          </span>
+        </div>
+        <div class="info-row">
+          <span class="ir-label">Status</span>
+          <span class="ir-val">
+            {% if is_cancelled %}
+              <span class="badge-custom badge-danger">Cancelled</span>
+            {% else %}
+              <span class="badge-custom badge-success">Active</span>
+            {% endif %}
+          </span>
+        </div>
+        {% if invoice.order_ref %}
+        <div class="info-row">
+          <span class="ir-label">Order Ref</span>
+          <span class="ir-val">{{ invoice.order_ref }}</span>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- Buyer Info -->
+    <div class="side-card">
+      <div class="side-card-title">
+        <i class="bi bi-person"></i> Buyer Details
+      </div>
+      <div class="side-card-body">
+        <div class="info-row">
+          <span class="ir-label">Name</span>
+          <span class="ir-val">{{ invoice.buyer_name }}</span>
+        </div>
+        <div class="info-row">
+          <span class="ir-label">GSTIN</span>
+          <span class="ir-val" style="font-size:12px;">{{ invoice.buyer_gstin or '—' }}</span>
+        </div>
+        <div class="info-row">
+          <span class="ir-label">State</span>
+          <span class="ir-val">{{ invoice.buyer_state or '—' }}</span>
+        </div>
+        {% if invoice.buyer_address %}
+        <div style="padding:6px 0;font-size:12.5px;color:var(--text-muted);">
+          <i class="bi bi-geo-alt me-1"></i>{{ invoice.buyer_address }}
+        </div>
+        {% endif %}
+      </div>
+    </div>
+
+  </div><!-- /right -->
+
+</div>
+
+<!-- Cancel Modal -->
+<div class="modal-overlay" id="cancelModal">
+  <div class="modal-box">
+    <div class="modal-title">
+      <i class="bi bi-exclamation-triangle-fill text-warning me-2"></i>
+      Cancel Invoice?
+    </div>
+    <div class="modal-body" id="cancelBody">
+      This action cannot be undone. Stock will be restored.
+    </div>
+    <div style="display:flex;gap:10px;justify-content:flex-end;">
+      <button class="btn-outline-custom" onclick="document.getElementById('cancelModal').classList.remove('open')">
+        No, Keep It
+      </button>
+      <form id="cancelForm" method="POST">
+        <button type="submit" class="btn-danger-custom">
+          <i class="bi bi-x-circle"></i> Yes, Cancel
+        </button>
+      </form>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+function confirmCancel(id, invNo) {
+  document.getElementById('cancelBody').innerHTML =
+    `Cancel invoice <strong>${invNo}</strong>? Stock will be restored.`;
+  document.getElementById('cancelForm').action = `/invoices/${id}/cancel`;
+  document.getElementById('cancelModal').classList.add('open');
+}
+document.getElementById('cancelModal').addEventListener('click', function(e){
+  if(e.target===this) this.classList.remove('open');
+});
+</script>
+{% endblock %}

@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Login — BillPro</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet" />
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-icons/1.11.3/font/bootstrap-icons.min.css" rel="stylesheet" />
+
+  <style>
+    :root {
+      --accent  : #2563eb;
+      --accent-d: #1d4ed8;
+      --danger  : #dc2626;
+      --border  : #e2e8f0;
+      --text    : #0f172a;
+      --muted   : #64748b;
+      --font-h  : 'Syne', sans-serif;
+      --font-b  : 'DM Sans', sans-serif;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: var(--font-b);
+      min-height: 100vh;
+      display: flex;
+      background: #0f172a;
+      overflow: hidden;
+    }
+
+    /* Left — decorative panel */
+    .left-panel {
+      flex: 1;
+      background: linear-gradient(135deg, #0f172a 0%, #1e3a8a 60%, #1d4ed8 100%);
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      padding: 60px 40px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    /* Animated circles */
+    .left-panel::before {
+      content: '';
+      position: absolute;
+      width: 500px; height: 500px;
+      border-radius: 50%;
+      border: 1px solid rgba(255,255,255,.06);
+      top: -100px; left: -100px;
+      animation: rotate 30s linear infinite;
+    }
+    .left-panel::after {
+      content: '';
+      position: absolute;
+      width: 350px; height: 350px;
+      border-radius: 50%;
+      border: 1px solid rgba(255,255,255,.08);
+      bottom: -80px; right: -80px;
+      animation: rotate 20s linear infinite reverse;
+    }
+    @keyframes rotate {
+      from { transform: rotate(0deg); }
+      to   { transform: rotate(360deg); }
+    }
+
+    .left-content { position: relative; z-index: 2; text-align: center; }
+
+    .brand-icon {
+      width: 72px; height: 72px;
+      background: rgba(255,255,255,.1);
+      border: 1px solid rgba(255,255,255,.15);
+      border-radius: 20px;
+      display: flex; align-items: center; justify-content: center;
+      font-family: var(--font-h);
+      font-size: 36px; font-weight: 800;
+      color: white;
+      margin: 0 auto 24px;
+      backdrop-filter: blur(8px);
+    }
+    .brand-name {
+      font-family: var(--font-h);
+      font-size: 36px; font-weight: 800;
+      color: white;
+      margin-bottom: 12px;
+    }
+    .brand-desc {
+      font-size: 15px;
+      color: rgba(255,255,255,.6);
+      line-height: 1.7;
+      max-width: 300px;
+    }
+
+    /* Feature list */
+    .feature-list {
+      margin-top: 48px;
+      list-style: none;
+      text-align: left;
+    }
+    .feature-list li {
+      display: flex; align-items: center; gap: 12px;
+      color: rgba(255,255,255,.75);
+      font-size: 14px;
+      margin-bottom: 16px;
+    }
+    .feature-list li .icon-wrap {
+      width: 32px; height: 32px;
+      background: rgba(255,255,255,.1);
+      border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+      color: #93c5fd;
+      font-size: 15px;
+    }
+
+    /* Right — login form */
+    .right-panel {
+      width: 440px;
+      min-width: 380px;
+      background: white;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      padding: 56px 48px;
+    }
+
+    .login-header { margin-bottom: 36px; }
+    .login-title {
+      font-family: var(--font-h);
+      font-size: 26px; font-weight: 800;
+      color: var(--text);
+      margin-bottom: 6px;
+    }
+    .login-sub { font-size: 14px; color: var(--muted); }
+
+    .form-group { margin-bottom: 20px; }
+    .form-label {
+      font-size: 12px; font-weight: 600;
+      color: var(--muted);
+      text-transform: uppercase; letter-spacing: .06em;
+      display: block; margin-bottom: 8px;
+    }
+    .input-wrap {
+      position: relative;
+    }
+    .input-wrap i {
+      position: absolute;
+      left: 13px; top: 50%; transform: translateY(-50%);
+      color: var(--muted); font-size: 16px;
+      pointer-events: none;
+    }
+    .form-input {
+      width: 100%;
+      padding: 11px 13px 11px 40px;
+      border: 1.5px solid var(--border);
+      border-radius: 10px;
+      font-family: var(--font-b);
+      font-size: 14px;
+      color: var(--text);
+      background: #f8fafc;
+      outline: none;
+      transition: border-color .18s, box-shadow .18s, background .18s;
+    }
+    .form-input:focus {
+      border-color: var(--accent);
+      background: white;
+      box-shadow: 0 0 0 3px rgba(37,99,235,.1);
+    }
+
+    /* Show/hide password toggle */
+    .pass-toggle {
+      position: absolute;
+      right: 13px; top: 50%; transform: translateY(-50%);
+      cursor: pointer; color: var(--muted);
+      font-size: 16px;
+      transition: color .18s;
+    }
+    .pass-toggle:hover { color: var(--accent); }
+
+    /* Error alert */
+    .alert-err {
+      background: #fef2f2;
+      border: 1px solid #fecaca;
+      border-left: 4px solid var(--danger);
+      border-radius: 10px;
+      padding: 12px 16px;
+      font-size: 13.5px;
+      color: #7f1d1d;
+      display: flex; align-items: center; gap: 10px;
+      margin-bottom: 20px;
+    }
+
+    .btn-login {
+      width: 100%;
+      padding: 13px;
+      background: var(--accent);
+      color: white;
+      border: none;
+      border-radius: 10px;
+      font-family: var(--font-h);
+      font-size: 15px; font-weight: 700;
+      cursor: pointer;
+      transition: background .18s, transform .15s, box-shadow .18s;
+      display: flex; align-items: center; justify-content: center; gap: 8px;
+      margin-top: 8px;
+    }
+    .btn-login:hover {
+      background: var(--accent-d);
+      transform: translateY(-1px);
+      box-shadow: 0 8px 24px rgba(37,99,235,.3);
+    }
+    .btn-login:active { transform: translateY(0); }
+
+    .login-hint {
+      margin-top: 28px;
+      padding: 14px;
+      background: #f8fafc;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      font-size: 12.5px;
+      color: var(--muted);
+    }
+    .login-hint strong { color: var(--text); }
+
+    @media (max-width: 768px) {
+      .left-panel { display: none; }
+      .right-panel { width: 100%; padding: 40px 28px; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Left decorative panel -->
+  <div class="left-panel">
+    <div class="left-content">
+      <div class="brand-icon">B</div>
+      <div class="brand-name">BillPro</div>
+      <p class="brand-desc">Professional GST Billing & Inventory Management for Indian SMEs</p>
+
+      <ul class="feature-list">
+        <li>
+          <div class="icon-wrap"><i class="bi bi-receipt-cutoff"></i></div>
+          <span>GST-Compliant Tax Invoices (CGST / SGST / IGST)</span>
+        </li>
+        <li>
+          <div class="icon-wrap"><i class="bi bi-box-seam"></i></div>
+          <span>Real-time Inventory with Weighted Average Costing</span>
+        </li>
+        <li>
+          <div class="icon-wrap"><i class="bi bi-graph-up-arrow"></i></div>
+          <span>Dashboard Analytics & Sales Reports</span>
+        </li>
+        <li>
+          <div class="icon-wrap"><i class="bi bi-person-check"></i></div>
+          <span>Buyer Ledger / Khata with Payment Tracking</span>
+        </li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- Right form panel -->
+  <div class="right-panel">
+    <div class="login-header">
+      <div class="login-title">Welcome Back 👋</div>
+      <div class="login-sub">Sign in to access your billing dashboard</div>
+    </div>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% for category, message in messages %}
+        {% if category == 'danger' %}
+        <div class="alert-err">
+          <i class="bi bi-exclamation-circle-fill"></i>
+          {{ message }}
+        </div>
+        {% endif %}
+      {% endfor %}
+    {% endwith %}
+
+    <form method="POST" action="{{ url_for('login') }}" id="loginForm">
+
+      <div class="form-group">
+        <label class="form-label">Username</label>
+        <div class="input-wrap">
+          <i class="bi bi-person"></i>
+          <input type="text" name="username" class="form-input"
+                 placeholder="Enter username" autocomplete="username"
+                 required autofocus />
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Password</label>
+        <div class="input-wrap">
+          <i class="bi bi-lock"></i>
+          <input type="password" name="password" id="passwordInput"
+                 class="form-input"
+                 placeholder="Enter password" autocomplete="current-password" required />
+          <i class="bi bi-eye pass-toggle" id="passToggle"></i>
+        </div>
+      </div>
+
+      <button type="submit" class="btn-login">
+        <i class="bi bi-box-arrow-in-right"></i>
+        Sign In
+      </button>
+
+    </form>
+
+    <div class="login-hint">
+      <i class="bi bi-info-circle me-1"></i>
+      Default credentials: <strong>admin</strong> / <strong>admin123</strong>
+      <br>Please change your password after first login.
+    </div>
+
+  </div>
+
+  <script>
+    // Password show/hide
+    const passInput  = document.getElementById('passwordInput');
+    const passToggle = document.getElementById('passToggle');
+    passToggle.addEventListener('click', () => {
+      const isPass = passInput.type === 'password';
+      passInput.type = isPass ? 'text' : 'password';
+      passToggle.className = isPass ? 'bi bi-eye-slash pass-toggle' : 'bi bi-eye pass-toggle';
+    });
+
+    // Submit button loading state
+    document.getElementById('loginForm').addEventListener('submit', function(e) {
+      const btn = this.querySelector('.btn-login');
+      btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Signing in...';
+      btn.disabled = true;
+    });
+  </script>
+
+</body>
+</html>

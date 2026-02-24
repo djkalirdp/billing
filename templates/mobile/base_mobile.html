@@ -1,0 +1,517 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="theme-color" content="#1e40af" />
+  <title>{% block title %}Billing{% endblock %}</title>
+
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-icons/1.11.3/font/bootstrap-icons.min.css" rel="stylesheet" />
+
+  <style>
+    /* ─── RESET & BASE ─────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --accent    : #2563eb;
+      --accent-dk : #1d4ed8;
+      --success   : #059669;
+      --danger    : #dc2626;
+      --warning   : #d97706;
+      --text-main : #0f172a;
+      --text-muted: #64748b;
+      --border    : #e2e8f0;
+      --bg        : #f1f5f9;
+      --card-bg   : #ffffff;
+      --font-body : 'DM Sans', sans-serif;
+      --font-head : 'Syne', sans-serif;
+      --topbar-h  : 56px;
+      --bottomnav : 64px;
+      --radius    : 16px;
+      --radius-sm : 10px;
+      --shadow    : 0 2px 12px rgba(0,0,0,.08);
+      --shadow-lg : 0 8px 32px rgba(0,0,0,.14);
+    }
+    html, body { height: 100%; }
+    body {
+      font-family: var(--font-body);
+      background: var(--bg);
+      color: var(--text-main);
+      -webkit-font-smoothing: antialiased;
+      overscroll-behavior: none;
+    }
+
+    /* ─── TOPBAR ───────────────────────────────────────────── */
+    .m-topbar {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 1000;
+      height: var(--topbar-h);
+      background: white;
+      border-bottom: 1px solid var(--border);
+      display: flex; align-items: center;
+      padding: 0 16px;
+      gap: 12px;
+      box-shadow: 0 1px 8px rgba(0,0,0,.06);
+    }
+    .m-topbar-logo {
+      width: 34px; height: 34px;
+      background: var(--accent);
+      border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+      font-family: var(--font-head); font-size: 16px; font-weight: 800;
+      color: white; flex-shrink: 0;
+    }
+    .m-topbar-title {
+      font-family: var(--font-head);
+      font-size: 16px; font-weight: 700;
+      flex: 1; color: var(--text-main);
+    }
+    .m-topbar-sub {
+      font-size: 11px; color: var(--text-muted); font-weight: 400;
+      font-family: var(--font-body); margin-top: 1px;
+    }
+    .m-topbar-action {
+      display: flex; gap: 8px; align-items: center;
+    }
+    .m-icon-btn {
+      width: 36px; height: 36px;
+      border-radius: 10px;
+      background: #f1f5f9;
+      border: none; cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 17px; color: var(--text-main);
+      text-decoration: none; transition: background .18s;
+      flex-shrink: 0;
+    }
+    .m-icon-btn:hover, .m-icon-btn:active { background: var(--accent); color: white; }
+    .m-icon-btn.accent { background: var(--accent); color: white; }
+
+    /* ─── CONTENT AREA ─────────────────────────────────────── */
+    .m-content {
+      margin-top: var(--topbar-h);
+      padding-bottom: calc(var(--bottomnav) + 16px);
+      min-height: calc(100vh - var(--topbar-h));
+      padding-top: 12px;
+    }
+    .m-page-pad { padding: 0 14px; }
+
+    /* ─── BOTTOM NAV ───────────────────────────────────────── */
+    .m-bottomnav {
+      position: fixed; bottom: 0; left: 0; right: 0; z-index: 1000;
+      height: var(--bottomnav);
+      background: white;
+      border-top: 1px solid var(--border);
+      display: flex; align-items: stretch;
+      box-shadow: 0 -4px 16px rgba(0,0,0,.07);
+      padding-bottom: env(safe-area-inset-bottom);
+    }
+    .m-nav-item {
+      flex: 1; display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      gap: 3px; text-decoration: none; cursor: pointer;
+      color: var(--text-muted); transition: color .18s;
+      font-size: 10.5px; font-weight: 600; border: none;
+      background: none; padding: 6px 2px; position: relative;
+    }
+    .m-nav-item i { font-size: 20px; display: block; }
+    .m-nav-item.active { color: var(--accent); }
+    .m-nav-item.active::before {
+      content: '';
+      position: absolute; top: 0; left: 20%; right: 20%;
+      height: 2.5px; border-radius: 0 0 99px 99px;
+      background: var(--accent);
+    }
+    .m-nav-fab {
+      width: 52px; height: 52px;
+      background: var(--accent); border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      color: white; font-size: 24px;
+      box-shadow: 0 4px 16px rgba(37,99,235,.4);
+      text-decoration: none; margin-top: -12px;
+      flex-shrink: 0;
+    }
+
+    /* ─── CARDS ────────────────────────────────────────────── */
+    .m-card {
+      background: var(--card-bg);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      overflow: hidden;
+      margin: 0 14px 12px;
+    }
+    .m-card-header {
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; gap: 10px;
+    }
+    .m-card-title {
+      font-family: var(--font-head);
+      font-size: 14px; font-weight: 700; flex: 1;
+    }
+    .m-card-body { padding: 14px 16px; }
+
+    /* ─── FORM ELEMENTS ────────────────────────────────────── */
+    .m-input, .m-select, .m-textarea {
+      width: 100%; padding: 13px 14px;
+      border: 1.5px solid var(--border); border-radius: 12px;
+      font-family: var(--font-body); font-size: 15px;
+      color: var(--text-main); background: #f8fafc;
+      outline: none; transition: border-color .18s;
+      -webkit-appearance: none; appearance: none;
+    }
+    .m-input:focus, .m-select:focus, .m-textarea:focus {
+      border-color: var(--accent); background: white;
+      box-shadow: 0 0 0 3px rgba(37,99,235,.1);
+    }
+    .m-input::placeholder { color: #cbd5e1; }
+    .m-label {
+      font-size: 12px; font-weight: 700;
+      color: var(--text-muted);
+      text-transform: uppercase; letter-spacing: .05em;
+      display: block; margin-bottom: 6px;
+    }
+    .m-fg { margin-bottom: 16px; }
+
+    /* ─── BUTTONS ──────────────────────────────────────────── */
+    .m-btn {
+      display: flex; align-items: center; justify-content: center;
+      gap: 8px; padding: 14px 20px;
+      border-radius: 12px; border: none; cursor: pointer;
+      font-family: var(--font-body); font-size: 15px;
+      font-weight: 700; text-decoration: none;
+      transition: all .18s; width: 100%;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .m-btn-primary { background: var(--accent); color: white; }
+    .m-btn-primary:active { background: var(--accent-dk); transform: scale(.98); }
+    .m-btn-success { background: var(--success); color: white; }
+    .m-btn-danger  { background: var(--danger);  color: white; }
+    .m-btn-outline {
+      background: white; color: var(--accent);
+      border: 1.5px solid var(--accent);
+    }
+    .m-btn-sm {
+      padding: 8px 14px; font-size: 13px; border-radius: 8px; width: auto;
+    }
+    .m-btn-icon {
+      width: 38px; height: 38px; padding: 0; border-radius: 10px;
+      font-size: 17px; width: auto; flex-shrink: 0;
+    }
+
+    /* ─── KPI / STAT CARDS ─────────────────────────────────── */
+    .m-kpi-grid {
+      display: grid; grid-template-columns: 1fr 1fr;
+      gap: 10px; padding: 0 14px 12px;
+    }
+    .m-kpi {
+      background: white; border-radius: var(--radius-sm);
+      padding: 14px; box-shadow: var(--shadow);
+    }
+    .m-kpi-icon {
+      width: 36px; height: 36px;
+      border-radius: 9px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 17px; margin-bottom: 8px;
+    }
+    .m-kpi-val { font-family: var(--font-head); font-size: 20px; font-weight: 800; }
+    .m-kpi-lbl { font-size: 11px; color: var(--text-muted); font-weight: 600; margin-top: 2px; }
+
+    /* ─── LIST ITEMS ───────────────────────────────────────── */
+    .m-list { background: white; border-radius: var(--radius); box-shadow: var(--shadow); overflow: hidden; margin: 0 14px 12px; }
+    .m-list-item {
+      display: flex; align-items: center; gap: 12px;
+      padding: 13px 16px;
+      border-bottom: 1px solid var(--border);
+      text-decoration: none; color: inherit;
+      -webkit-tap-highlight-color: transparent;
+      transition: background .1s;
+    }
+    .m-list-item:last-child { border-bottom: none; }
+    .m-list-item:active { background: #f8fafc; }
+    .m-list-avatar {
+      width: 40px; height: 40px; border-radius: 12px;
+      display: flex; align-items: center; justify-content: center;
+      font-family: var(--font-head); font-size: 17px; font-weight: 800;
+      color: white; flex-shrink: 0;
+    }
+    .m-list-main { flex: 1; min-width: 0; }
+    .m-list-title { font-weight: 700; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .m-list-sub   { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+    .m-list-right { text-align: right; flex-shrink: 0; }
+    .m-list-amount { font-family: var(--font-head); font-size: 14px; font-weight: 800; }
+    .m-list-chevron { color: #cbd5e1; font-size: 16px; flex-shrink: 0; }
+
+    /* ─── BADGES ───────────────────────────────────────────── */
+    .m-badge {
+      display: inline-flex; align-items: center;
+      padding: 3px 9px; border-radius: 99px;
+      font-size: 11px; font-weight: 700;
+    }
+    .m-badge-success { background: #ecfdf5; color: #065f46; }
+    .m-badge-danger  { background: #fef2f2; color: #7f1d1d; }
+    .m-badge-warning { background: #fef3c7; color: #78350f; }
+    .m-badge-info    { background: #eff6ff; color: #1e3a8a; }
+
+    /* ─── SECTION LABEL ────────────────────────────────────── */
+    .m-section-lbl {
+      font-size: 11px; font-weight: 700;
+      color: var(--text-muted);
+      text-transform: uppercase; letter-spacing: .07em;
+      padding: 10px 14px 6px;
+    }
+
+    /* ─── FLASH MESSAGES ───────────────────────────────────── */
+    .m-flash {
+      margin: 0 14px 10px;
+      padding: 12px 14px;
+      border-radius: var(--radius-sm);
+      font-size: 13.5px; font-weight: 500;
+      display: flex; align-items: center; gap: 8px;
+      animation: slideDown .25s ease;
+    }
+    @keyframes slideDown { from{transform:translateY(-10px);opacity:0} to{transform:translateY(0);opacity:1} }
+    .m-flash-success { background: #ecfdf5; color: #065f46; border-left: 3px solid #059669; }
+    .m-flash-danger  { background: #fef2f2; color: #7f1d1d; border-left: 3px solid #dc2626; }
+    .m-flash-warning { background: #fffbeb; color: #78350f; border-left: 3px solid #d97706; }
+
+    /* ─── MODAL / BOTTOM SHEET ─────────────────────────────── */
+    .m-overlay {
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,.45); z-index: 9000;
+      opacity: 0; pointer-events: none;
+      transition: opacity .25s;
+      display: flex; align-items: flex-end;
+    }
+    .m-overlay.open { opacity: 1; pointer-events: all; }
+    .m-sheet {
+      width: 100%; background: white;
+      border-radius: 24px 24px 0 0;
+      padding: 16px 20px 36px;
+      box-shadow: 0 -8px 32px rgba(0,0,0,.15);
+      transform: translateY(100%);
+      transition: transform .28s cubic-bezier(.4,0,.2,1);
+    }
+    .m-overlay.open .m-sheet { transform: translateY(0); }
+    .m-sheet-handle {
+      width: 40px; height: 4px; border-radius: 99px;
+      background: var(--border); margin: 0 auto 16px;
+    }
+    .m-sheet-title {
+      font-family: var(--font-head); font-size: 17px;
+      font-weight: 700; margin-bottom: 16px;
+    }
+
+    /* ─── DIVIDER ──────────────────────────────────────────── */
+    .m-divider { height: 1px; background: var(--border); margin: 4px 0; }
+
+    /* ─── EMPTY STATE ──────────────────────────────────────── */
+    .m-empty {
+      padding: 60px 20px; text-align: center;
+      color: var(--text-muted);
+    }
+    .m-empty i { font-size: 52px; display: block; margin-bottom: 12px; opacity: .25; }
+    .m-empty p { font-size: 14px; margin-bottom: 20px; }
+
+    /* ─── SEARCH BAR ───────────────────────────────────────── */
+    .m-searchbar {
+      margin: 0 14px 12px;
+      display: flex; align-items: center;
+      background: white; border-radius: 12px;
+      box-shadow: var(--shadow); overflow: hidden;
+      border: 1.5px solid var(--border);
+    }
+    .m-searchbar:focus-within { border-color: var(--accent); }
+    .m-searchbar i { padding: 0 12px; color: var(--text-muted); font-size: 16px; }
+    .m-searchbar input {
+      flex: 1; border: none; background: transparent; outline: none;
+      padding: 12px 8px 12px 0;
+      font-family: var(--font-body); font-size: 15px;
+      color: var(--text-main);
+    }
+
+    /* ─── SUMMARY ROW ──────────────────────────────────────── */
+    .m-sum-row {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 10px 0;
+      border-bottom: 1px solid var(--border);
+      font-size: 14px;
+    }
+    .m-sum-row:last-child { border-bottom: none; }
+    .m-sum-lbl { color: var(--text-muted); }
+    .m-sum-val { font-weight: 700; }
+    .m-sum-row.grand { font-family: var(--font-head); font-size: 17px; }
+    .m-sum-row.grand .m-sum-val { color: var(--accent); font-size: 20px; }
+
+    /* ─── TABLE (horizontal scroll) ───────────────────────── */
+    .m-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+    .m-table { width: 100%; border-collapse: collapse; min-width: 500px; }
+    .m-table th {
+      padding: 9px 12px; background: #f8fafc;
+      font-size: 11px; font-weight: 700; color: var(--text-muted);
+      text-transform: uppercase; letter-spacing: .05em;
+      border-bottom: 1px solid var(--border); white-space: nowrap;
+      text-align: left;
+    }
+    .m-table td {
+      padding: 11px 12px; border-bottom: 1px solid #f1f5f9;
+      font-size: 13px;
+    }
+    .m-table tbody tr:last-child td { border-bottom: none; }
+    .m-table tbody tr:active { background: #f8fafc; }
+
+    /* Utilities */
+    .mb-3  { margin-bottom: 12px; }
+    .mb-2  { margin-bottom: 8px;  }
+    .mt-2  { margin-top: 8px;     }
+    .mt-3  { margin-top: 12px;    }
+    .text-danger  { color: var(--danger);  }
+    .text-success { color: var(--success); }
+    .text-muted   { color: var(--text-muted); }
+    .fw-bold { font-weight: 700; }
+    .text-right { text-align: right; }
+  </style>
+
+  {% block head %}{% endblock %}
+</head>
+
+<body>
+
+  <!-- ─── TOP BAR ────────────────────────────────────────────── -->
+  <div class="m-topbar">
+    <div class="m-topbar-logo">{{ app_name[0]|upper if app_name else 'B' }}</div>
+    <div style="flex:1;min-width:0;">
+      <div class="m-topbar-title">{% block page_title %}{% endblock %}</div>
+    </div>
+    <div class="m-topbar-action">
+      {% block topbar_actions %}{% endblock %}
+    </div>
+  </div>
+
+  <!-- ─── MAIN CONTENT ───────────────────────────────────────── -->
+  <main class="m-content">
+
+    <!-- Flash messages -->
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        <div style="padding-top:4px;">
+          {% for cat, msg in messages %}
+          <div class="m-flash m-flash-{{ cat }}">
+            {% if cat == 'success' %}<i class="bi bi-check-circle-fill"></i>
+            {% elif cat == 'danger' %}<i class="bi bi-x-circle-fill"></i>
+            {% else %}<i class="bi bi-exclamation-triangle-fill"></i>{% endif %}
+            {{ msg }}
+          </div>
+          {% endfor %}
+        </div>
+      {% endif %}
+    {% endwith %}
+
+    {% block content %}{% endblock %}
+
+  </main>
+
+  <!-- ─── BOTTOM NAV ─────────────────────────────────────────── -->
+  <nav class="m-bottomnav">
+    <a href="{{ url_for('dashboard') }}" class="m-nav-item {% if request.endpoint=='dashboard' %}active{% endif %}">
+      <i class="bi bi-house"></i>Home
+    </a>
+    <a href="{{ url_for('invoices') }}" class="m-nav-item {% if request.endpoint in ['invoices','view_invoice'] %}active{% endif %}">
+      <i class="bi bi-file-text"></i>Bills
+    </a>
+    <a href="{{ url_for('billing') }}" class="m-nav-fab">
+      <i class="bi bi-plus-lg"></i>
+    </a>
+    <a href="{{ url_for('buyers') }}" class="m-nav-item {% if request.endpoint in ['buyers','buyer_ledger','add_buyer','edit_buyer'] %}active{% endif %}">
+      <i class="bi bi-people"></i>Buyers
+    </a>
+    <button type="button" class="m-nav-item {% if request.endpoint in ['products','add_product','edit_product','vendors','add_vendor','edit_vendor','purchases','settings','manage_users'] %}active{% endif %}"
+            onclick="document.getElementById('moreSheet').classList.add('open')"
+            style="border:none;background:none;cursor:pointer;">
+      <i class="bi bi-grid-3x3-gap-fill"></i>More
+    </button>
+  </nav>
+
+  <!-- ─── MORE SHEET ───────────────────────────────────────────── -->
+  <style>
+  .more-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:6px;}
+  .more-tile{
+    display:flex;flex-direction:column;align-items:center;justify-content:center;
+    padding:16px 8px;background:#f8fafc;border-radius:14px;
+    text-decoration:none;color:var(--text-main);
+    -webkit-tap-highlight-color:transparent;transition:background .12s;
+    border:1px solid var(--border);
+  }
+  .more-tile:active{background:#eff6ff;}
+  .more-tile i{font-size:22px;margin-bottom:6px;}
+  .more-tile span{font-size:11.5px;font-weight:700;text-align:center;}
+  .more-section-lbl{font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.07em;margin:14px 0 8px;}
+  </style>
+
+  <div class="m-overlay" id="moreSheet">
+    <div class="m-sheet">
+      <div class="m-sheet-handle"></div>
+      <div class="m-sheet-title" style="margin-bottom:16px;">
+        <i class="bi bi-grid-3x3-gap-fill me-2" style="color:var(--accent);"></i>All Sections
+      </div>
+
+      <div class="more-section-lbl">Inventory</div>
+      <div class="more-grid">
+        <a href="{{ url_for('products') }}" class="more-tile">
+          <i class="bi bi-box-seam" style="color:#7c3aed;"></i><span>Products</span>
+        </a>
+        <a href="{{ url_for('vendors') }}" class="more-tile">
+          <i class="bi bi-truck" style="color:#0891b2;"></i><span>Vendors</span>
+        </a>
+        <a href="{{ url_for('purchases') }}" class="more-tile">
+          <i class="bi bi-cart3" style="color:#059669;"></i><span>Purchases</span>
+        </a>
+      </div>
+
+      <div class="more-section-lbl">Reports</div>
+      <div class="more-grid">
+        <a href="{{ url_for('invoices') }}" class="more-tile">
+          <i class="bi bi-file-text" style="color:#2563eb;"></i><span>Invoices</span>
+        </a>
+        <a href="{{ url_for('buyers') }}" class="more-tile">
+          <i class="bi bi-journal-text" style="color:#d97706;"></i><span>Khata</span>
+        </a>
+        <a href="{{ url_for('export_summary_pdf') }}" class="more-tile">
+          <i class="bi bi-file-pdf" style="color:#dc2626;"></i><span>PDF Report</span>
+        </a>
+      </div>
+
+      {% if user_role == 'Admin' %}
+      <div class="more-section-lbl">Admin</div>
+      <div class="more-grid">
+        <a href="{{ url_for('settings') }}" class="more-tile">
+          <i class="bi bi-gear-fill" style="color:#475569;"></i><span>Settings</span>
+        </a>
+        <a href="{{ url_for('manage_users') }}" class="more-tile">
+          <i class="bi bi-people-fill" style="color:#7c3aed;"></i><span>Users</span>
+        </a>
+        <a href="{{ url_for('logout') }}" class="more-tile">
+          <i class="bi bi-box-arrow-right" style="color:#dc2626;"></i><span>Logout</span>
+        </a>
+      </div>
+      {% else %}
+      <div style="margin-top:8px;">
+        <a href="{{ url_for('logout') }}" class="m-btn" style="background:#fef2f2;color:#dc2626;border:1.5px solid #fecaca;">
+          <i class="bi bi-box-arrow-right"></i> Logout
+        </a>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <script>
+  document.getElementById('moreSheet').addEventListener('click', function(e){
+    if(e.target===this) this.classList.remove('open');
+  });
+  </script>
+
+  {% block scripts %}{% endblock %}
+
+</body>
+</html>

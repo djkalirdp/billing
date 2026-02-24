@@ -1,0 +1,191 @@
+{% extends 'base.html' %}
+
+{% block title %}Settings{% endblock %}
+{% block page_title %}Settings{% endblock %}
+
+{% block head %}
+<style>
+  .settings-layout { display:grid; grid-template-columns:200px 1fr; gap:16px; align-items:start; }
+  @media(max-width:768px){ .settings-layout{grid-template-columns:1fr;} }
+  .settings-nav { background:white; border:1px solid var(--border); border-radius:var(--radius); overflow:hidden; position:sticky; top:0; }
+  .settings-nav-item { display:flex; align-items:center; gap:10px; padding:12px 16px; font-size:13px; font-weight:500; color:var(--text-muted); cursor:pointer; border-left:3px solid transparent; transition:all .18s; text-decoration:none; }
+  .settings-nav-item:hover { background:#f8fafc; color:var(--text-main); }
+  .settings-nav-item.active { border-left-color:var(--accent); color:var(--accent); background:var(--accent-light); font-weight:600; }
+  .settings-nav-item i { font-size:16px; width:18px; }
+  .nav-divider { height:1px; background:var(--border); margin:4px 0; }
+  .section-card { background:white; border:1px solid var(--border); border-radius:var(--radius); overflow:hidden; margin-bottom:16px; }
+  .section-head { padding:14px 20px; border-bottom:1px solid var(--border); display:flex; align-items:center; gap:10px; }
+  .section-title-sm { font-family:var(--font-head); font-size:14px; font-weight:700; }
+  .section-body { padding:20px; }
+  .form-grid-2 { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+  .form-grid-3 { display:grid; grid-template-columns:1fr 1fr 1fr; gap:14px; }
+  @media(max-width:700px){ .form-grid-2,.form-grid-3{grid-template-columns:1fr;} }
+  .fg { display:flex; flex-direction:column; gap:5px; }
+  .fg label { font-size:11px; font-weight:700; color:var(--text-muted); text-transform:uppercase; letter-spacing:.05em; }
+  .fg input,.fg select,.fg textarea { padding:9px 12px; border:1.5px solid var(--border); border-radius:8px; font-family:var(--font-body); font-size:13.5px; color:var(--text-main); background:#f8fafc; outline:none; transition:border-color .18s; width:100%; }
+  .fg input:focus,.fg select:focus,.fg textarea:focus { border-color:var(--accent); background:white; box-shadow:0 0 0 3px rgba(37,99,235,.1); }
+  .fg .hint { font-size:11.5px; color:var(--text-muted); }
+  .logo-upload-area { border:2px dashed var(--border); border-radius:var(--radius-sm); padding:24px; text-align:center; cursor:pointer; display:block; transition:border-color .18s,background .18s; background:#f8fafc; }
+  .logo-upload-area:hover { border-color:var(--accent); background:var(--accent-light); }
+  .logo-upload-area i { font-size:32px; color:var(--text-muted); display:block; margin-bottom:8px; }
+  .logo-preview { max-height:80px; max-width:200px; border-radius:8px; border:1px solid var(--border); }
+  .save-bar { background:white; border:1px solid var(--border); border-radius:var(--radius); padding:14px 20px; display:flex; align-items:center; gap:12px; }
+  .section-anchor { scroll-margin-top:16px; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="section-title">Settings</div>
+<div class="section-sub">Configure company info, billing preferences and more</div>
+
+<div class="settings-layout" style="margin-top:16px;">
+
+  <div>
+    <div class="settings-nav">
+      <a href="#company" class="settings-nav-item active" onclick="setActive(this)"><i class="bi bi-building"></i> Company</a>
+      <a href="#logo"    class="settings-nav-item" onclick="setActive(this)"><i class="bi bi-image"></i> Logo</a>
+      <a href="#bank"    class="settings-nav-item" onclick="setActive(this)"><i class="bi bi-bank"></i> Bank</a>
+      <a href="#invoice" class="settings-nav-item" onclick="setActive(this)"><i class="bi bi-receipt"></i> Invoice</a>
+      <div class="nav-divider"></div>
+      <a href="{{ url_for('manage_users') }}" class="settings-nav-item"><i class="bi bi-people"></i> Users</a>
+    </div>
+  </div>
+
+  <div>
+
+    <!-- ══ FORM 1: Main Settings (Company + Bank + Invoice) ══════ -->
+    <form method="POST" action="{{ url_for('settings') }}" id="settingsForm">
+
+      <div class="section-card section-anchor" id="company">
+        <div class="section-head"><i class="bi bi-building" style="color:var(--accent);"></i><span class="section-title-sm">Company Information</span></div>
+        <div class="section-body">
+          {% set c = settings.get('company_info', {}) %}
+          <div class="fg mb-3"><label>Company / Business Name</label><input type="text" name="name" value="{{ c.get('name','') }}" placeholder="e.g. Shree Traders" /></div>
+          <div class="form-grid-2 mb-3">
+            <div class="fg"><label>GSTIN</label><input type="text" name="gstin" maxlength="15" value="{{ c.get('gstin','') }}" placeholder="27AAAPZ2323J1ZN" /></div>
+            <div class="fg"><label>PAN</label><input type="text" name="pan" maxlength="10" value="{{ c.get('pan','') }}" placeholder="AAAPZ2323J" /></div>
+          </div>
+          <div class="fg mb-3"><label>Address Line 1</label><input type="text" name="address_line1" value="{{ c.get('address_line1','') }}" placeholder="Shop / Building name, Street" /></div>
+          <div class="fg mb-3"><label>Address Line 2</label><input type="text" name="address_line2" value="{{ c.get('address_line2','') }}" placeholder="Area, City, PIN" /></div>
+          <div class="form-grid-3">
+            <div class="fg">
+              <label>State</label>
+              <select name="state">
+                {% set states = ['Andaman & Nicobar','Andhra Pradesh','Arunachal Pradesh','Assam','Bihar','Chandigarh','Chhattisgarh','Dadra & Nagar Haveli','Daman & Diu','Delhi','Goa','Gujarat','Haryana','Himachal Pradesh','Jammu & Kashmir','Jharkhand','Karnataka','Kerala','Ladakh','Lakshadweep','Madhya Pradesh','Maharashtra','Manipur','Meghalaya','Mizoram','Nagaland','Odisha','Puducherry','Punjab','Rajasthan','Sikkim','Tamil Nadu','Telangana','Tripura','Uttar Pradesh','Uttarakhand','West Bengal'] %}
+                {% for s in states %}<option value="{{ s }}" {% if c.get('state') == s %}selected{% endif %}>{{ s }}</option>{% endfor %}
+              </select>
+              <span class="hint">Used for CGST/SGST vs IGST</span>
+            </div>
+            <div class="fg"><label>Phone</label><input type="tel" name="phone" value="{{ c.get('phone','') }}" placeholder="9876543210" /></div>
+            <div class="fg"><label>Email</label><input type="email" name="email" value="{{ c.get('email','') }}" placeholder="info@company.com" /></div>
+          </div>
+          <div class="fg mt-3"><label>Website</label><input type="text" name="website" value="{{ c.get('website','') }}" placeholder="www.yourcompany.com" /></div>
+        </div>
+      </div>
+
+      <div class="section-card section-anchor" id="bank">
+        <div class="section-head"><i class="bi bi-bank" style="color:var(--success);"></i><span class="section-title-sm">Bank Details</span></div>
+        <div class="section-body">
+          {% set b = settings.get('bank_details', {}) %}
+          <div class="form-grid-2">
+            <div class="fg"><label>Bank Name</label><input type="text" name="bank_name" value="{{ b.get('bank_name','') }}" placeholder="State Bank of India" /></div>
+            <div class="fg"><label>Account Number</label><input type="text" name="account_no" value="{{ b.get('account_no','') }}" placeholder="1234567890123456" /></div>
+            <div class="fg"><label>IFSC Code</label><input type="text" name="ifsc_code" value="{{ b.get('ifsc_code','') }}" placeholder="SBIN0001234" /></div>
+            <div class="fg"><label>Branch</label><input type="text" name="branch" value="{{ b.get('branch','') }}" placeholder="Mumbai Main Branch" /></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="section-card section-anchor" id="invoice">
+        <div class="section-head"><i class="bi bi-receipt" style="color:#7c3aed;"></i><span class="section-title-sm">Invoice Settings</span></div>
+        <div class="section-body">
+          {% set inv = settings.get('invoice_settings', {}) %}
+          <div class="fg mb-3" style="max-width:260px;">
+            <label>Invoice Number Prefix</label>
+            <input type="text" name="invoice_prefix" value="{{ inv.get('invoice_prefix','INV-') }}" placeholder="INV-" />
+            <span class="hint">e.g. <strong>INV-</strong> → INV-0001 &nbsp;|&nbsp; <strong>GST-</strong> → GST-0001</span>
+          </div>
+          <div class="fg">
+            <label>Terms & Conditions (printed on invoice)</label>
+            <textarea name="terms_and_conditions" rows="4" placeholder="1. Goods once sold will not be taken back.">{{ inv.get('terms_and_conditions','') }}</textarea>
+          </div>
+        </div>
+      </div>
+
+      <div class="save-bar mb-3">
+        <button type="submit" class="btn-primary-custom" id="saveBtn">
+          <i class="bi bi-save2"></i> Save All Settings
+        </button>
+        <span style="font-size:12.5px;color:var(--text-muted);">
+          <i class="bi bi-info-circle me-1"></i> Changes apply to all new invoices immediately.
+        </span>
+      </div>
+
+    </form>
+    <!-- ══ END main settings form ══ -->
+
+
+    <!-- ══ FORM 2: Logo Upload (standalone — NEVER nest inside another form) ══ -->
+    <form method="POST" action="{{ url_for('upload_logo') }}"
+          enctype="multipart/form-data" id="logoForm">
+      <div class="section-card section-anchor" id="logo">
+        <div class="section-head"><i class="bi bi-image" style="color:var(--warning);"></i><span class="section-title-sm">Company Logo</span></div>
+        <div class="section-body">
+          <div style="display:flex;align-items:center;gap:20px;flex-wrap:wrap;">
+            {% if settings.get('company_info',{}).get('logo_path') %}
+            <div>
+              <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;margin-bottom:6px;">Current Logo</div>
+              <img src="/{{ settings.company_info.logo_path }}" class="logo-preview" alt="Logo" />
+            </div>
+            {% endif %}
+            <div style="flex:1;">
+              <label class="logo-upload-area" for="logoFile">
+                <i class="bi bi-cloud-arrow-up"></i>
+                <span>Click to upload logo<br><small>(PNG, JPG — max 2MB)</small></span>
+              </label>
+              <input type="file" id="logoFile" name="logo" accept=".png,.jpg,.jpeg"
+                     style="display:none;" onchange="uploadLogo(this)" />
+              <div id="uploadStatus" style="display:none;margin-top:8px;font-size:12.5px;color:var(--text-muted);">
+                <span class="spinner-border spinner-border-sm me-1"></span> Uploading...
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </form>
+    <!-- ══ END logo form ══ -->
+
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function uploadLogo(input) {
+  if (!input.files || !input.files[0]) return;
+  document.getElementById('uploadStatus').style.display = 'flex';
+  document.getElementById('logoForm').submit();
+}
+
+function setActive(el) {
+  document.querySelectorAll('.settings-nav-item').forEach(a => a.classList.remove('active'));
+  el.classList.add('active');
+}
+
+const content  = document.getElementById('content');
+const sections = document.querySelectorAll('.section-anchor');
+const navItems = document.querySelectorAll('.settings-nav-item[href^="#"]');
+
+content.addEventListener('scroll', () => {
+  let current = '';
+  sections.forEach(s => { if (content.scrollTop + 80 >= s.offsetTop) current = s.id; });
+  navItems.forEach(a => { a.classList.toggle('active', a.getAttribute('href') === '#' + current); });
+});
+
+document.getElementById('settingsForm').addEventListener('submit', function() {
+  const btn = document.getElementById('saveBtn');
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Saving...';
+  btn.disabled = true;
+});
+</script>
+{% endblock %}

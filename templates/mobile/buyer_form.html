@@ -1,0 +1,87 @@
+{% extends 'mobile/base_mobile.html' %}
+{% block title %}{{ action }} Buyer{% endblock %}
+{% block page_title %}{{ action }} Buyer{% endblock %}
+
+{% block topbar_actions %}
+<a href="{{ url_for('buyers') }}" class="m-icon-btn"><i class="bi bi-arrow-left"></i></a>
+{% endblock %}
+
+{% block content %}
+
+<form method="POST"
+      action="{{ url_for('edit_buyer', buyer_id=buyer.id) if buyer else url_for('add_buyer') }}"
+      id="buyerForm">
+
+  <div class="m-card" style="margin:0 14px 12px;">
+    <div class="m-card-header">
+      <i class="bi bi-person" style="color:var(--accent);font-size:18px;"></i>
+      <span class="m-card-title">Buyer Information</span>
+    </div>
+    <div class="m-card-body">
+      <div class="m-fg">
+        <label class="m-label">Name <span style="color:red">*</span></label>
+        <input type="text" name="name" class="m-input" required autofocus
+               value="{{ buyer.name if buyer else '' }}"
+               placeholder="e.g. Ravi Enterprises" />
+      </div>
+      <div class="m-fg">
+        <label class="m-label">GSTIN</label>
+        <input type="text" name="gstin" class="m-input" maxlength="15"
+               value="{{ buyer.gstin if buyer else '' }}"
+               placeholder="15-char GST number" />
+      </div>
+      <div class="m-fg">
+        <label class="m-label">State</label>
+        <select name="state" class="m-select">
+          <option value="">— Select State —</option>
+          {% set states = ['Andhra Pradesh','Assam','Bihar','Delhi','Goa','Gujarat','Haryana','Himachal Pradesh','Jammu & Kashmir','Jharkhand','Karnataka','Kerala','Madhya Pradesh','Maharashtra','Odisha','Punjab','Rajasthan','Tamil Nadu','Telangana','Uttar Pradesh','Uttarakhand','West Bengal'] %}
+          {% for s in states %}
+          <option value="{{ s }}" {% if buyer and buyer.state == s %}selected{% endif %}>{{ s }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="m-fg">
+        <label class="m-label">Phone</label>
+        <input type="tel" name="phone" class="m-input"
+               value="{{ buyer.phone if buyer else '' }}" placeholder="9876543210" />
+      </div>
+      <div class="m-fg">
+        <label class="m-label">Email</label>
+        <input type="email" name="email" class="m-input"
+               value="{{ buyer.email if buyer else '' }}" placeholder="buyer@example.com" />
+      </div>
+      <div class="m-fg">
+        <label class="m-label">Address</label>
+        <textarea name="address" class="m-input" rows="2"
+                  style="resize:none;" placeholder="Full address">{{ buyer.address if buyer else '' }}</textarea>
+      </div>
+      <div class="m-fg">
+        <label class="m-label">Opening Balance (₹)</label>
+        <input type="number" name="opening_balance" class="m-input" step="0.01" min="0"
+               value="{{ '%.2f'|format(buyer.opening_balance) if buyer else '0.00' }}"
+               placeholder="0.00" />
+      </div>
+    </div>
+  </div>
+
+  <div style="padding:0 14px;display:flex;flex-direction:column;gap:10px;">
+    <button type="submit" class="m-btn m-btn-primary" id="saveBtn">
+      <i class="bi bi-save2"></i> {{ 'Update Buyer' if buyer else 'Save Buyer' }}
+    </button>
+    <a href="{{ url_for('buyers') }}" class="m-btn m-btn-outline">
+      <i class="bi bi-x"></i> Cancel
+    </a>
+  </div>
+
+</form>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.getElementById('buyerForm').addEventListener('submit',function(){
+  const btn=document.getElementById('saveBtn');
+  btn.innerHTML='<span class="spinner-border spinner-border-sm me-2"></span>Saving...';
+  btn.disabled=true;
+});
+</script>
+{% endblock %}

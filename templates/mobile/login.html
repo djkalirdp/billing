@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
+  <meta name="mobile-web-app-capable" content="yes"/>
+  <meta name="apple-mobile-web-app-capable" content="yes"/>
+  <meta name="theme-color" content="#1e40af"/>
+  <title>Login — Billing App</title>
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-icons/1.11.3/font/bootstrap-icons.min.css" rel="stylesheet"/>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0;}
+    :root{
+      --accent:#2563eb; --accent-dk:#1d4ed8;
+      --border:#e2e8f0; --text-main:#0f172a;
+      --text-muted:#64748b; --font-body:'DM Sans',sans-serif; --font-head:'Syne',sans-serif;
+    }
+    body{font-family:var(--font-body);background:#f1f5f9;min-height:100vh;display:flex;flex-direction:column;justify-content:center;padding:20px;}
+    .logo-wrap{text-align:center;margin-bottom:32px;}
+    .logo-mark{
+      width:72px;height:72px;border-radius:22px;
+      background:linear-gradient(135deg,#2563eb,#7c3aed);
+      display:flex;align-items:center;justify-content:center;
+      font-family:var(--font-head);font-size:36px;font-weight:800;color:white;
+      margin:0 auto 16px; box-shadow:0 8px 32px rgba(37,99,235,.35);
+    }
+    .logo-name{font-family:var(--font-head);font-size:26px;font-weight:800;color:var(--text-main);}
+    .logo-sub{font-size:14px;color:var(--text-muted);margin-top:4px;}
+    .login-card{background:white;border-radius:20px;padding:28px 24px;box-shadow:0 4px 24px rgba(0,0,0,.08);}
+    .card-title{font-family:var(--font-head);font-size:20px;font-weight:700;margin-bottom:6px;}
+    .card-sub{font-size:13.5px;color:var(--text-muted);margin-bottom:24px;}
+    .fg{margin-bottom:18px;}
+    label{font-size:12px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:6px;}
+    .inp-wrap{position:relative;}
+    input{
+      width:100%;padding:14px 16px;
+      border:1.5px solid var(--border);border-radius:14px;
+      font-family:var(--font-body);font-size:16px;color:var(--text-main);
+      background:#f8fafc;outline:none;transition:border-color .18s;
+      -webkit-appearance:none;
+    }
+    input:focus{border-color:var(--accent);background:white;box-shadow:0 0 0 3px rgba(37,99,235,.1);}
+    .pass-toggle{
+      position:absolute;right:14px;top:50%;transform:translateY(-50%);
+      background:none;border:none;cursor:pointer;color:var(--text-muted);font-size:18px;
+    }
+    .btn-login{
+      width:100%;padding:15px;border-radius:14px;border:none;
+      background:linear-gradient(135deg,#2563eb,#4f46e5);color:white;
+      font-family:var(--font-body);font-size:16px;font-weight:700;
+      cursor:pointer;letter-spacing:.02em;margin-top:4px;
+      box-shadow:0 4px 16px rgba(37,99,235,.35);
+      transition:transform .1s,box-shadow .1s;
+    }
+    .btn-login:active{transform:scale(.98);box-shadow:0 2px 8px rgba(37,99,235,.3);}
+    .flash{
+      padding:13px 16px;border-radius:12px;
+      margin-bottom:18px;font-size:14px;font-weight:500;
+      display:flex;align-items:center;gap:8px;
+    }
+    .flash-danger{background:#fef2f2;color:#7f1d1d;border-left:3px solid #dc2626;}
+    .flash-success{background:#ecfdf5;color:#065f46;border-left:3px solid #059669;}
+    .version-note{text-align:center;margin-top:24px;font-size:12px;color:var(--text-muted);}
+  </style>
+</head>
+<body>
+
+<div class="logo-wrap">
+  <div class="logo-mark">B</div>
+  <div class="logo-name">BillPro</div>
+  <div class="logo-sub">GST Billing & Inventory</div>
+</div>
+
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% if messages %}
+    {% for cat, msg in messages %}
+    <div class="flash flash-{{ cat }}">
+      <i class="bi bi-{{ 'x-circle-fill' if cat=='danger' else 'check-circle-fill' }}"></i>
+      {{ msg }}
+    </div>
+    {% endfor %}
+  {% endif %}
+{% endwith %}
+
+<div class="login-card">
+  <div class="card-title">Welcome Back</div>
+  <div class="card-sub">Sign in to your account</div>
+
+  <form method="POST" action="{{ url_for('login') }}" id="loginForm">
+    <div class="fg">
+      <label>Username</label>
+      <input type="text" name="username" placeholder="Enter username"
+             autocomplete="username" autofocus required />
+    </div>
+    <div class="fg">
+      <label>Password</label>
+      <div class="inp-wrap">
+        <input type="password" name="password" id="passInp"
+               placeholder="Enter password" autocomplete="current-password" required />
+        <button type="button" class="pass-toggle" onclick="togglePass()">
+          <i class="bi bi-eye" id="passIcon"></i>
+        </button>
+      </div>
+    </div>
+    <button type="submit" class="btn-login" id="loginBtn">
+      Sign In
+    </button>
+  </form>
+</div>
+
+<div class="version-note">Secured · GST Compliant</div>
+
+<script>
+function togglePass(){
+  const inp=document.getElementById('passInp');
+  const ico=document.getElementById('passIcon');
+  inp.type=inp.type==='password'?'text':'password';
+  ico.className=inp.type==='password'?'bi bi-eye':'bi bi-eye-slash';
+}
+document.getElementById('loginForm').addEventListener('submit',function(){
+  const btn=document.getElementById('loginBtn');
+  btn.textContent='Signing in...'; btn.disabled=true;
+});
+</script>
+</body>
+</html>
