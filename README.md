@@ -200,6 +200,8 @@ Opening an invoice shows:
 - **Previous Balance** if applicable (purple)
 - **Total Outstanding** = Balance Due + Previous Balance
 - Amount in Words
+- UPI QR ALSO
+- a QR code will automatically appear on every invoice PDF. Customers can scan with PhonePe, Google Pay, Paytm, or any UPI app to pay instantly.
 
 ### Invoice Actions
 | Action | Access |
@@ -230,6 +232,7 @@ Access via `More → Products`.
 | Wholesale Price | Used when Wholesale mode is active in billing |
 | Stock Qty | Current available quantity |
 | Unit | Pcs / Kg / Box / Litre / etc. |
+| Product variations options
 
 ### Automatic Stock Movement
 | Event | Stock Change |
@@ -347,6 +350,11 @@ Auto-generated when invoice is saved. Also available for reprint from invoice de
 | Monthly | Last 30 days, week by week |
 | Yearly | Last 12 months |
 
+### 5. GSTR 1 and 3B Export Option
+| Excel / CSV export
+| Stock Report
+Opening · Purchases · Sales · Closing · Stock Value
+
 ---
 
 ## ⚙️ Settings
@@ -375,6 +383,9 @@ Printed at the bottom of every invoice:
 - View all users with roles
 - Add new user (username + password + role)
 - Delete users (`admin` account is protected)
+
+### UPI & QR Code
+Add your UPI ID — a QR code will automatically appear on every invoice PDF. Customers can scan with PhonePe, Google Pay, Paytm, or any UPI app to pay instantly.
 
 ---
 
