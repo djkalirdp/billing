@@ -25,18 +25,18 @@
 /* ── Autocomplete ──────────────────── */
 .acw{position:relative;}
 .aclist{
-  position:absolute;top:calc(100% + 2px);left:0;right:0;z-index:9999;
-  background:white;border:1.5px solid var(--accent);border-radius:12px;
-  max-height:220px;overflow-y:auto;-webkit-overflow-scrolling:touch;
+  position:absolute;top:calc(100% + 4px);left:-6px;right:-6px;z-index:9999;
+  background:white;border:2px solid var(--accent);border-radius:14px;
+  max-height:300px;overflow-y:auto;-webkit-overflow-scrolling:touch;
   overscroll-behavior:contain;touch-action:pan-y;
-  box-shadow:0 8px 28px rgba(0,0,0,.18);display:none;
+  box-shadow:0 12px 40px rgba(0,0,0,.22);display:none;
 }
-.acitem{padding:13px 16px;border-bottom:1px solid #f1f5f9;cursor:pointer;user-select:none;-webkit-user-select:none;transition:background .06s;}
+.acitem{padding:15px 18px;border-bottom:1px solid #f1f5f9;cursor:pointer;user-select:none;-webkit-user-select:none;transition:background .06s;min-height:52px;}
 .acitem:last-child{border-bottom:none;}
 .acitem.hi{background:#eff6ff;}
 .acitem.add-new{background:#fffbeb;border-top:1px solid #fde68a;}
-.acname{font-weight:600;font-size:14px;}
-.acsub{font-size:12px;color:var(--text-muted);margin-top:2px;}
+.acname{font-weight:700;font-size:15px;color:#1e293b;}
+.acsub{font-size:13px;color:var(--text-muted);margin-top:3px;font-weight:500;}
 
 /* ── Buyer display card (existing) ── */
 .bcard{background:#f0fdf4;border:1.5px solid #86efac;border-radius:13px;padding:14px;margin-top:10px;display:none;}
@@ -501,9 +501,12 @@ async function fetchProds(q, idx) {
       list.map(p => ({
         label : p.name,
         sub   : [
-          p.selling_price  ? '₹'+p.selling_price  : null,
-          p.stock_qty != null ? 'Stock: '+p.stock_qty+(p.unit?' '+p.unit:'') : null,
-          p.gst_rate  != null ? 'GST: '+p.gst_rate+'%' : null
+          p.selling_price  ? '₹' + parseFloat(p.selling_price).toFixed(2) : null,
+          (p.stock_qty !== null && p.stock_qty !== undefined)
+            ? 'Stock: ' + p.stock_qty + (p.unit && p.unit !== 'undefined' ? ' ' + p.unit : '')
+            : null,
+          (p.gst_rate !== null && p.gst_rate !== undefined)
+            ? 'GST: ' + p.gst_rate + '%' : null
         ].filter(Boolean).join('  |  '),
         data  : p
       })),
@@ -515,18 +518,19 @@ async function fetchProds(q, idx) {
 }
 
 function onProdPick(idx, p) {
-  // Store product object for mode switch
-  rows[idx]._prod      = p;
-  rows[idx].product_id = p.id;
-  rows[idx].gst_rate   = parseFloat(p.gst_rate) || 0;
+  // Store product + variation for form submission
+  rows[idx]._prod       = p;
+  rows[idx].product_id  = p.id;
+  rows[idx].variation_id = p.variation_id || null;
+  rows[idx].gst_rate    = parseFloat(p.gst_rate) || 0;
 
   const price = mode === 'Wholesale'
     ? (parseFloat(p.wholesale_price) || parseFloat(p.selling_price) || 0)
     : (parseFloat(p.selling_price)   || 0);
 
-  // Fill all fields
+  // Fill all fields — use display_name (includes variation e.g. "Nike T-Shirt — Red / L")
   const el = n => document.getElementById(n+'_'+idx);
-  if (el('pName'))  el('pName').value  = p.name;
+  if (el('pName'))  el('pName').value  = p.name;  // display_name already set by API
   if (el('pHsn'))   el('pHsn').value   = p.hsn      || '';
   if (el('pGst'))   el('pGst').value   = p.gst_rate != null ? p.gst_rate : 0;
   if (el('pRate'))  el('pRate').value  = price;
@@ -542,6 +546,17 @@ function onProdPick(idx, p) {
     lbl.style.color = g > 0 ? '#059669' : '#94a3b8';
   }
 
+  // Show variation badge if applicable
+  const vbadge = document.getElementById('pVarBadge_'+idx);
+  if (vbadge) {
+    if (p.variation_name) {
+      vbadge.textContent = '🎨 ' + p.variation_name;
+      vbadge.style.display = 'inline-block';
+    } else {
+      vbadge.style.display = 'none';
+    }
+  }
+
   recalcRow(idx);
 }
 
@@ -550,7 +565,7 @@ function onProdPick(idx, p) {
 // ═══════════════════════════════════════════════════════════════════
 function addItem() {
   const idx = rowCount++;
-  rows[idx] = { product_id:'', gst_rate:0, _prod:null };
+  rows[idx] = { product_id:'', variation_id:null, gst_rate:0, _prod:null };
 
   const card = document.createElement('div');
   card.className = 'icard';
@@ -567,9 +582,11 @@ function addItem() {
       <div class="m-fg">
         <label class="m-label">Product <span style="color:red">*</span></label>
         <div class="acw">
+          <div id="pVarBadge_${idx}" style="display:none;background:#eff6ff;color:var(--accent);border-radius:8px;padding:4px 10px;font-size:12px;font-weight:700;margin-bottom:6px;"></div>
           <input type="text" id="pName_${idx}" class="m-input"
                  placeholder="Type product name to search…"
                  autocomplete="off" spellcheck="false"
+                 style="font-size:16px;padding:14px 16px;"
                  oninput="onProdType(this.value,${idx})"
                  onfocus="if(this.value.length>1) onProdType(this.value,${idx})" />
           <div class="aclist" id="pList_${idx}"></div>
@@ -799,7 +816,8 @@ function saveInvoice() {
     const amt  = qty * rate * (1 - disc/100);
 
     add('description[]',       document.getElementById('pName_'+idx)?.value || '');
-    add('product_id[]',        rows[idx].product_id || '0');
+    add('product_id[]',        rows[idx].product_id  || '0');
+    add('variation_id[]',      rows[idx].variation_id || '0');
     add('hsn[]',               document.getElementById('pHsn_'+idx)?.value  || '');
     add('gst_rate[]',          gst);
     add('quantity[]',          qty);

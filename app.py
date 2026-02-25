@@ -68,6 +68,7 @@ import io
 from werkzeug.utils import secure_filename
 
 import database_manager as db
+import reports_generator as rg
 import pdf_generator
 
 # ── Utility: number to Indian words ──────────────────────────────────────
@@ -130,7 +131,8 @@ def load_settings():
         return {
             "company_info"    : {"name": "My Company", "state": "Delhi"},
             "bank_details"    : {},
-            "invoice_settings": {"invoice_prefix": "INV-", "terms_and_conditions": ""}
+            "invoice_settings": {"invoice_prefix": "INV-", "terms_and_conditions": ""},
+            "upi"             : {"upi_id": "", "upi_name": ""}
         }
 
 def save_settings(data):
@@ -387,10 +389,14 @@ def billing():
             base_amt = qty * rate
             disc_amt = base_amt * disc / 100
             taxable  = base_amt - disc_amt
-            sent_amt = amounts[i] if i < len(amounts) else ''
-            amount   = float(sent_amt) if sent_amt and sent_amt != '' else taxable
+            sent_amt   = amounts[i] if i < len(amounts) else ''
+            amount     = float(sent_amt) if sent_amt and sent_amt != '' else taxable
+            var_ids    = request.form.getlist('variation_id[]')
+            var_id_raw = var_ids[i].strip() if i < len(var_ids) else ''
+            var_id     = int(var_id_raw) if var_id_raw and var_id_raw.isdigit() and int(var_id_raw) > 0 else None
             items_data.append({
                 'product_id'      : pid,
+                'variation_id'    : var_id,
                 'description'     : desc,
                 'hsn'             : hsns[i].strip() if i < len(hsns) else '',
                 'gst_rate'        : gst,
@@ -530,20 +536,25 @@ def product_info_api():
 @app.route('/products/search')
 @login_required
 def product_search_api():
-    """JSON API — product search for autocomplete dropdown in billing."""
-    q    = request.args.get('q', '')
-    mode = request.args.get('mode', 'Retail')
-    products = db.search_products(q)
-    return jsonify([{
-        'id'             : p['id'],
-        'name'           : p['name'],
-        'hsn'            : p.get('hsn', ''),
-        'gst_rate'       : p.get('gst_rate', 0),
-        'unit'           : p.get('unit', ''),
-        'stock_qty'      : p.get('stock_qty', 0),
-        'selling_price'  : p.get('selling_price', 0),
-        'wholesale_price': p.get('wholesale_price', 0) or p.get('selling_price', 0),
-    } for p in products])
+    """JSON API — product search including variations for billing autocomplete."""
+    try:
+        q        = request.args.get('q', '')
+        products = db.search_products(q)
+        return jsonify([{
+            'id'             : p['id'],
+            'name'           : p.get('display_name') or p['name'],
+            'hsn'            : p.get('hsn') or '',
+            'gst_rate'       : p.get('gst_rate') or 0,
+            'unit'           : p.get('unit') or '',
+            'stock_qty'      : p.get('stock_qty') or 0,
+            'selling_price'  : round(float(p.get('selling_price') or 0), 2),
+            'wholesale_price': round(float(p.get('wholesale_price') or p.get('selling_price') or 0), 2),
+            'variation_id'   : p.get('variation_id'),
+            'variation_name' : p.get('variation_name'),
+        } for p in products])
+    except Exception as e:
+        app.logger.error(f"product_search_api error: {e}")
+        return jsonify([])
 
 
 # ─────────────────────────────────────────────
@@ -678,6 +689,9 @@ def products():
         prod_list = db.search_products(search)
     else:
         prod_list = db.get_all('products')
+    # Add variation counts to each product
+    for p in prod_list:
+        p['variation_count'] = len(db.get_variations(p['id']))
     return mrender('products.html', products=prod_list, search=search)
 
 
@@ -768,6 +782,68 @@ def delete_product(product_id):
         db.delete_record('products', product_id)
         flash(f'Product "{product["name"]}" deleted.', 'success')
     return redirect(url_for('products'))
+
+
+# ─────────────────────────────────────────────
+#  PRODUCT VARIATIONS
+# ─────────────────────────────────────────────
+@app.route('/products/<int:product_id>/variations')
+@admin_required
+def product_variations(product_id):
+    product    = db.get_by_id('products', product_id)
+    if not product:
+        flash('Product not found.', 'danger')
+        return redirect(url_for('products'))
+    variations = db.get_variations(product_id)
+    return mrender('product_variations.html', product=product, variations=variations)
+
+
+@app.route('/products/<int:product_id>/variations/add', methods=['POST'])
+@admin_required
+def add_variation(product_id):
+    f    = request.form
+    name = f.get('variation_name', '').strip()
+    if not name:
+        flash('Variation name is required.', 'danger')
+        return redirect(url_for('product_variations', product_id=product_id))
+    db.add_variation(
+        product_id    = product_id,
+        name          = name,
+        selling_price = f.get('selling_price',   0),
+        wholesale_price= f.get('wholesale_price', 0),
+        stock_qty     = f.get('stock_qty',        0),
+        cost_rate     = f.get('cost_rate',         0),
+    )
+    flash(f'Variation "{name}" added.', 'success')
+    return redirect(url_for('product_variations', product_id=product_id))
+
+
+@app.route('/products/<int:product_id>/variations/<int:variation_id>/edit', methods=['POST'])
+@admin_required
+def edit_variation(product_id, variation_id):
+    f    = request.form
+    name = f.get('variation_name', '').strip()
+    if not name:
+        flash('Variation name is required.', 'danger')
+        return redirect(url_for('product_variations', product_id=product_id))
+    db.update_variation(
+        variation_id    = variation_id,
+        name            = name,
+        selling_price   = f.get('selling_price',   0),
+        wholesale_price = f.get('wholesale_price',  0),
+        stock_qty       = f.get('stock_qty',        0),
+        cost_rate       = f.get('cost_rate',         0),
+    )
+    flash(f'Variation "{name}" updated.', 'success')
+    return redirect(url_for('product_variations', product_id=product_id))
+
+
+@app.route('/products/<int:product_id>/variations/<int:variation_id>/delete', methods=['POST'])
+@admin_required
+def delete_variation(product_id, variation_id):
+    db.delete_variation(variation_id)
+    flash('Variation deleted.', 'success')
+    return redirect(url_for('product_variations', product_id=product_id))
 
 
 # ─────────────────────────────────────────────
@@ -1116,6 +1192,10 @@ def settings():
             'invoice_prefix'     : f.get('invoice_prefix', 'INV-'),
             'terms_and_conditions': f.get('terms_and_conditions', ''),
         }
+        data['upi'] = {
+            'upi_id'   : f.get('upi_id', '').strip(),
+            'upi_name' : f.get('upi_name', '').strip(),
+        }
 
         save_settings(data)
         flash('Settings saved successfully!', 'success')
@@ -1208,6 +1288,114 @@ def server_error(e):
 
 
 # ─────────────────────────────────────────────
+#  REPORTS
+# ─────────────────────────────────────────────
+@app.route('/reports')
+@login_required
+def reports():
+    return mrender('reports.html')
+
+
+@app.route('/reports/stock')
+@login_required
+def stock_report():
+    start = request.args.get('start', '')
+    end   = request.args.get('end', '')
+    fmt   = request.args.get('format', 'pdf')   # pdf or excel
+
+    if not start or not end:
+        flash('Please provide start and end dates.', 'danger')
+        return redirect(url_for('reports'))
+
+    data = db.get_stock_report(start, end)
+
+    if fmt == 'excel':
+        from flask import send_file
+        xlsx_bytes = rg.create_stock_report_excel(data, start, end)
+        return send_file(
+            io.BytesIO(xlsx_bytes),
+            mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            as_attachment=True,
+            download_name=f'Stock_Report_{start}_to_{end}.xlsx'
+        )
+    else:
+        from flask import send_file
+        pdf_bytes = rg.create_stock_report_pdf(data, start, end)
+        return send_file(
+            io.BytesIO(pdf_bytes),
+            mimetype='application/pdf',
+            as_attachment=True,
+            download_name=f'Stock_Report_{start}_to_{end}.pdf'
+        )
+
+
+@app.route('/reports/gstr1')
+@login_required
+def gstr1_report():
+    start = request.args.get('start', '')
+    end   = request.args.get('end', '')
+    fmt   = request.args.get('format', 'pdf')
+
+    if not start or not end:
+        flash('Please provide start and end dates.', 'danger')
+        return redirect(url_for('reports'))
+
+    data = db.get_gstr1_data(start, end)
+
+    if fmt == 'excel':
+        from flask import send_file
+        xlsx_bytes = rg.create_gstr1_excel(data)
+        return send_file(
+            io.BytesIO(xlsx_bytes),
+            mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            as_attachment=True,
+            download_name=f'GSTR1_{start}_to_{end}.xlsx'
+        )
+    else:
+        from flask import send_file
+        pdf_bytes = rg.create_gstr1_pdf(data)
+        return send_file(
+            io.BytesIO(pdf_bytes),
+            mimetype='application/pdf',
+            as_attachment=True,
+            download_name=f'GSTR1_{start}_to_{end}.pdf'
+        )
+
+
+@app.route('/reports/gstr3b')
+@login_required
+def gstr3b_report():
+    start = request.args.get('start', '')
+    end   = request.args.get('end', '')
+    fmt   = request.args.get('format', 'pdf')
+
+    if not start or not end:
+        flash('Please provide start and end dates.', 'danger')
+        return redirect(url_for('reports'))
+
+    data = db.get_gstr3b_data(start, end)
+
+    if fmt == 'excel':
+        from flask import send_file
+        xlsx_bytes = rg.create_gstr3b_excel(data)
+        return send_file(
+            io.BytesIO(xlsx_bytes),
+            mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            as_attachment=True,
+            download_name=f'GSTR3B_{start}_to_{end}.xlsx'
+        )
+    else:
+        from flask import send_file
+        pdf_bytes = rg.create_gstr3b_pdf(data)
+        return send_file(
+            io.BytesIO(pdf_bytes),
+            mimetype='application/pdf',
+            as_attachment=True,
+            download_name=f'GSTR3B_{start}_to_{end}.pdf'
+        )
+
+
+# ─────────────────────────────────────────────
 #  ENTRY POINT
 # ─────────────────────────────────────────────
 if __name__ == '__main__':
@@ -1216,4 +1404,4 @@ if __name__ == '__main__':
     print("  URL: http://localhost:5000")
     print("  Default Login → admin / admin123")
     print("=" * 60)
-    app.run(debug=True, host='0.0.0.0', port=6000)
+    app.run(debug=True, host='0.0.0.0', port=8000)

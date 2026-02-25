@@ -297,10 +297,20 @@
           </td>
 
           <td style="text-align:center;">
-            <div style="display:flex;gap:5px;justify-content:center;">
+            <div style="display:flex;gap:5px;justify-content:center;flex-wrap:wrap;">
               <a href="{{ url_for('edit_product', product_id=p.id) }}"
                  class="tbl-btn tbl-btn-edit">
                 <i class="bi bi-pencil"></i> Edit
+              </a>
+              <a href="{{ url_for('product_variations', product_id=p.id) }}"
+                 class="tbl-btn" style="background:#f5f3ff;color:#7c3aed;border-color:#ddd6fe;"
+                 title="Manage Variations">
+                <i class="bi bi-diagram-2"></i>
+                {% if p.variation_count and p.variation_count > 0 %}
+                  {{ p.variation_count }}
+                {% else %}
+                  Variants
+                {% endif %}
               </a>
               <button class="tbl-btn tbl-btn-del"
                       onclick="confirmDelete({{ p.id }}, '{{ p.name | e }}')">

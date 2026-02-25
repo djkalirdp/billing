@@ -1,0 +1,199 @@
+{% extends 'base.html' %}
+{% block title %}Reports{% endblock %}
+{% block page_title %}Reports & Exports{% endblock %}
+
+{% block head %}
+<style>
+.rep-grid { display:grid; grid-template-columns: repeat(auto-fit, minmax(380px,1fr)); gap:20px; }
+.rep-card  { background:white; border-radius:14px; box-shadow:var(--shadow); overflow:hidden; }
+.rep-head  { padding:16px 20px; border-bottom:1px solid var(--border); display:flex; align-items:center; gap:12px; }
+.rep-icon  { width:44px; height:44px; border-radius:12px; display:flex; align-items:center; justify-content:center; font-size:22px; flex-shrink:0; }
+.rep-body  { padding:18px 20px; }
+.month-pills { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:14px; }
+.month-pill  { border:1.5px solid var(--border); background:#f8fafc; border-radius:8px; padding:4px 12px; font-size:12px; font-weight:600; cursor:pointer; transition:all .15s; }
+.month-pill:hover, .month-pill.active { background:#eff6ff; border-color:var(--accent); color:var(--accent); }
+.date-row { display:flex; gap:12px; margin-bottom:14px; align-items:flex-end; }
+.date-row .m-fg { flex:1; }
+.dl-btns { display:flex; gap:10px; }
+.dl-btn { flex:1; padding:10px; border:none; border-radius:10px; font-size:13px; font-weight:700; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:6px; transition:opacity .15s; text-decoration:none; }
+.dl-pdf   { background:#dc2626; color:white; }
+.dl-excel { background:#059669; color:white; }
+.dl-btn:hover { opacity:.85; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div style="margin-bottom:20px;">
+  <p style="color:var(--text-muted);font-size:14px;">
+    Select a month shortcut or custom date range, then download as PDF or Excel.
+  </p>
+</div>
+
+<div class="rep-grid">
+
+  <!-- ── STOCK REPORT ──────────────────────────────────────────── -->
+  <div class="rep-card">
+    <div class="rep-head">
+      <div class="rep-icon" style="background:#ecfdf5;"><i class="bi bi-boxes" style="color:#059669;"></i></div>
+      <div>
+        <div style="font-weight:800;font-size:15px;">Stock Report</div>
+        <div style="font-size:12px;color:var(--text-muted);">Opening · Purchases · Sales · Closing · Stock Value</div>
+      </div>
+    </div>
+    <div class="rep-body">
+      <div class="month-pills" id="stockPills"></div>
+      <div class="date-row">
+        <div class="m-fg">
+          <label class="m-label">From Date</label>
+          <input type="date" id="stockStart" class="form-control form-control-sm" />
+        </div>
+        <div class="m-fg">
+          <label class="m-label">To Date</label>
+          <input type="date" id="stockEnd" class="form-control form-control-sm" />
+        </div>
+      </div>
+      <div class="dl-btns">
+        <a href="#" class="dl-btn dl-pdf" onclick="return dlReport('stock','pdf')">
+          <i class="bi bi-file-earmark-pdf"></i> Download PDF
+        </a>
+        <a href="#" class="dl-btn dl-excel" onclick="return dlReport('stock','excel')">
+          <i class="bi bi-file-earmark-excel"></i> Download Excel
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── GSTR-1 ─────────────────────────────────────────────────── -->
+  <div class="rep-card">
+    <div class="rep-head">
+      <div class="rep-icon" style="background:#eff6ff;"><i class="bi bi-receipt-cutoff" style="color:var(--accent);"></i></div>
+      <div>
+        <div style="font-weight:800;font-size:15px;">GSTR-1</div>
+        <div style="font-size:12px;color:var(--text-muted);">Outward supplies · B2B · B2C · HSN Summary (Section 12)</div>
+      </div>
+    </div>
+    <div class="rep-body">
+      <div style="background:#fffbeb;border-radius:8px;padding:8px 12px;font-size:12px;color:#92400e;margin-bottom:12px;">
+        <i class="bi bi-info-circle me-1"></i>
+        B2B = buyers with GSTIN &nbsp;·&nbsp; B2C = all others
+      </div>
+      <div class="month-pills" id="gstr1Pills"></div>
+      <div class="date-row">
+        <div class="m-fg">
+          <label class="m-label">From Date</label>
+          <input type="date" id="gstr1Start" class="form-control form-control-sm" />
+        </div>
+        <div class="m-fg">
+          <label class="m-label">To Date</label>
+          <input type="date" id="gstr1End" class="form-control form-control-sm" />
+        </div>
+      </div>
+      <div class="dl-btns">
+        <a href="#" class="dl-btn dl-pdf" onclick="return dlReport('gstr1','pdf')">
+          <i class="bi bi-file-earmark-pdf"></i> Download PDF
+        </a>
+        <a href="#" class="dl-btn dl-excel" onclick="return dlReport('gstr1','excel')">
+          <i class="bi bi-file-earmark-excel"></i> Download Excel
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── GSTR-3B ────────────────────────────────────────────────── -->
+  <div class="rep-card">
+    <div class="rep-head">
+      <div class="rep-icon" style="background:#fff7ed;"><i class="bi bi-calculator" style="color:#f59e0b;"></i></div>
+      <div>
+        <div style="font-weight:800;font-size:15px;">GSTR-3B</div>
+        <div style="font-size:12px;color:var(--text-muted);">Monthly summary · Tax liability · Rate-wise breakup</div>
+      </div>
+    </div>
+    <div class="rep-body">
+      <div style="background:#fffbeb;border-radius:8px;padding:8px 12px;font-size:12px;color:#92400e;margin-bottom:12px;">
+        <i class="bi bi-info-circle me-1"></i>
+        Use these figures while filing on the GST portal.
+      </div>
+      <div class="month-pills" id="gstr3bPills"></div>
+      <div class="date-row">
+        <div class="m-fg">
+          <label class="m-label">From Date</label>
+          <input type="date" id="gstr3bStart" class="form-control form-control-sm" />
+        </div>
+        <div class="m-fg">
+          <label class="m-label">To Date</label>
+          <input type="date" id="gstr3bEnd" class="form-control form-control-sm" />
+        </div>
+      </div>
+      <div class="dl-btns">
+        <a href="#" class="dl-btn dl-pdf" onclick="return dlReport('gstr3b','pdf')">
+          <i class="bi bi-file-earmark-pdf"></i> Download PDF
+        </a>
+        <a href="#" class="dl-btn dl-excel" onclick="return dlReport('gstr3b','excel')">
+          <i class="bi bi-file-earmark-excel"></i> Download Excel
+        </a>
+      </div>
+    </div>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const today  = new Date();
+const thisYr = today.getFullYear();
+const thisMo = today.getMonth();
+
+function padZ(n){ return String(n).padStart(2,'0'); }
+
+function setRange(sId, eId, yr, mo) {
+  const last = new Date(yr, mo+1, 0).getDate();
+  document.getElementById(sId).value = `${yr}-${padZ(mo+1)}-01`;
+  document.getElementById(eId).value = `${yr}-${padZ(mo+1)}-${padZ(last)}`;
+}
+
+function buildPills(containerId, startId, endId) {
+  const c = document.getElementById(containerId);
+  for (let i = 5; i >= 0; i--) {
+    let d = new Date(thisYr, thisMo - i, 1);
+    let yr = d.getFullYear(), mo = d.getMonth();
+    const p = document.createElement('button');
+    p.type = 'button';
+    p.className = 'month-pill' + (i === 0 ? ' active' : '');
+    p.textContent = MONTHS[mo] + ' ' + yr;
+    p.onclick = () => {
+      c.querySelectorAll('.month-pill').forEach(x => x.classList.remove('active'));
+      p.classList.add('active');
+      setRange(startId, endId, yr, mo);
+    };
+    c.appendChild(p);
+    if (i === 0) setRange(startId, endId, yr, mo);
+  }
+}
+
+buildPills('stockPills',  'stockStart',  'stockEnd');
+buildPills('gstr1Pills',  'gstr1Start',  'gstr1End');
+buildPills('gstr3bPills', 'gstr3bStart', 'gstr3bEnd');
+
+function dlReport(type, fmt) {
+  const map = {
+    stock : ['stockStart',  'stockEnd'],
+    gstr1 : ['gstr1Start',  'gstr1End'],
+    gstr3b: ['gstr3bStart', 'gstr3bEnd'],
+  };
+  const [sId, eId] = map[type];
+  const start = document.getElementById(sId).value;
+  const end   = document.getElementById(eId).value;
+  if (!start || !end) { alert('Please select date range.'); return false; }
+  if (start > end)    { alert('Start date cannot be after end date.'); return false; }
+  const urls = {
+    stock : '{{ url_for("stock_report") }}',
+    gstr1 : '{{ url_for("gstr1_report") }}',
+    gstr3b: '{{ url_for("gstr3b_report") }}',
+  };
+  window.location.href = `${urls[type]}?start=${start}&end=${end}&format=${fmt}`;
+  return false;
+}
+</script>
+{% endblock %}

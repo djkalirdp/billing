@@ -29,8 +29,18 @@ from reportlab.pdfbase.ttfonts import TTFont
 from num2words import num2words
 import os
 import io
+import json
 from datetime import datetime
 import database_manager as db
+
+# QR code via ReportLab
+try:
+    from reportlab.graphics.barcode.qr import QrCodeWidget
+    from reportlab.graphics.shapes import Drawing
+    from reportlab.graphics import renderPDF
+    _QR_AVAILABLE = True
+except Exception:
+    _QR_AVAILABLE = False
 
 
 # ─────────────────────────────────────────────
@@ -106,6 +116,34 @@ def get_pdf_response(pdf_bytes, filename):
         as_attachment=True,
         download_name=filename
     )
+
+
+def _make_upi_qr(upi_id, payee_name, amount, note="Invoice Payment"):
+    """
+    Returns a ReportLab Drawing containing a UPI QR code.
+    UPI URL: upi://pay?pa=<id>&pn=<name>&am=<amount>&tn=<note>&cu=INR
+    Returns None if QR is unavailable or upi_id empty.
+    """
+    if not _QR_AVAILABLE or not upi_id:
+        return None
+    try:
+        import urllib.parse
+        url = (
+            f"upi://pay?pa={urllib.parse.quote(str(upi_id))}"
+            f"&pn={urllib.parse.quote(str(payee_name or ''))}"
+            f"&am={float(amount):.2f}"
+            f"&tn={urllib.parse.quote(str(note))}"
+            f"&cu=INR"
+        )
+        qr       = QrCodeWidget(url)
+        size     = 2.5 * cm
+        qr.barWidth  = size
+        qr.barHeight = size
+        d = Drawing(size, size)
+        d.add(qr)
+        return d
+    except Exception:
+        return None
 
 
 def _build_doc(buffer, pagesize=A4, margins=None):
@@ -215,7 +253,7 @@ def create_invoice_pdf(invoice_data, items, settings,
         logo_img  = None
         if logo_path and os.path.exists(logo_path):
             try:
-                logo_img = Image(logo_path, width=3*cm, height=2.5*cm)
+                logo_img = Image(logo_path, width=2.5*cm, height=2.0*cm)
                 logo_img.hAlign = 'RIGHT'
             except Exception:
                 pass
@@ -345,17 +383,6 @@ def create_invoice_pdf(invoice_data, items, settings,
             _gt = float(invoice_data.get('grand_total') or 0)
             amt_words = f"{_gt:.2f} Only"
 
-        left_content = [
-            [Paragraph(f"Amount in words:<br/><b>{amt_words}</b>", S['footer_txt'])],
-            [Spacer(1, 6)],
-            [Paragraph("<b>Bank Details:</b>", S['footer_txt'])],
-            [Paragraph(f"Bank: {bank.get('bank_name', '')}",       S['footer_txt'])],
-            [Paragraph(f"A/c:  {bank.get('account_no', '')}",      S['footer_txt'])],
-            [Paragraph(f"IFSC: {bank.get('ifsc_code', '')}",       S['footer_txt'])],
-        ]
-        t_left = Table(left_content, colWidths=[11*cm])
-        t_left.setStyle(TableStyle([('LEFTPADDING', (0,0), (-1,-1), 4)]))
-
         # ── Footer: GST Totals + Grand Total ─────────────────────
         right_content = []
 
@@ -396,14 +423,61 @@ def create_invoice_pdf(invoice_data, items, settings,
         bal_due    = max(0.0, grand - paid)
         prev_bal   = float(previous_balance or 0)
 
+        # ── UPI QR Code (built once, used in bank section) ────────
+        upi_id     = settings.get('upi', {}).get('upi_id', '') or ''
+        upi_name   = c_info.get('name', '')
+        qr_amount  = max(0.0, bal_due + prev_bal)  # total outstanding
+        qr_note    = str(invoice_data.get('invoice_no', 'Invoice'))
+        qr_drawing = _make_upi_qr(upi_id, upi_name, qr_amount, qr_note)
+
+        # ── Left footer: bank details + optional QR ───────────────
+        bank_lines = [
+            [Paragraph(f"Amount in words:<br/><b>{amt_words}</b>", S['footer_txt'])],
+            [Spacer(1, 4)],
+            [Paragraph("<b>Bank Details:</b>", S['footer_txt'])],
+        ]
+        if bank.get('bank_name'):
+            bank_lines.append([Paragraph(f"Bank: {bank.get('bank_name', '')}",  S['footer_txt'])])
+        if bank.get('account_no'):
+            bank_lines.append([Paragraph(f"A/c:  {bank.get('account_no', '')}",  S['footer_txt'])])
+        if bank.get('ifsc_code'):
+            bank_lines.append([Paragraph(f"IFSC: {bank.get('ifsc_code', '')}",   S['footer_txt'])])
+        if upi_id:
+            bank_lines.append([Paragraph(f"UPI:  {upi_id}", S['footer_txt'])])
+
+        if qr_drawing:
+            qr_col = [
+                [Paragraph("<b>Scan to Pay</b>",
+                           ParagraphStyle('qrl', parent=S['footer_txt'],
+                                          alignment=TA_CENTER, fontSize=7))],
+                [qr_drawing],
+                [Paragraph(f"\u20b9{qr_amount:,.2f}",
+                           ParagraphStyle('qra', parent=S['footer_txt'],
+                                          alignment=TA_CENTER, fontName=FONT_BOLD, fontSize=8))],
+            ]
+            bank_tbl   = Table(bank_lines, colWidths=[7.5*cm])
+            bank_tbl.setStyle(TableStyle([('LEFTPADDING', (0,0), (-1,-1), 0)]))
+            qr_tbl     = Table(qr_col, colWidths=[3*cm])
+            qr_tbl.setStyle(TableStyle([('ALIGN', (0,0), (-1,-1), 'CENTER')]))
+            left_inner = Table([[bank_tbl, qr_tbl]], colWidths=[7.5*cm, 3.5*cm])
+            left_inner.setStyle(TableStyle([('VALIGN', (0,0), (-1,-1), 'TOP')]))
+            left_content = [[left_inner]]
+        else:
+            left_content = bank_lines
+
+        t_left = Table(left_content, colWidths=[11*cm])
+        t_left.setStyle(TableStyle([('LEFTPADDING', (0,0), (-1,-1), 4)]))
+
         # Show paid only if actually paid (partial or full)
         if paid > 0:
             add_right_row("Paid at Billing:", paid)
-        add_right_row("Balance Due:", bal_due, bold=True)
 
         if prev_bal > 0:
+            add_right_row("Balance Due (This Inv.):", bal_due)
             add_right_row("Prev. Balance:", prev_bal)
             add_right_row("Total Outstanding:", bal_due + prev_bal, bold=True)
+        else:
+            add_right_row("Total Outstanding:", bal_due, bold=True)
 
         t_right = Table(right_content, colWidths=[4.5*cm, 2.5*cm])
         t_right.setStyle(TableStyle([

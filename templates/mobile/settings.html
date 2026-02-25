@@ -136,6 +136,49 @@
     </div>
   </div>
 
+  <!-- UPI / QR Code -->
+  <div class="m-accordion-item">
+    <button type="button" class="m-accordion-head" onclick="toggleAcc(this)">
+      <div class="m-accordion-icon" style="background:#eff6ff;color:var(--accent);">
+        <i class="bi bi-qr-code"></i>
+      </div>
+      <span class="m-accordion-lbl">UPI & QR Code</span>
+      <i class="bi bi-chevron-down m-accordion-chevron"></i>
+    </button>
+    <div class="m-accordion-body">
+      {% set upi = settings.get('upi', {}) %}
+      <div style="background:#eff6ff;border-radius:10px;padding:10px 12px;margin-bottom:12px;font-size:13px;color:#1e40af;">
+        <i class="bi bi-info-circle me-1"></i>
+        Add your UPI ID here. A <strong>QR code</strong> will auto-appear on every invoice PDF — customers can scan to pay instantly.
+      </div>
+      <div class="m-fg">
+        <label class="m-label">UPI ID <span style="color:var(--accent);font-size:11px;">(e.g. yourname@upi)</span></label>
+        <input type="text" name="upi_id" class="m-input"
+               value="{{ upi.get('upi_id','') }}"
+               placeholder="yourname@okaxis / 9876543210@paytm"
+               autocomplete="off" autocorrect="off" autocapitalize="none" />
+        <div style="font-size:12px;color:var(--text-muted);margin-top:4px;">
+          Supports PhonePe, Google Pay, Paytm, BHIM, and all UPI apps.
+        </div>
+      </div>
+      <div class="m-fg">
+        <label class="m-label">Payee Display Name</label>
+        <input type="text" name="upi_name" class="m-input"
+               value="{{ upi.get('upi_name', '') or settings.get('company_info',{}).get('name','') }}"
+               placeholder="Your Shop Name" />
+        <div style="font-size:12px;color:var(--text-muted);margin-top:4px;">
+          This name shows in the customer's UPI app when scanning.
+        </div>
+      </div>
+      {% if upi.get('upi_id') %}
+      <div style="background:#ecfdf5;border-radius:10px;padding:10px 12px;margin-top:4px;font-size:13px;color:#065f46;">
+        <i class="bi bi-check-circle-fill me-1"></i>
+        UPI set: <strong>{{ upi.get('upi_id') }}</strong> — QR codes will appear on invoices.
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
   <!-- Invoice Settings -->
   <div class="m-accordion-item">
     <button type="button" class="m-accordion-head" onclick="toggleAcc(this)">

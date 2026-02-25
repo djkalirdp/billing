@@ -1,0 +1,222 @@
+{% extends 'base.html' %}
+{% block title %}Variations — {{ product.name }}{% endblock %}
+{% block page_title %}Product Variations{% endblock %}
+
+{% block head %}
+<style>
+.page-header {
+  display:flex; align-items:center; justify-content:space-between;
+  margin-bottom:24px; gap:12px; flex-wrap:wrap;
+}
+.var-table th { background:#f8fafc; font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; }
+.var-table td { vertical-align:middle; }
+.stock-low { color:#dc2626; font-weight:700; }
+.stock-ok  { color:#059669; font-weight:700; }
+.badge-var { background:#eff6ff; color:var(--accent); border-radius:8px; padding:4px 10px; font-size:12px; font-weight:700; }
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- Breadcrumb -->
+<nav style="font-size:13px;color:var(--text-muted);margin-bottom:16px;">
+  <a href="{{ url_for('products') }}" style="color:var(--accent);text-decoration:none;">Products</a>
+  <span style="margin:0 6px;">›</span>
+  <a href="{{ url_for('edit_product', product_id=product.id) }}"
+     style="color:var(--accent);text-decoration:none;">{{ product.name }}</a>
+  <span style="margin:0 6px;">›</span> Variations
+</nav>
+
+<!-- Page header -->
+<div class="page-header">
+  <div>
+    <h4 style="margin:0;font-weight:800;">{{ product.name }}</h4>
+    <div style="font-size:13px;color:var(--text-muted);margin-top:3px;">
+      GST {{ product.gst_rate }}% &nbsp;·&nbsp; HSN {{ product.hsn or '—' }}
+      &nbsp;·&nbsp; Base stock: {{ product.stock_qty }} {{ product.unit or '' }}
+    </div>
+  </div>
+  <div style="display:flex;gap:10px;">
+    <a href="{{ url_for('edit_product', product_id=product.id) }}" class="btn-outline-custom">
+      <i class="bi bi-arrow-left"></i> Back to Product
+    </a>
+    <button class="btn-primary-custom" data-bs-toggle="modal" data-bs-target="#addModal">
+      <i class="bi bi-plus-lg"></i> Add Variation
+    </button>
+  </div>
+</div>
+
+<!-- Info banner -->
+<div class="alert alert-warning" style="font-size:13px;border-radius:12px;">
+  <i class="bi bi-lightbulb-fill me-2"></i>
+  Variations inherit <strong>GST%</strong> and <strong>HSN</strong> from the parent product.
+  Each variation has its own price and stock.
+  &nbsp;Examples: <em>Size S / M / L / XL</em> &nbsp;·&nbsp; <em>Red / Blue / Green</em> &nbsp;·&nbsp; <em>500ml / 1L / 2L</em>
+</div>
+
+<!-- Variations table -->
+<div class="card border-0 shadow-sm" style="border-radius:14px;overflow:hidden;">
+  <div class="card-body p-0">
+    {% if variations %}
+    <table class="table var-table mb-0">
+      <thead>
+        <tr>
+          <th style="padding:12px 20px;">Variation</th>
+          <th>Retail Price</th>
+          <th>Wholesale</th>
+          <th>Stock</th>
+          <th>Cost Rate</th>
+          <th style="width:140px;">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for v in variations %}
+        <tr>
+          <td style="padding:14px 20px;font-weight:700;">
+            <span class="badge-var">{{ v.variation_name }}</span>
+          </td>
+          <td>₹{{ "%.2f"|format(v.selling_price or 0) }}</td>
+          <td>₹{{ "%.2f"|format(v.wholesale_price or 0) }}</td>
+          <td class="{{ 'stock-low' if (v.stock_qty or 0) <= 5 else 'stock-ok' }}">
+            {{ v.stock_qty or 0 }} {{ product.unit or '' }}
+          </td>
+          <td>₹{{ "%.2f"|format(v.rate or 0) }}</td>
+          <td>
+            <button class="btn btn-sm btn-outline-primary me-1"
+                    onclick="openEdit({{ v.id }}, '{{ v.variation_name }}',
+                                      {{ v.selling_price or 0 }}, {{ v.wholesale_price or 0 }},
+                                      {{ v.stock_qty or 0 }}, {{ v.rate or 0 }})">
+              <i class="bi bi-pencil"></i>
+            </button>
+            <form method="POST"
+                  action="{{ url_for('delete_variation', product_id=product.id, variation_id=v.id) }}"
+                  style="display:inline;"
+                  onsubmit="return confirm('Delete variation {{ v.variation_name }}?')">
+              <button type="submit" class="btn btn-sm btn-outline-danger">
+                <i class="bi bi-trash"></i>
+              </button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div style="text-align:center;padding:48px 20px;">
+      <i class="bi bi-diagram-2" style="font-size:48px;color:#cbd5e1;display:block;margin-bottom:12px;"></i>
+      <h6 style="color:var(--text-muted);font-weight:700;">No variations yet</h6>
+      <p style="font-size:13px;color:#94a3b8;">Click "Add Variation" to create sizes, colours or other variants.</p>
+      <button class="btn-primary-custom" data-bs-toggle="modal" data-bs-target="#addModal">
+        <i class="bi bi-plus-lg"></i> Add First Variation
+      </button>
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+<!-- ── ADD MODAL ─────────────────────────────────────────────────── -->
+<div class="modal fade" id="addModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content" style="border-radius:16px;border:none;">
+      <form method="POST" action="{{ url_for('add_variation', product_id=product.id) }}">
+        <div class="modal-header" style="border-bottom:1px solid var(--border);">
+          <h5 class="modal-title fw-bold">Add Variation</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Variation Name <span class="text-danger">*</span></label>
+            <input type="text" name="variation_name" class="form-control"
+                   placeholder="e.g. Large / Red / 1 Litre" required />
+          </div>
+          <div class="row g-3">
+            <div class="col-6">
+              <label class="form-label fw-semibold">Retail Price ₹</label>
+              <input type="number" name="selling_price" class="form-control" step="0.01" min="0"
+                     value="{{ '%.2f'|format(product.selling_price or 0) }}" />
+            </div>
+            <div class="col-6">
+              <label class="form-label fw-semibold">Wholesale ₹</label>
+              <input type="number" name="wholesale_price" class="form-control" step="0.01" min="0"
+                     value="{{ '%.2f'|format(product.wholesale_price or 0) }}" />
+            </div>
+            <div class="col-6">
+              <label class="form-label fw-semibold">Opening Stock</label>
+              <input type="number" name="stock_qty" class="form-control" step="0.001" min="0" value="0" />
+            </div>
+            <div class="col-6">
+              <label class="form-label fw-semibold">Cost Rate ₹</label>
+              <input type="number" name="cost_rate" class="form-control" step="0.01" min="0"
+                     value="{{ '%.2f'|format(product.rate or 0) }}" />
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer" style="border-top:1px solid var(--border);">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn-primary-custom">
+            <i class="bi bi-plus-circle"></i> Add Variation
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- ── EDIT MODAL ────────────────────────────────────────────────── -->
+<div class="modal fade" id="editModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content" style="border-radius:16px;border:none;">
+      <form method="POST" id="editForm" action="">
+        <div class="modal-header">
+          <h5 class="modal-title fw-bold">Edit Variation</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Variation Name <span class="text-danger">*</span></label>
+            <input type="text" name="variation_name" id="editName" class="form-control" required />
+          </div>
+          <div class="row g-3">
+            <div class="col-6">
+              <label class="form-label fw-semibold">Retail Price ₹</label>
+              <input type="number" name="selling_price" id="editSell" class="form-control" step="0.01" min="0" />
+            </div>
+            <div class="col-6">
+              <label class="form-label fw-semibold">Wholesale ₹</label>
+              <input type="number" name="wholesale_price" id="editWhole" class="form-control" step="0.01" min="0" />
+            </div>
+            <div class="col-6">
+              <label class="form-label fw-semibold">Stock Qty</label>
+              <input type="number" name="stock_qty" id="editStock" class="form-control" step="0.001" min="0" />
+            </div>
+            <div class="col-6">
+              <label class="form-label fw-semibold">Cost Rate ₹</label>
+              <input type="number" name="cost_rate" id="editCost" class="form-control" step="0.01" min="0" />
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn-primary-custom">
+            <i class="bi bi-save2"></i> Update
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function openEdit(vid, name, sell, whole, stock, cost) {
+  document.getElementById('editForm').action =
+    '/products/{{ product.id }}/variations/' + vid + '/edit';
+  document.getElementById('editName').value  = name;
+  document.getElementById('editSell').value  = sell.toFixed(2);
+  document.getElementById('editWhole').value = whole.toFixed(2);
+  document.getElementById('editStock').value = stock;
+  document.getElementById('editCost').value  = cost.toFixed(2);
+  new bootstrap.Modal(document.getElementById('editModal')).show();
+}
+</script>
+{% endblock %}

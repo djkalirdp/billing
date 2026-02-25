@@ -97,12 +97,23 @@
       {% if p.wholesale_price %}
       <div class="product-price-sub" style="margin-top:2px;">W: ₹{{ "%.0f"|format(p.wholesale_price) }}</div>
       {% endif %}
-      <div style="display:flex;gap:5px;margin-top:6px;">
+      <div style="display:flex;gap:5px;margin-top:6px;flex-wrap:wrap;">
         <a href="{{ url_for('edit_product', product_id=p.id) }}"
-           class="m-icon-btn" style="width:30px;height:30px;font-size:14px;background:#eff6ff;color:#2563eb;">
+           class="m-icon-btn" style="width:30px;height:30px;font-size:14px;background:#eff6ff;color:#2563eb;"
+           title="Edit">
           <i class="bi bi-pencil"></i>
         </a>
+        <a href="{{ url_for('product_variations', product_id=p.id) }}"
+           class="m-icon-btn" style="width:30px;height:30px;font-size:14px;background:#f5f3ff;color:#7c3aed;"
+           title="Variations">
+          <i class="bi bi-diagram-2"></i>
+        </a>
       </div>
+      {% if p.variation_count and p.variation_count > 0 %}
+      <div style="font-size:11px;color:#7c3aed;font-weight:700;margin-top:3px;">
+        {{ p.variation_count }} variation{{ 's' if p.variation_count > 1 else '' }}
+      </div>
+      {% endif %}
     </div>
   </div>
   {% endfor %}

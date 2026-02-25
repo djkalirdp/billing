@@ -169,12 +169,22 @@ def create_tables():
     for col_sql in [
         "ALTER TABLE invoices ADD COLUMN paid_amount REAL DEFAULT 0",
         "ALTER TABLE invoices ADD COLUMN previous_balance REAL DEFAULT 0",
+        """CREATE TABLE IF NOT EXISTS product_variations (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            product_id INTEGER NOT NULL,
+            variation_name TEXT NOT NULL,
+            selling_price REAL DEFAULT 0,
+            wholesale_price REAL DEFAULT 0,
+            stock_qty REAL DEFAULT 0,
+            rate REAL DEFAULT 0,
+            FOREIGN KEY (product_id) REFERENCES products(id))""",
+        "ALTER TABLE invoice_items ADD COLUMN variation_id INTEGER DEFAULT NULL",
     ]:
         try:
             c.execute(col_sql)
             conn.commit()
         except Exception:
-            pass  # column already exists
+            pass  # already exists
 
     # ── Invoice Line Items ────────────────────
     c.execute('''
@@ -190,6 +200,20 @@ def create_tables():
             discount_percent REAL DEFAULT 0,
             amount           REAL,
             FOREIGN KEY (invoice_id) REFERENCES invoices(id),
+            FOREIGN KEY (product_id) REFERENCES products(id)
+        )
+    ''')
+
+    # ── Product Variations ───────────────────────────────
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS product_variations (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            product_id      INTEGER NOT NULL,
+            variation_name  TEXT    NOT NULL,
+            selling_price   REAL    DEFAULT 0,
+            wholesale_price REAL    DEFAULT 0,
+            stock_qty       REAL    DEFAULT 0,
+            rate            REAL    DEFAULT 0,
             FOREIGN KEY (product_id) REFERENCES products(id)
         )
     ''')
@@ -420,11 +444,153 @@ def delete_record(table, record_id):
 #  PRODUCTS
 # ─────────────────────────────────────────────
 def search_products(query):
-    """Search products by name (for autocomplete / search bar)."""
+    """
+    Search products AND their variations by name.
+    Returns flat list — variations appear as separate rows with parent HSN/GST.
+    """
+    conn = get_db_connection()
+    c    = conn.cursor()
+    pat  = f'%{query}%'
+    results = []
+
+    try:
+        # Parent products matching query
+        rows = c.execute(
+            "SELECT * FROM products WHERE name LIKE ? ORDER BY name LIMIT 15",
+            (pat,)
+        ).fetchall()
+        for r in rows:
+            p = dict(r)
+            p['display_name']   = p['name']
+            p['variation_id']   = None
+            p['variation_name'] = None
+            results.append(p)
+
+        # Variations matching query (by variation_name OR parent name)
+        try:
+            var_rows = c.execute("""
+                SELECT pv.id         AS var_id,
+                       pv.product_id,
+                       pv.variation_name,
+                       pv.selling_price,
+                       pv.wholesale_price,
+                       pv.stock_qty,
+                       pv.rate       AS var_rate,
+                       p.name        AS parent_name,
+                       p.hsn,
+                       p.gst_rate,
+                       p.unit
+                FROM product_variations pv
+                JOIN products p ON pv.product_id = p.id
+                WHERE pv.variation_name LIKE ? OR p.name LIKE ?
+                ORDER BY p.name, pv.variation_name
+                LIMIT 20
+            """, (pat, pat)).fetchall()
+
+            for v in var_rows:
+                vd = dict(v)
+                results.append({
+                    'id'              : vd['product_id'],
+                    'name'            : vd['parent_name'],
+                    'display_name'    : f"{vd['parent_name']} — {vd['variation_name']}",
+                    'hsn'             : vd['hsn'],
+                    'gst_rate'        : vd['gst_rate'],
+                    'unit'            : vd['unit'],
+                    'selling_price'   : vd['selling_price'],
+                    'wholesale_price' : vd['wholesale_price'],
+                    'stock_qty'       : vd['stock_qty'],
+                    'rate'            : vd['var_rate'],
+                    'variation_id'    : vd['var_id'],
+                    'variation_name'  : vd['variation_name'],
+                })
+        except Exception:
+            # product_variations table may not exist yet — just return parents
+            pass
+
+    finally:
+        conn.close()
+
+    # Deduplicate — parent product + its variations both appear separately
+    seen_keys = set()
+    deduped   = []
+    for item in results:
+        key = (item['id'], item.get('variation_id'))
+        if key not in seen_keys:
+            seen_keys.add(key)
+            deduped.append(item)
+    return deduped[:20]
+
+
+# ── Variation CRUD ─────────────────────────────────────────────────
+
+def get_variations(product_id):
+    """Return all variations for a product."""
     return execute_query(
-        "SELECT * FROM products WHERE name LIKE ? ORDER BY name LIMIT 20",
-        (f'%{query}%',), fetchall=True
-    )
+        "SELECT * FROM product_variations WHERE product_id = ? ORDER BY variation_name",
+        (product_id,), fetchall=True
+    ) or []
+
+
+def add_variation(product_id, name, selling_price, wholesale_price, stock_qty, cost_rate):
+    """Add a new variation."""
+    return add_record('product_variations', {
+        'product_id'     : product_id,
+        'variation_name' : name.strip(),
+        'selling_price'  : float(selling_price  or 0),
+        'wholesale_price': float(wholesale_price or 0),
+        'stock_qty'      : float(stock_qty       or 0),
+        'rate'           : float(cost_rate        or 0),
+    })
+
+
+def update_variation(variation_id, name, selling_price, wholesale_price, stock_qty, cost_rate):
+    """Update an existing variation."""
+    return update_record('product_variations', variation_id, {
+        'variation_name' : name.strip(),
+        'selling_price'  : float(selling_price  or 0),
+        'wholesale_price': float(wholesale_price or 0),
+        'stock_qty'      : float(stock_qty       or 0),
+        'rate'           : float(cost_rate        or 0),
+    })
+
+
+def delete_variation(variation_id):
+    """Delete a variation."""
+    return delete_record('product_variations', variation_id)
+
+
+def deduct_variation_stock(variation_id, qty):
+    """Deduct stock from a variation."""
+    conn = get_db_connection()
+    try:
+        conn.execute(
+            "UPDATE product_variations SET stock_qty = stock_qty - ? WHERE id = ?",
+            (qty, variation_id)
+        )
+        conn.commit()
+        return True
+    except Exception as e:
+        print(f"[deduct_variation_stock ERROR] {e}")
+        return False
+    finally:
+        conn.close()
+
+
+def restore_variation_stock(variation_id, qty):
+    """Restore stock to a variation (on invoice cancel)."""
+    conn = get_db_connection()
+    try:
+        conn.execute(
+            "UPDATE product_variations SET stock_qty = stock_qty + ? WHERE id = ?",
+            (qty, variation_id)
+        )
+        conn.commit()
+        return True
+    except Exception as e:
+        print(f"[restore_variation_stock ERROR] {e}")
+        return False
+    finally:
+        conn.close()
 
 
 def get_low_stock_products(threshold=10):
@@ -569,8 +735,8 @@ def save_invoice(inv_data, items, company_state):
             c.execute('''
                 INSERT INTO invoice_items
                   (invoice_id, product_id, description, hsn,
-                   gst_rate, quantity, rate, discount_percent, amount)
-                VALUES (?,?,?,?,?,?,?,?,?)
+                   gst_rate, quantity, rate, discount_percent, amount, variation_id)
+                VALUES (?,?,?,?,?,?,?,?,?,?)
             ''', (
                 invoice_id,
                 item['product_id'],
@@ -580,13 +746,22 @@ def save_invoice(inv_data, items, company_state):
                 item['quantity'],
                 item['rate'],
                 item.get('discount_percent', 0),
-                item['amount']
+                item['amount'],
+                item.get('variation_id') or None
             ))
-            # Deduct from inventory only for known products
-            if item.get('product_id') and int(item['product_id']) > 0:
+            # Deduct stock — from variation if set, else from parent product
+            vid = item.get('variation_id')
+            pid = item.get('product_id')
+            qty = item['quantity']
+            if vid and int(vid) > 0:
+                c.execute(
+                    "UPDATE product_variations SET stock_qty = stock_qty - ? WHERE id = ?",
+                    (qty, int(vid))
+                )
+            elif pid and int(pid) > 0:
                 c.execute(
                     "UPDATE products SET stock_qty = stock_qty - ? WHERE id = ?",
-                    (item['quantity'], int(item['product_id']))
+                    (qty, int(pid))
                 )
 
         conn.commit()
@@ -683,16 +858,22 @@ def cancel_invoice(invoice_id):
         if row['invoice_no'].startswith('[CANCELLED]'):
             return False   # Already cancelled
 
-        # Restore stock
+        # Restore stock — variations first, then parent products
         items = c.execute(
-            "SELECT product_id, quantity FROM invoice_items WHERE invoice_id = ?",
+            "SELECT product_id, quantity, variation_id FROM invoice_items WHERE invoice_id = ?",
             (invoice_id,)
         ).fetchall()
         for item in items:
-            c.execute(
-                "UPDATE products SET stock_qty = stock_qty + ? WHERE id = ?",
-                (item['quantity'], item['product_id'])
-            )
+            if item['variation_id']:
+                c.execute(
+                    "UPDATE product_variations SET stock_qty = stock_qty + ? WHERE id = ?",
+                    (item['quantity'], item['variation_id'])
+                )
+            elif item['product_id']:
+                c.execute(
+                    "UPDATE products SET stock_qty = stock_qty + ? WHERE id = ?",
+                    (item['quantity'], item['product_id'])
+                )
 
         # Mark as cancelled
         c.execute('''
@@ -1107,6 +1288,225 @@ def get_item_wise_report(start_date, end_date):
         ORDER BY total_amount DESC
     ''', (start_date, end_date), fetchall=True) or []
 
+
+
+# ─────────────────────────────────────────────
+#  STOCK REPORT
+# ─────────────────────────────────────────────
+def get_stock_report(start_date, end_date):
+    """
+    Stock report for a date range.
+    Closing stock = current stock_qty in DB.
+    Sales in range = sum of invoice_items qty for this product in date range.
+    Opening stock  = closing_stock + sales_in_range (reverse-calculated).
+    Note: No purchase_items table exists; stock changes are tracked on products.stock_qty.
+    """
+    conn = get_db_connection()
+    c    = conn.cursor()
+    try:
+        products = c.execute("SELECT * FROM products ORDER BY name").fetchall()
+        report   = []
+        # Check if variation_id column exists in invoice_items
+        cols = [r[1] for r in c.execute("PRAGMA table_info(invoice_items)").fetchall()]
+        has_variation_col = 'variation_id' in cols
+
+        for p in products:
+            pid = p['id']
+
+            # Sales qty — all invoice_items for this product in range
+            if has_variation_col:
+                row = c.execute("""
+                    SELECT COALESCE(SUM(ii.quantity), 0)
+                    FROM invoice_items ii
+                    JOIN invoices i ON ii.invoice_id = i.id
+                    WHERE ii.product_id = ?
+                      AND (ii.variation_id IS NULL OR ii.variation_id = 0)
+                      AND i.invoice_date BETWEEN ? AND ?
+                      AND i.invoice_no NOT LIKE '[CANCELLED]%'
+                """, (pid, start_date, end_date)).fetchone()
+            else:
+                row = c.execute("""
+                    SELECT COALESCE(SUM(ii.quantity), 0)
+                    FROM invoice_items ii
+                    JOIN invoices i ON ii.invoice_id = i.id
+                    WHERE ii.product_id = ?
+                      AND i.invoice_date BETWEEN ? AND ?
+                      AND i.invoice_no NOT LIKE '[CANCELLED]%'
+                """, (pid, start_date, end_date)).fetchone()
+            sales_direct = float(row[0] or 0)
+
+            # Sales via variations (only if column exists)
+            sales_var = 0.0
+            if has_variation_col:
+                try:
+                    row2 = c.execute("""
+                        SELECT COALESCE(SUM(ii.quantity), 0)
+                        FROM invoice_items ii
+                        JOIN invoices i ON ii.invoice_id = i.id
+                        JOIN product_variations pv ON ii.variation_id = pv.id
+                        WHERE pv.product_id = ?
+                          AND i.invoice_date BETWEEN ? AND ?
+                          AND i.invoice_no NOT LIKE '[CANCELLED]%'
+                    """, (pid, start_date, end_date)).fetchone()
+                    sales_var = float(row2[0] or 0)
+                except Exception:
+                    pass
+
+            total_sales   = sales_direct + sales_var
+            closing_stock = float(p['stock_qty'] or 0)
+            opening_stock = closing_stock + total_sales  # reverse-calculated
+
+            report.append({
+                'id'            : pid,
+                'name'          : p['name'],
+                'hsn'           : p['hsn'] or '',
+                'unit'          : p['unit'] or 'Pcs',
+                'opening_stock' : round(opening_stock, 3),
+                'purchases'     : 0,  # not tracked per item
+                'sales'         : round(total_sales, 3),
+                'closing_stock' : round(closing_stock, 3),
+                'selling_price' : float(p['selling_price'] or 0),
+                'rate'          : float(p['rate'] or 0),
+                'stock_value'   : round(closing_stock * float(p['rate'] or 0), 2),
+            })
+        return report
+    except Exception as e:
+        import traceback; traceback.print_exc()
+        print(f"[get_stock_report ERROR] {e}")
+        return []
+    finally:
+        conn.close()
+
+
+# ─────────────────────────────────────────────
+#  GSTR REPORTS
+# ─────────────────────────────────────────────
+def get_gstr1_data(start_date, end_date):
+    """
+    GSTR-1 data: B2B (with GSTIN), B2C (without), HSN summary.
+    Returns dict with b2b, b2c, hsn_summary, totals.
+    """
+    conn = get_db_connection()
+    c    = conn.cursor()
+    try:
+        invoices = c.execute("""
+            SELECT i.*, b.name AS buyer_name, b.gstin AS buyer_gstin,
+                   b.state AS buyer_state
+            FROM invoices i
+            JOIN buyers b ON i.buyer_id = b.id
+            WHERE i.invoice_date BETWEEN ? AND ?
+              AND i.invoice_no NOT LIKE '[CANCELLED]%'
+            ORDER BY i.invoice_date
+        """, (start_date, end_date)).fetchall()
+
+        b2b, b2c = [], []
+        for inv in invoices:
+            row = dict(inv)
+            items = c.execute(
+                "SELECT * FROM invoice_items WHERE invoice_id = ?", (row['id'],)
+            ).fetchall()
+            row['items'] = [dict(it) for it in items]
+            gstin = (row.get('buyer_gstin') or '').strip()
+            if gstin and len(gstin) == 15:
+                b2b.append(row)
+            else:
+                b2c.append(row)
+
+        # HSN Summary
+        hsn_rows = c.execute("""
+            SELECT ii.hsn, ii.gst_rate,
+                   SUM(ii.quantity)                     AS total_qty,
+                   SUM(ii.amount)                       AS taxable_value,
+                   SUM(ii.amount * ii.gst_rate / 100)  AS total_tax
+            FROM invoice_items ii
+            JOIN invoices i ON ii.invoice_id = i.id
+            WHERE i.invoice_date BETWEEN ? AND ?
+              AND i.invoice_no NOT LIKE '[CANCELLED]%'
+              AND ii.hsn IS NOT NULL AND ii.hsn != ''
+            GROUP BY ii.hsn, ii.gst_rate
+            ORDER BY ii.hsn
+        """, (start_date, end_date)).fetchall()
+        hsn_summary = [dict(r) for r in hsn_rows]
+
+        # Totals
+        tot = c.execute("""
+            SELECT
+              COALESCE(SUM(taxable_value), 0) AS taxable,
+              COALESCE(SUM(total_cgst),    0) AS cgst,
+              COALESCE(SUM(total_sgst),    0) AS sgst,
+              COALESCE(SUM(total_igst),    0) AS igst,
+              COALESCE(SUM(grand_total),   0) AS grand
+            FROM invoices
+            WHERE invoice_date BETWEEN ? AND ?
+              AND invoice_no NOT LIKE '[CANCELLED]%'
+        """, (start_date, end_date)).fetchone()
+
+        return {
+            'b2b'        : b2b,
+            'b2c'        : b2c,
+            'hsn_summary': hsn_summary,
+            'totals'     : dict(tot),
+            'start_date' : start_date,
+            'end_date'   : end_date,
+        }
+    except Exception as e:
+        print(f"[get_gstr1_data ERROR] {e}")
+        return {'b2b':[], 'b2c':[], 'hsn_summary':[], 'totals':{}, 'start_date':start_date, 'end_date':end_date}
+    finally:
+        conn.close()
+
+
+def get_gstr3b_data(start_date, end_date):
+    """
+    GSTR-3B summary: outward taxable supplies broken by tax rate.
+    Returns dict with rate-wise breakup and totals.
+    """
+    conn = get_db_connection()
+    c    = conn.cursor()
+    try:
+        # Rate-wise outward supply from invoice_items
+        rate_rows = c.execute("""
+            SELECT ii.gst_rate,
+                   SUM(ii.amount)                      AS taxable_value,
+                   SUM(ii.amount * ii.gst_rate / 200)  AS cgst,
+                   SUM(ii.amount * ii.gst_rate / 200)  AS sgst,
+                   SUM(ii.amount * ii.gst_rate / 100)  AS igst_total,
+                   COUNT(DISTINCT i.id)                AS invoice_count
+            FROM invoice_items ii
+            JOIN invoices i ON ii.invoice_id = i.id
+            WHERE i.invoice_date BETWEEN ? AND ?
+              AND i.invoice_no NOT LIKE '[CANCELLED]%'
+            GROUP BY ii.gst_rate
+            ORDER BY ii.gst_rate
+        """, (start_date, end_date)).fetchall()
+        rate_wise = [dict(r) for r in rate_rows]
+
+        # IGST vs CGST/SGST split from invoices table
+        tax_totals = c.execute("""
+            SELECT
+              COALESCE(SUM(taxable_value),0) AS total_taxable,
+              COALESCE(SUM(total_cgst),   0) AS total_cgst,
+              COALESCE(SUM(total_sgst),   0) AS total_sgst,
+              COALESCE(SUM(total_igst),   0) AS total_igst,
+              COALESCE(SUM(total_gst),    0) AS total_gst,
+              COALESCE(SUM(grand_total),  0) AS total_grand,
+              COUNT(*)                        AS invoice_count
+            FROM invoices
+            WHERE invoice_date BETWEEN ? AND ?
+              AND invoice_no NOT LIKE '[CANCELLED]%'
+        """, (start_date, end_date)).fetchone()
+
+        return {
+            'rate_wise'  : rate_wise,
+            'tax_totals' : dict(tax_totals),
+            'start_date' : start_date,
+            'end_date'   : end_date,
+        }
+    except Exception as e:
+        print(f"[get_gstr3b_data ERROR] {e}")
+        return {'rate_wise':[], 'tax_totals':{}, 'start_date':start_date, 'end_date':end_date}
+    finally:
+        conn.close()
 
 # ─────────────────────────────────────────────
 #  ENTRY POINT (for direct testing)

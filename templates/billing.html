@@ -90,7 +90,7 @@
   /* Item inputs */
   .item-input {
     width: 100%;
-    padding: 7px 10px;
+    padding: 10px 10px;
     border: 1.5px solid transparent;
     border-radius: 7px;
     font-family: var(--font-body);
@@ -127,21 +127,21 @@
   .autocomplete-wrap { position: relative; }
   .autocomplete-list {
     position: absolute;
-    top: 100%; left: 0; right: 0;
+    top: calc(100% + 2px); left: 0; right: 0;
     background: white;
-    border: 1.5px solid var(--accent);
-    border-top: none;
-    border-radius: 0 0 10px 10px;
-    max-height: 200px;
+    border: 2px solid var(--accent);
+    border-radius: 10px;
+    max-height: 280px;
     overflow-y: auto;
-    z-index: 1000;
-    box-shadow: var(--shadow);
+    z-index: 2000;
+    box-shadow: 0 10px 30px rgba(0,0,0,.18);
   }
   .autocomplete-list .ac-item {
-    padding: 9px 13px;
+    padding: 10px 13px;
     cursor: pointer;
     font-size: 13px;
-    display: flex; justify-content: space-between; align-items: center;
+    display: block;
+    border-bottom: 1px solid #f1f5f9;
     transition: background .15s;
   }
   .autocomplete-list .ac-item:hover { background: var(--accent-light); color: var(--accent); }
@@ -248,8 +248,8 @@
               <label class="form-label-custom">Payment Mode</label>
               <select name="payment_mode" class="form-select-custom" id="paymentMode"
                       onchange="handlePaymentMode()">
-                <option value="Credit">Credit</option>
                 <option value="Cash">Cash</option>
+                <option value="Credit">Credit</option>
                 <option value="UPI">UPI</option>
                 <option value="Bank Transfer">Bank Transfer</option>
                 <option value="Cheque">Cheque</option>
@@ -599,44 +599,83 @@ async function handleProductInput(input, idx) {
   if (!q) { dd.style.display = 'none'; return; }
 
   searchTimer = setTimeout(async () => {
-    const res  = await fetch(`/products/search?q=${encodeURIComponent(q)}`);
+    const res  = await fetch(`/products/search?q=${encodeURIComponent(q)}&mode=${billingMode}`);
     const data = await res.json();
     if (!data.length) { dd.style.display = 'none'; return; }
 
+    // Cache all search results for direct fill (no second API call)
+    data.forEach(p => {
+      const cacheKey = p.id + '_' + (p.variation_id || 0);
+      _lastProductData[cacheKey] = p;
+    });
+
     dd.innerHTML = data.map(p => {
-      const stockCls = p.stock <= 10 ? 'low' : '';
-      return `<div class="ac-item"
-               onclick="selectProduct(${p.id}, '${p.name.replace(/'/g,"\\'")}', ${idx})">
-         <span>${p.name}</span>
-         <span class="ac-stock ${stockCls}">Stock: ${p.stock} ${p.unit}</span>
+      const stock    = (p.stock_qty !== null && p.stock_qty !== undefined) ? Number(p.stock_qty) : 0;
+      const unit     = (p.unit && p.unit !== 'undefined' && p.unit !== 'null') ? p.unit : '';
+      const sprice   = parseFloat(p.selling_price || 0);
+      const wprice   = parseFloat(p.wholesale_price || p.selling_price || 0);
+      const showPrice= billingMode === 'Wholesale' ? wprice : sprice;
+      const priceStr = showPrice > 0 ? 'Rs.' + showPrice.toFixed(2) : '';
+      const vid      = p.variation_id || 0;
+      const stockCls = stock <= 10 ? 'low' : '';
+      const isVar    = p.variation_id ? ' (Variant)' : '';
+      return `<div class="ac-item" style="display:block;padding:10px 13px;"
+               onclick="selectProduct(${p.id}, '${p.name.replace(/'/g,"\\'")}', ${idx}, ${vid})">
+         <div style="font-weight:600;font-size:14px;color:#1e293b;">${p.name}</div>
+         <div style="display:flex;gap:14px;font-size:12px;color:#64748b;margin-top:3px;">
+           ${priceStr ? `<span style="color:#059669;font-weight:600;">${priceStr}</span>` : ''}
+           <span class="ac-stock ${stockCls}">Stock: ${stock}${unit ? ' ' + unit : ''}</span>
+           ${p.gst_rate ? `<span>GST: ${p.gst_rate}%</span>` : ''}
+         </div>
        </div>`;
     }).join('');
     dd.style.display = 'block';
   }, 200);
 }
 
-async function selectProduct(pid, name, idx) {
+async function selectProduct(pid, name, idx, vid) {
   const row  = document.querySelector(`.item-row[data-row-index="${idx}"]`);
   const input = row.querySelector('.product-input');
   input.value = name;
-  row.dataset.productId = pid;
+  row.dataset.productId  = pid;
+  row.dataset.variationId = vid || 0;
   document.getElementById(`pd_${idx}`).style.display = 'none';
   await fetchProductAndFill(pid, row, true);
 }
 
+// Store last search results for direct lookup (avoids second API call)
+const _lastProductData = {};
+
 async function fetchProductAndFill(pid, row, setQty) {
-  const idx  = row.dataset.rowIndex;
-  const res  = await fetch(`/billing/product-info?name=${encodeURIComponent(row.querySelector('.product-input').value)}&mode=${billingMode}`);
-  const data = await res.json();
-  if (data.found) {
-    document.getElementById(`hsn_${idx}`).value  = data.hsn      || '';
-    document.getElementById(`gst_${idx}`).value  = data.gst_rate || 0;
-    document.getElementById(`rate_${idx}`).value = (data.rate || 0).toFixed(2);
-    document.getElementById(`unit_${idx}`).value = data.unit      || '';
-    if (setQty) document.getElementById(`qty_${idx}`).value = 1;
-    recalculate();
-    document.getElementById(`qty_${idx}`).focus();
+  const idx = row.dataset.rowIndex;
+  // First try to use cached search result (has correct variation price)
+  const cached = _lastProductData[pid + '_' + (row.dataset.variationId || 0)];
+  if (cached) {
+    _fillRowFromProduct(cached, idx, setQty);
+    return;
   }
+  // Fallback: fetch by product-info (works for non-variation products)
+  const name = row.querySelector('.product-input').value;
+  try {
+    const res  = await fetch(`/billing/product-info?name=${encodeURIComponent(name)}&mode=${billingMode}`);
+    const data = await res.json();
+    if (data.found) {
+      _fillRowFromProduct(data, idx, setQty);
+    }
+  } catch(e) { console.error('fetchProductAndFill error', e); }
+}
+
+function _fillRowFromProduct(p, idx, setQty) {
+  const price = billingMode === 'Wholesale'
+    ? (parseFloat(p.wholesale_price || p.selling_price || p.rate || 0))
+    : (parseFloat(p.selling_price   || p.rate || 0));
+  document.getElementById(`hsn_${idx}`) && (document.getElementById(`hsn_${idx}`).value  = p.hsn      || '');
+  document.getElementById(`gst_${idx}`) && (document.getElementById(`gst_${idx}`).value  = p.gst_rate || 0);
+  document.getElementById(`rate_${idx}`)&& (document.getElementById(`rate_${idx}`).value = price.toFixed(2));
+  document.getElementById(`unit_${idx}`)&& (document.getElementById(`unit_${idx}`).value = p.unit     || '');
+  if (setQty && document.getElementById(`qty_${idx}`)) document.getElementById(`qty_${idx}`).value = 1;
+  recalculate();
+  document.getElementById(`qty_${idx}`)?.focus();
 }
 
 // Close product dropdowns on outside click

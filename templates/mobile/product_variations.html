@@ -1,0 +1,260 @@
+{% extends 'mobile/base_mobile.html' %}
+{% block title %}Variations — {{ product.name }}{% endblock %}
+{% block page_title %}Variations{% endblock %}
+
+{% block topbar_actions %}
+<a href="{{ url_for('edit_product', product_id=product.id) }}" class="m-icon-btn">
+  <i class="bi bi-arrow-left"></i>
+</a>
+{% endblock %}
+
+{% block head %}
+<style>
+.var-card {
+  background:white; border-radius:14px; box-shadow:var(--shadow);
+  margin:0 14px 12px; overflow:hidden;
+  border-left:3px solid var(--accent);
+}
+.var-head {
+  background:#f8fafc; padding:11px 14px;
+  border-bottom:1px solid var(--border);
+  display:flex; align-items:center; justify-content:space-between;
+}
+.var-name { font-weight:700; font-size:15px; color:var(--text-main); }
+.var-body { padding:12px 14px; }
+.var-grid { display:grid; grid-template-columns:1fr 1fr; gap:6px 14px; font-size:13px; margin-bottom:10px; }
+.var-lbl  { color:var(--text-muted); font-size:11px; margin-bottom:1px; }
+.var-val  { font-weight:700; }
+.var-stock-low { color:#dc2626; }
+.var-stock-ok  { color:#059669; }
+
+.add-sheet-btn {
+  position:fixed; bottom:calc(var(--nav-h) + 16px); right:18px;
+  width:54px; height:54px; border-radius:50%;
+  background:var(--accent); color:white;
+  border:none; font-size:24px; cursor:pointer;
+  box-shadow:0 4px 16px rgba(37,99,235,.4);
+  display:flex; align-items:center; justify-content:center;
+  z-index:300; -webkit-tap-highlight-color:transparent;
+}
+
+/* Edit inline form */
+.edit-form { display:none; background:#f8fafc; border-radius:10px; padding:12px; margin-top:8px; }
+.edit-form.open { display:block; }
+.ef-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+
+/* CSS spinner */
+.cspin{width:16px;height:16px;border:2px solid rgba(255,255,255,.4);border-top-color:white;border-radius:50%;animation:csp .7s linear infinite;display:inline-block;vertical-align:middle;margin-right:6px;}
+@keyframes csp{to{transform:rotate(360deg);}}
+</style>
+{% endblock %}
+
+{% block content %}
+
+<!-- Product header -->
+<div class="m-card" style="margin:0 14px 14px;">
+  <div class="m-card-body" style="display:flex;align-items:center;gap:12px;">
+    <div style="width:44px;height:44px;background:#eff6ff;border-radius:12px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+      <i class="bi bi-box-seam" style="color:var(--accent);font-size:20px;"></i>
+    </div>
+    <div>
+      <div style="font-weight:700;font-size:15px;">{{ product.name }}</div>
+      <div style="font-size:12px;color:var(--text-muted);">
+        GST {{ product.gst_rate }}% &nbsp;·&nbsp; Base stock: {{ product.stock_qty }} {{ product.unit or '' }}
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Info banner -->
+<div style="margin:0 14px 14px;background:#fffbeb;border:1px solid #fde68a;border-radius:12px;padding:11px 14px;font-size:13px;color:#92400e;">
+  <i class="bi bi-lightbulb me-1"></i>
+  Variations inherit GST% and HSN from the parent product. Each variation has its own price and stock.
+  <br><strong>Examples:</strong> Size S / M / L / XL &nbsp;·&nbsp; Red / Blue / Green &nbsp;·&nbsp; 500ml / 1L / 2L
+</div>
+
+<!-- Existing variations -->
+{% if variations %}
+  {% for v in variations %}
+  <div class="var-card" id="vcard_{{ v.id }}">
+    <div class="var-head">
+      <span class="var-name">{{ v.variation_name }}</span>
+      <div style="display:flex;gap:8px;">
+        <button type="button" onclick="toggleEdit({{ v.id }})"
+          style="background:#eff6ff;border:none;border-radius:8px;padding:6px 11px;font-size:12px;font-weight:700;color:var(--accent);cursor:pointer;">
+          <i class="bi bi-pencil"></i>
+        </button>
+        <form method="POST"
+              action="{{ url_for('delete_variation', product_id=product.id, variation_id=v.id) }}"
+              onsubmit="return confirm('Delete {{ v.variation_name }}?')">
+          <button type="submit"
+            style="background:#fef2f2;border:none;border-radius:8px;padding:6px 11px;font-size:12px;font-weight:700;color:#dc2626;cursor:pointer;">
+            <i class="bi bi-trash"></i>
+          </button>
+        </form>
+      </div>
+    </div>
+    <div class="var-body">
+      <div class="var-grid">
+        <div>
+          <div class="var-lbl">Retail Price</div>
+          <div class="var-val">₹{{ "%.2f"|format(v.selling_price or 0) }}</div>
+        </div>
+        <div>
+          <div class="var-lbl">Wholesale</div>
+          <div class="var-val">₹{{ "%.2f"|format(v.wholesale_price or 0) }}</div>
+        </div>
+        <div>
+          <div class="var-lbl">Stock</div>
+          <div class="var-val {% if (v.stock_qty or 0) <= 5 %}var-stock-low{% else %}var-stock-ok{% endif %}">
+            {{ v.stock_qty or 0 }} {{ product.unit or '' }}
+          </div>
+        </div>
+        <div>
+          <div class="var-lbl">Cost Rate</div>
+          <div class="var-val">₹{{ "%.2f"|format(v.rate or 0) }}</div>
+        </div>
+      </div>
+
+      <!-- Edit form (hidden by default) -->
+      <form method="POST" class="edit-form" id="ef_{{ v.id }}"
+            action="{{ url_for('edit_variation', product_id=product.id, variation_id=v.id) }}">
+        <div style="font-weight:700;font-size:13px;margin-bottom:10px;color:var(--accent);">
+          Edit Variation
+        </div>
+        <div class="m-fg">
+          <label class="m-label">Variation Name <span style="color:red">*</span></label>
+          <input type="text" name="variation_name" class="m-input" required
+                 value="{{ v.variation_name }}" />
+        </div>
+        <div class="ef-grid">
+          <div class="m-fg">
+            <label class="m-label">Retail Price ₹</label>
+            <input type="number" name="selling_price" class="m-input" step="0.01" min="0"
+                   value="{{ '%.2f'|format(v.selling_price or 0) }}" />
+          </div>
+          <div class="m-fg">
+            <label class="m-label">Wholesale ₹</label>
+            <input type="number" name="wholesale_price" class="m-input" step="0.01" min="0"
+                   value="{{ '%.2f'|format(v.wholesale_price or 0) }}" />
+          </div>
+          <div class="m-fg">
+            <label class="m-label">Stock Qty</label>
+            <input type="number" name="stock_qty" class="m-input" step="0.001" min="0"
+                   value="{{ v.stock_qty or 0 }}" />
+          </div>
+          <div class="m-fg">
+            <label class="m-label">Cost Rate ₹</label>
+            <input type="number" name="cost_rate" class="m-input" step="0.01" min="0"
+                   value="{{ '%.2f'|format(v.rate or 0) }}" />
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:4px;">
+          <button type="submit" class="m-btn m-btn-primary" style="flex:2;padding:10px;">
+            <i class="bi bi-check2"></i> Update
+          </button>
+          <button type="button" onclick="toggleEdit({{ v.id }})"
+                  class="m-btn m-btn-outline" style="flex:1;padding:10px;">
+            Cancel
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+  {% endfor %}
+{% else %}
+  <div style="margin:0 14px 20px;background:white;border-radius:14px;
+              box-shadow:var(--shadow);padding:28px 20px;text-align:center;">
+    <i class="bi bi-diagram-2" style="font-size:40px;color:#cbd5e1;display:block;margin-bottom:12px;"></i>
+    <div style="font-weight:700;color:var(--text-muted);margin-bottom:6px;">No variations yet</div>
+    <div style="font-size:13px;color:#94a3b8;">
+      Tap + to add sizes, colours, or any other variants
+    </div>
+  </div>
+{% endif %}
+
+<!-- Spacer for FAB -->
+<div style="height:90px;"></div>
+
+<!-- FAB — Add variation -->
+<button class="add-sheet-btn" onclick="document.getElementById('addSheet').classList.add('open')"
+        title="Add Variation">
+  <i class="bi bi-plus-lg"></i>
+</button>
+
+<!-- Add Variation Sheet -->
+<div class="m-overlay" id="addSheet">
+  <div class="m-sheet">
+    <div class="m-sheet-handle"></div>
+    <div class="m-sheet-title">
+      <i class="bi bi-plus-circle me-2" style="color:var(--accent);"></i>Add Variation
+    </div>
+    <form method="POST" id="addVarForm"
+          action="{{ url_for('add_variation', product_id=product.id) }}">
+      <div class="m-fg">
+        <label class="m-label">Variation Name <span style="color:red">*</span></label>
+        <input type="text" name="variation_name" id="newVarName" class="m-input"
+               placeholder="e.g. Large / Red / 1 Litre" autocomplete="off" />
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+        <div class="m-fg">
+          <label class="m-label">Retail Price ₹</label>
+          <input type="number" name="selling_price" class="m-input" step="0.01" min="0"
+                 value="{{ '%.2f'|format(product.selling_price or 0) }}" />
+        </div>
+        <div class="m-fg">
+          <label class="m-label">Wholesale ₹</label>
+          <input type="number" name="wholesale_price" class="m-input" step="0.01" min="0"
+                 value="{{ '%.2f'|format(product.wholesale_price or 0) }}" />
+        </div>
+        <div class="m-fg">
+          <label class="m-label">Opening Stock</label>
+          <input type="number" name="stock_qty" class="m-input" step="0.001" min="0" value="0" />
+        </div>
+        <div class="m-fg">
+          <label class="m-label">Cost Rate ₹</label>
+          <input type="number" name="cost_rate" class="m-input" step="0.01" min="0"
+                 value="{{ '%.2f'|format(product.rate or 0) }}" />
+        </div>
+      </div>
+      <div style="display:flex;gap:10px;margin-top:6px;padding-bottom:8px;">
+        <button type="button"
+                onclick="document.getElementById('addSheet').classList.remove('open')"
+                class="m-btn m-btn-outline" style="flex:1;">Cancel</button>
+        <button type="submit" id="addVarBtn" class="m-btn m-btn-primary" style="flex:2;">
+          <i class="bi bi-plus-circle"></i> Add Variation
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Close sheet on overlay click
+document.getElementById('addSheet').addEventListener('click', function(e) {
+  if (e.target === this) this.classList.remove('open');
+});
+
+// Toggle inline edit form
+function toggleEdit(vid) {
+  const el = document.getElementById('ef_' + vid);
+  el.classList.toggle('open');
+}
+
+// CSS spinner on submit
+const style = document.createElement('style');
+style.textContent = '.cspin{width:16px;height:16px;border:2px solid rgba(255,255,255,.4);border-top-color:white;border-radius:50%;animation:csp .7s linear infinite;display:inline-block;vertical-align:middle;margin-right:6px;}@keyframes csp{to{transform:rotate(360deg);}}';
+document.head.appendChild(style);
+
+document.getElementById('addVarForm').addEventListener('submit', function() {
+  const name = document.getElementById('newVarName').value.trim();
+  if (!name) { alert('Variation name is required.'); return false; }
+  const btn = document.getElementById('addVarBtn');
+  btn.innerHTML = '<span class="cspin"></span> Saving…';
+  btn.disabled = true;
+});
+</script>
+{% endblock %}

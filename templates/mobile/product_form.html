@@ -7,7 +7,6 @@
 {% endblock %}
 
 {% block content %}
-
 <form method="POST"
       action="{{ url_for('edit_product', product_id=product.id) if product else url_for('add_product') }}"
       id="productForm">
@@ -23,21 +22,21 @@
         <label class="m-label">Product Name <span style="color:red">*</span></label>
         <input type="text" name="name" class="m-input" required autofocus
                value="{{ product.name if product else '' }}"
-               placeholder="e.g. Cement 50kg Bag" />
+               placeholder="e.g. Nike T-Shirt / Cement 50kg" />
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
         <div class="m-fg">
           <label class="m-label">HSN Code</label>
           <input type="text" name="hsn" class="m-input"
-                 value="{{ product.hsn if product else '' }}" placeholder="20002" />
+                 value="{{ product.hsn if product else '' }}" placeholder="6109" />
         </div>
         <div class="m-fg">
           <label class="m-label">GST Rate</label>
           <select name="gst_rate" class="m-select">
             {% for rate in [0, 0.1, 0.25, 1, 1.5, 3, 5, 6, 7.5, 9, 12, 14, 18, 28] %}
-            <option value="{{ rate }}" {% if product and product.gst_rate|float == rate %}selected{% elif not product and rate == 18 %}selected{% endif %}>
-              {{ rate }}%
-            </option>
+            <option value="{{ rate }}"
+              {% if product and product.gst_rate|float == rate %}selected
+              {% elif not product and rate == 18 %}selected{% endif %}>{{ rate }}%</option>
             {% endfor %}
           </select>
         </div>
@@ -76,63 +75,62 @@
   </div>
 
   {% if not product %}
-  <!-- Opening Stock (Add mode only) -->
+  <!-- Opening Stock (Add mode) -->
   <div class="m-card" style="margin:0 14px 12px;">
     <div class="m-card-header">
-      <i class="bi bi-layers" style="color:var(--warning);font-size:18px;"></i>
+      <i class="bi bi-layers" style="color:#f59e0b;font-size:18px;"></i>
       <span class="m-card-title">Opening Stock</span>
     </div>
     <div class="m-card-body">
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
         <div class="m-fg">
           <label class="m-label">Qty</label>
-          <input type="number" name="add_stock" class="m-input" step="0.001" min="0" value="0" id="openQty" oninput="updatePreview()" />
+          <input type="number" name="add_stock" class="m-input" step="0.001" min="0"
+                 value="0" id="openQty" oninput="updatePreview()" />
         </div>
         <div class="m-fg">
           <label class="m-label">Cost Rate (₹)</label>
-          <input type="number" name="purchase_rate" class="m-input" step="0.01" min="0" value="0" id="openRate" oninput="updatePreview()" />
+          <input type="number" name="purchase_rate" class="m-input" step="0.01" min="0"
+                 value="0" id="openRate" oninput="updatePreview()" />
         </div>
       </div>
-      <div id="stockPreview" style="display:none;background:#ecfdf5;border-radius:10px;padding:10px 12px;margin-top:4px;font-size:13px;color:#065f46;">
+      <div id="stockPreview" style="display:none;background:#ecfdf5;border-radius:10px;padding:10px 12px;margin-top:8px;font-size:13px;color:#065f46;">
         <strong>Total Stock Value:</strong> ₹<span id="previewTotal">0</span>
       </div>
     </div>
   </div>
 
   {% else %}
-  <!-- WAC (Edit mode) -->
+  <!-- WAC Stock Add (Edit mode) -->
   <div class="m-card" style="margin:0 14px 12px;">
     <div class="m-card-header">
       <i class="bi bi-calculator" style="color:var(--accent);font-size:18px;"></i>
       <span class="m-card-title">Add Stock (WAC)</span>
     </div>
     <div class="m-card-body">
-      <!-- Current stock display -->
       <div style="display:flex;gap:10px;margin-bottom:14px;">
         <div style="flex:1;background:#f8fafc;border-radius:10px;padding:10px;text-align:center;">
           <div style="font-family:var(--font-head);font-size:18px;font-weight:800;">{{ product.stock_qty }}</div>
           <div style="font-size:11px;color:var(--text-muted);">Current Stock</div>
         </div>
         <div style="flex:1;background:#f8fafc;border-radius:10px;padding:10px;text-align:center;">
-          <div style="font-family:var(--font-head);font-size:18px;font-weight:800;">₹{{ "%.2f"|format(product.cost_price or 0) }}</div>
+          <div style="font-family:var(--font-head);font-size:18px;font-weight:800;">₹{{ "%.2f"|format(product.rate or 0) }}</div>
           <div style="font-size:11px;color:var(--text-muted);">Avg Cost</div>
         </div>
       </div>
-
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
         <div class="m-fg">
           <label class="m-label">Add Qty</label>
-          <input type="number" name="add_stock" class="m-input" step="0.001" min="0" value="0"
-                 id="addQty" oninput="calcWAC()" />
+          <input type="number" name="add_stock" class="m-input" step="0.001" min="0"
+                 value="0" id="addQty" oninput="calcWAC()" />
         </div>
         <div class="m-fg">
           <label class="m-label">Purchase Rate (₹)</label>
-          <input type="number" name="purchase_rate" class="m-input" step="0.01" min="0" value="0"
-                 id="newRate" oninput="calcWAC()" />
+          <input type="number" name="purchase_rate" class="m-input" step="0.01" min="0"
+                 value="0" id="newRate" oninput="calcWAC()" />
         </div>
       </div>
-
-      <div id="wacPreview" style="display:none;background:#eff6ff;border-radius:10px;padding:12px;margin-top:4px;font-size:13px;color:#1e40af;">
+      <div id="wacPreview" style="display:none;background:#eff6ff;border-radius:10px;padding:12px;margin-top:8px;font-size:13px;color:#1e40af;">
         <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
           <span>Old Value</span><span id="wacOld">₹0</span>
         </div>
@@ -143,16 +141,28 @@
           <span>New Avg Cost</span><span id="wacAvg">₹0</span>
         </div>
       </div>
-
       <div style="margin-top:10px;background:#fef3c7;border-radius:10px;padding:10px;font-size:12px;color:#78350f;">
         <i class="bi bi-info-circle me-1"></i>
-        (Old Qty × Old Cost + New Qty × New Cost) ÷ Total Qty
+        Formula: (Old Qty × Old Cost + New Qty × New Cost) ÷ Total Qty
       </div>
     </div>
   </div>
+
+  <!-- Variations shortcut -->
+  <div style="margin:0 14px 12px;">
+    <a href="{{ url_for('product_variations', product_id=product.id) }}"
+       class="m-btn m-btn-outline" style="display:flex;align-items:center;gap:8px;">
+      <i class="bi bi-diagram-2" style="font-size:18px;color:var(--accent);"></i>
+      <div style="text-align:left;">
+        <div style="font-weight:700;font-size:14px;">Manage Variations</div>
+        <div style="font-size:12px;color:var(--text-muted);">Add sizes, colours, or other variants</div>
+      </div>
+      <i class="bi bi-chevron-right" style="margin-left:auto;color:var(--text-muted);"></i>
+    </a>
+  </div>
   {% endif %}
 
-  <div style="padding:0 14px 24px;display:flex;flex-direction:column;gap:10px;">
+  <div style="padding:0 14px 80px;display:flex;flex-direction:column;gap:10px;">
     <button type="submit" class="m-btn m-btn-primary" id="saveBtn">
       <i class="bi bi-save2"></i> {{ 'Update Product' if product else 'Save Product' }}
     </button>
@@ -162,29 +172,27 @@
   </div>
 
 </form>
-
 {% endblock %}
 
 {% block scripts %}
 <script>
 {% if not product %}
-function updatePreview(){
-  const qty  = parseFloat(document.getElementById('openQty')?.value)  || 0;
-  const rate = parseFloat(document.getElementById('openRate')?.value) || 0;
-  const total = qty * rate;
-  const preview = document.getElementById('stockPreview');
-  preview.style.display = qty > 0 && rate > 0 ? 'block' : 'none';
-  document.getElementById('previewTotal').textContent = total.toFixed(2);
+function updatePreview() {
+  const qty   = parseFloat(document.getElementById('openQty')?.value)  || 0;
+  const rate  = parseFloat(document.getElementById('openRate')?.value) || 0;
+  const prev  = document.getElementById('stockPreview');
+  prev.style.display = (qty > 0 && rate > 0) ? 'block' : 'none';
+  document.getElementById('previewTotal').textContent = (qty * rate).toFixed(2);
 }
 {% else %}
 const curStock = {{ product.stock_qty | float }};
-const curCost  = {{ product.cost_price | float if product.cost_price else 0 }};
+const curCost  = {{ product.rate | float if product.rate else 0 }};
 
-function calcWAC(){
+function calcWAC() {
   const addQty  = parseFloat(document.getElementById('addQty')?.value)  || 0;
   const newRate = parseFloat(document.getElementById('newRate')?.value) || 0;
-  const preview = document.getElementById('wacPreview');
-  if (addQty <= 0 || newRate <= 0) { preview.style.display='none'; return; }
+  const prev    = document.getElementById('wacPreview');
+  if (addQty <= 0 || newRate <= 0) { prev.style.display = 'none'; return; }
   const oldVal   = curStock * curCost;
   const newVal   = addQty  * newRate;
   const totalQty = curStock + addQty;
@@ -192,14 +200,19 @@ function calcWAC(){
   document.getElementById('wacOld').textContent = '₹' + oldVal.toFixed(2);
   document.getElementById('wacNew').textContent = '₹' + newVal.toFixed(2);
   document.getElementById('wacAvg').textContent = '₹' + avgCost.toFixed(3);
-  preview.style.display = 'block';
+  prev.style.display = 'block';
 }
 {% endif %}
 
-document.getElementById('productForm').addEventListener('submit',function(){
-  const btn=document.getElementById('saveBtn');
-  btn.innerHTML='<span class="spinner-border spinner-border-sm me-2"></span>Saving...';
-  btn.disabled=true;
+// CSS spinner on submit — no Bootstrap dependency
+const style = document.createElement('style');
+style.textContent = '.save-spin{width:16px;height:16px;border:2px solid rgba(255,255,255,.4);border-top-color:white;border-radius:50%;animation:sspin .7s linear infinite;display:inline-block;vertical-align:middle;margin-right:6px;}@keyframes sspin{to{transform:rotate(360deg);}}';
+document.head.appendChild(style);
+
+document.getElementById('productForm').addEventListener('submit', function() {
+  const btn = document.getElementById('saveBtn');
+  btn.innerHTML = '<span class="save-spin"></span> Saving…';
+  btn.disabled  = true;
 });
 </script>
 {% endblock %}

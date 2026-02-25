@@ -112,6 +112,41 @@
         </div>
       </div>
 
+      <!-- UPI / QR Code Section — INSIDE main form so it saves with Save button -->
+      <div class="section-card section-anchor" id="upi">
+        <div class="section-head"><i class="bi bi-qr-code" style="color:var(--accent);"></i><span class="section-title-sm">UPI & QR Code</span></div>
+        <div class="section-body">
+          {% set upi = settings.get('upi', {}) %}
+          <div style="background:#eff6ff;border-radius:10px;padding:12px 16px;margin-bottom:16px;font-size:13px;color:#1e40af;">
+            <i class="bi bi-info-circle me-1"></i>
+            Add your UPI ID — a <strong>QR code</strong> will automatically appear on every invoice PDF.
+            Customers can scan with PhonePe, Google Pay, Paytm, or any UPI app to pay instantly.
+          </div>
+          <div class="form-grid-2">
+            <div class="fg">
+              <label>UPI ID <span style="color:#64748b;font-size:12px;">(e.g. yourname@upi or 9876543210@paytm)</span></label>
+              <input type="text" name="upi_id"
+                     value="{{ upi.get('upi_id','') }}"
+                     placeholder="yourname@okaxis"
+                     autocomplete="off" autocorrect="off" autocapitalize="none" />
+            </div>
+            <div class="fg">
+              <label>Payee Display Name <span style="color:#64748b;font-size:12px;">(shows in UPI app)</span></label>
+              <input type="text" name="upi_name"
+                     value="{{ upi.get('upi_name','') or settings.get('company_info',{}).get('name','') }}"
+                     placeholder="Your Shop Name" />
+            </div>
+          </div>
+          {% if upi.get('upi_id') %}
+          <div style="background:#ecfdf5;border-radius:10px;padding:10px 14px;margin-top:8px;font-size:13px;color:#065f46;">
+            <i class="bi bi-check-circle-fill me-1"></i>
+            <strong>UPI Active:</strong> {{ upi.get('upi_id') }}
+            — QR codes will appear on all invoice PDFs.
+          </div>
+          {% endif %}
+        </div>
+      </div>
+
       <div class="save-bar mb-3">
         <button type="submit" class="btn-primary-custom" id="saveBtn">
           <i class="bi bi-save2"></i> Save All Settings
@@ -125,7 +160,7 @@
     <!-- ══ END main settings form ══ -->
 
 
-    <!-- ══ FORM 2: Logo Upload (standalone — NEVER nest inside another form) ══ -->
+    <!-- ══ FORM 2: Logo Upload (standalone — separate form, different action) ══ -->
     <form method="POST" action="{{ url_for('upload_logo') }}"
           enctype="multipart/form-data" id="logoForm">
       <div class="section-card section-anchor" id="logo">
