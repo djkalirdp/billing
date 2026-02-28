@@ -532,9 +532,17 @@
 
       <li class="nav-item">
         <a href="{{ url_for('products') }}"
-           class="nav-link-item {% if 'product' in request.endpoint %}active{% endif %}">
+           class="nav-link-item {% if request.endpoint in ['products','add_product','edit_product','product_variations'] %}active{% endif %}">
           <i class="bi bi-box-seam"></i>
           <span>Products</span>
+        </a>
+      </li>
+
+      <li class="nav-item">
+        <a href="{{ url_for('product_rate_list') }}"
+           class="nav-link-item {% if request.endpoint == 'product_rate_list' %}active{% endif %}">
+          <i class="bi bi-tags-fill"></i>
+          <span>Rate List</span>
         </a>
       </li>
 
@@ -551,6 +559,22 @@
            class="nav-link-item {% if 'purchase' in request.endpoint %}active{% endif %}">
           <i class="bi bi-cart3"></i>
           <span>Purchases</span>
+        </a>
+      </li>
+
+      <li class="nav-item">
+        <a href="{{ url_for('proforma_list') }}"
+           class="nav-link-item {% if 'proforma' in request.endpoint %}active{% endif %}">
+          <i class="bi bi-file-earmark-text"></i>
+          <span>Quotations</span>
+        </a>
+      </li>
+
+      <li class="nav-item">
+        <a href="{{ url_for('batch_list') }}"
+           class="nav-link-item {% if request.endpoint in ['batch_list','batch_history'] %}active{% endif %}">
+          <i class="bi bi-boxes"></i>
+          <span>Batch Tracker</span>
         </a>
       </li>
 

@@ -99,19 +99,65 @@
     </div>
   </div>
 
-  <!-- ── GSTR-3B ────────────────────────────────────────────────── -->
+</div><!-- end row-1 rep-grid -->
+
+<!-- ── Row 2: Purchase Register + GSTR-3B + Batch Tracker ── -->
+<div class="rep-grid" style="margin-top:20px;">
+
+  <!-- ── GSTR-2B / PURCHASE REGISTER ─────────────────────────── -->
   <div class="rep-card">
     <div class="rep-head">
-      <div class="rep-icon" style="background:#fff7ed;"><i class="bi bi-calculator" style="color:#f59e0b;"></i></div>
+      <div class="rep-icon" style="background:#f0fdf4;"><i class="bi bi-cart3" style="color:#059669;"></i></div>
       <div>
-        <div style="font-weight:800;font-size:15px;">GSTR-3B</div>
-        <div style="font-size:12px;color:var(--text-muted);">Monthly summary · Tax liability · Rate-wise breakup</div>
+        <div style="font-weight:800;font-size:15px;">Purchase Register (GSTR-2B Style)</div>
+        <div style="font-size:12px;color:var(--text-muted);">Supplier · GSTIN · Bill No · Place of Supply · RCM · ITC</div>
       </div>
     </div>
     <div class="rep-body">
-      <div style="background:#fffbeb;border-radius:8px;padding:8px 12px;font-size:12px;color:#92400e;margin-bottom:12px;">
+      <div style="background:#ecfdf5;border-radius:8px;padding:8px 12px;font-size:12px;color:#065f46;margin-bottom:12px;">
         <i class="bi bi-info-circle me-1"></i>
-        Use these figures while filing on the GST portal.
+        All purchase bills with tax details — use for ITC claim &amp; reconciliation
+      </div>
+      <div class="month-pills" id="gstr2bPills"></div>
+      <div class="date-row">
+        <div class="m-fg">
+          <label class="m-label">From Date</label>
+          <input type="date" id="gstr2bStart" class="form-control form-control-sm" />
+        </div>
+        <div class="m-fg">
+          <label class="m-label">To Date</label>
+          <input type="date" id="gstr2bEnd" class="form-control form-control-sm" />
+        </div>
+      </div>
+      <div class="dl-btns">
+        <a href="#" class="dl-btn dl-pdf" onclick="return dlReport('gstr2b','pdf')">
+          <i class="bi bi-file-earmark-pdf"></i> Download PDF
+        </a>
+        <a href="#" class="dl-btn dl-excel" onclick="return dlReport('gstr2b','excel')">
+          <i class="bi bi-file-earmark-excel"></i> Download Excel
+        </a>
+      </div>
+    </div>
+  </div>
+
+</div><!-- end rep-grid -->
+
+<!-- ── Row 3: GSTR-3B + Batch Tracker ──────────────────────── -->
+<div class="rep-grid" style="margin-top:20px;">
+
+  <!-- GSTR-3B (already exists, now with ITC Section 4) -->
+  <div class="rep-card">
+    <div class="rep-head">
+      <div class="rep-icon" style="background:#fef2f2;"><i class="bi bi-bar-chart-line" style="color:#dc2626;"></i></div>
+      <div>
+        <div style="font-weight:800;font-size:15px;">GSTR-3B — Monthly Return</div>
+        <div style="font-size:12px;color:var(--text-muted);">Outward Tax · Section 4 ITC · Net Tax Payable</div>
+      </div>
+    </div>
+    <div class="rep-body">
+      <div style="background:#fef2f2;border-radius:8px;padding:8px 12px;font-size:12px;color:#7f1d1d;margin-bottom:12px;">
+        <i class="bi bi-info-circle me-1"></i>
+        Now includes <strong>Section 4 ITC</strong> from purchases &amp; Net Tax Payable formula
       </div>
       <div class="month-pills" id="gstr3bPills"></div>
       <div class="date-row">
@@ -135,7 +181,33 @@
     </div>
   </div>
 
+  <!-- Batch Tracker quick link -->
+  <div class="rep-card">
+    <div class="rep-head">
+      <div class="rep-icon" style="background:#fff7ed;"><i class="bi bi-boxes" style="color:#f59e0b;"></i></div>
+      <div>
+        <div style="font-weight:800;font-size:15px;">Batch Tracker</div>
+        <div style="font-size:12px;color:var(--text-muted);">Batch No · Expiry Dates · Movement History per Customer</div>
+      </div>
+    </div>
+    <div class="rep-body">
+      <div style="background:#fff7ed;border-radius:8px;padding:8px 12px;font-size:12px;color:#92400e;margin-bottom:16px;">
+        <i class="bi bi-info-circle me-1"></i>
+        Track which batch went to which customer. Get expiry reminders 30 days in advance.
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+        <a href="{{ url_for('batch_list') }}" class="dl-btn" style="background:#fff7ed;color:#f59e0b;border:1.5px solid #fde68a;">
+          <i class="bi bi-boxes"></i> All Batches
+        </a>
+        <a href="{{ url_for('purchases') }}" class="dl-btn" style="background:#eff6ff;color:var(--accent);border:1.5px solid #bfdbfe;">
+          <i class="bi bi-cart3"></i> Add Purchase
+        </a>
+      </div>
+    </div>
+  </div>
+
 </div>
+
 {% endblock %}
 
 {% block scripts %}
@@ -174,12 +246,14 @@ function buildPills(containerId, startId, endId) {
 
 buildPills('stockPills',  'stockStart',  'stockEnd');
 buildPills('gstr1Pills',  'gstr1Start',  'gstr1End');
+buildPills('gstr2bPills', 'gstr2bStart', 'gstr2bEnd');
 buildPills('gstr3bPills', 'gstr3bStart', 'gstr3bEnd');
 
 function dlReport(type, fmt) {
   const map = {
     stock : ['stockStart',  'stockEnd'],
     gstr1 : ['gstr1Start',  'gstr1End'],
+    gstr2b: ['gstr2bStart', 'gstr2bEnd'],
     gstr3b: ['gstr3bStart', 'gstr3bEnd'],
   };
   const [sId, eId] = map[type];
@@ -190,6 +264,7 @@ function dlReport(type, fmt) {
   const urls = {
     stock : '{{ url_for("stock_report") }}',
     gstr1 : '{{ url_for("gstr1_report") }}',
+    gstr2b: '{{ url_for("gstr2b_report") }}',
     gstr3b: '{{ url_for("gstr3b_report") }}',
   };
   window.location.href = `${urls[type]}?start=${start}&end=${end}&format=${fmt}`;

@@ -93,6 +93,17 @@
           <input type="number" name="purchase_rate" class="m-input" step="0.01" min="0"
                  value="0" id="openRate" oninput="updatePreview()" />
         </div>
+        <div class="m-fg">
+          <label class="m-label" style="color:#7c3aed;"><i class="bi bi-upc me-1"></i>Batch No.</label>
+          <input type="text" name="batch_no" class="m-input"
+                 placeholder="e.g. B2025-01"
+                 style="border-color:#c4b5fd;" />
+        </div>
+        <div class="m-fg">
+          <label class="m-label" style="color:#dc2626;"><i class="bi bi-calendar-x me-1"></i>Expiry Date</label>
+          <input type="date" name="expiry_date" class="m-input"
+                 style="border-color:#fca5a5;" />
+        </div>
       </div>
       <div id="stockPreview" style="display:none;background:#ecfdf5;border-radius:10px;padding:10px 12px;margin-top:8px;font-size:13px;color:#065f46;">
         <strong>Total Stock Value:</strong> ₹<span id="previewTotal">0</span>
@@ -128,6 +139,17 @@
           <label class="m-label">Purchase Rate (₹)</label>
           <input type="number" name="purchase_rate" class="m-input" step="0.01" min="0"
                  value="0" id="newRate" oninput="calcWAC()" />
+        </div>
+        <div class="m-fg">
+          <label class="m-label" style="color:#7c3aed;"><i class="bi bi-upc me-1"></i>Batch No.</label>
+          <input type="text" name="batch_no" class="m-input"
+                 placeholder="e.g. B2025-01"
+                 style="border-color:#c4b5fd;" />
+        </div>
+        <div class="m-fg">
+          <label class="m-label" style="color:#dc2626;"><i class="bi bi-calendar-x me-1"></i>Expiry Date</label>
+          <input type="date" name="expiry_date" class="m-input"
+                 style="border-color:#fca5a5;" />
         </div>
       </div>
       <div id="wacPreview" style="display:none;background:#eff6ff;border-radius:10px;padding:12px;margin-top:8px;font-size:13px;color:#1e40af;">

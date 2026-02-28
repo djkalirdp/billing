@@ -1,0 +1,243 @@
+{% extends 'base.html' %}
+{% block title %}{{ proforma.quotation_no }}{% endblock %}
+{% block page_title %}Sales Quotation{% endblock %}
+
+{% block head %}
+<style>
+  .detail-layout{display:grid;grid-template-columns:1fr 280px;gap:16px;align-items:start;}
+  @media(max-width:1000px){.detail-layout{grid-template-columns:1fr;}}
+  .card{background:white;border:1.5px solid var(--border);border-radius:14px;overflow:hidden;margin-bottom:14px;}
+  .card-head{padding:13px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px;background:#f8fafc;}
+  .card-title{font-weight:800;font-size:14px;}
+  .card-body{padding:18px;}
+  .info-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+  .info-row{display:flex;flex-direction:column;gap:3px;}
+  .info-lbl{font-size:10.5px;font-weight:800;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;}
+  .info-val{font-size:13.5px;font-weight:700;color:var(--text-main);}
+  .items-table{width:100%;border-collapse:collapse;font-size:13px;}
+  .items-table thead th{padding:9px 12px;background:#f1f5f9;font-size:10.5px;font-weight:800;text-transform:uppercase;color:#64748b;border-bottom:1.5px solid var(--border);}
+  .items-table thead th.num{text-align:right;}
+  .items-table tbody td{padding:10px 12px;border-bottom:1px solid #f1f5f9;}
+  .items-table tbody td.num{text-align:right;}
+  .sum-row{display:flex;justify-content:space-between;padding:8px 16px;border-bottom:1px solid #f1f5f9;font-size:13px;}
+  .sum-row.total{background:#ede9fe;font-weight:800;font-size:15px;border-bottom:none;}
+  .sum-row .lbl{color:var(--text-muted);}
+  .action-btn{display:flex;align-items:center;gap:8px;padding:10px 16px;border-radius:10px;font-size:13px;font-weight:800;cursor:pointer;border:none;text-decoration:none;width:100%;justify-content:center;margin-bottom:8px;}
+  .btn-purple{background:#7c3aed;color:white;}
+  .btn-purple:hover{background:#6d28d9;color:white;}
+  .btn-green{background:#059669;color:white;}
+  .btn-green:hover{background:#047857;color:white;}
+  .btn-red{background:#dc2626;color:white;}
+  .btn-red:hover{background:#b91c1c;color:white;}
+  .btn-outline{background:white;color:#475569;border:1.5px solid var(--border);}
+  .btn-outline:hover{background:#f1f5f9;}
+
+  /* Page size selector */
+  .size-picker{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:10px;}
+  .size-opt{border:2px solid var(--border);border-radius:9px;padding:8px;text-align:center;cursor:pointer;font-size:12px;font-weight:700;color:#475569;transition:all .15s;}
+  .size-opt:hover,.size-opt.active{border-color:#7c3aed;background:#ede9fe;color:#7c3aed;}
+  .size-opt small{display:block;font-size:10px;font-weight:400;color:#94a3b8;}
+</style>
+{% endblock %}
+
+{% block topbar_actions %}
+<a href="{{ url_for('proforma_list') }}" class="btn-outline-custom">
+  <i class="bi bi-arrow-left"></i> All Quotations
+</a>
+{% endblock %}
+
+{% block content %}
+<div class="detail-layout">
+
+  <!-- LEFT: Details -->
+  <div>
+    <!-- Header -->
+    <div class="card">
+      <div class="card-head">
+        <i class="bi bi-file-earmark-text" style="color:#7c3aed;"></i>
+        <span class="card-title" style="color:#7c3aed;">SALES QUOTATION</span>
+        <span style="margin-left:auto;font-size:20px;font-weight:900;color:#7c3aed;">{{ proforma.quotation_no }}</span>
+      </div>
+      <div class="card-body">
+        <div class="info-grid">
+          <div class="info-row">
+            <div class="info-lbl">Buyer</div>
+            <div class="info-val">{{ proforma.buyer_name or '—' }}</div>
+            {% if proforma.buyer_gstin %}<div style="font-size:11.5px;color:#64748b;">{{ proforma.buyer_gstin }}</div>{% endif %}
+            {% if proforma.buyer_address %}<div style="font-size:11.5px;color:#94a3b8;">{{ proforma.buyer_address }}</div>{% endif %}
+          </div>
+          <div>
+            <div class="info-row" style="margin-bottom:8px;">
+              <div class="info-lbl">Date</div>
+              <div class="info-val">{{ proforma.quotation_date }}</div>
+            </div>
+            {% if proforma.valid_until %}
+            <div class="info-row" style="margin-bottom:8px;">
+              <div class="info-lbl">Valid Until</div>
+              <div class="info-val" style="color:#d97706;">{{ proforma.valid_until }}</div>
+            </div>
+            {% endif %}
+            <div class="info-row">
+              <div class="info-lbl">Payment Mode</div>
+              <div class="info-val" style="color:#059669;">Advance</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Items -->
+    <div class="card">
+      <div class="card-head">
+        <i class="bi bi-list-ul" style="color:#059669;"></i>
+        <span class="card-title">Items</span>
+        <span style="margin-left:auto;font-size:12px;color:#94a3b8;">{{ items|length }} items</span>
+      </div>
+      <div style="overflow-x:auto;">
+        <table class="items-table">
+          <thead>
+            <tr>
+              <th>#</th><th>Description</th><th>HSN</th><th>GST%</th>
+              <th class="num">Qty</th><th class="num">Rate</th>
+              <th class="num">Disc%</th><th class="num">Amount</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for it in items %}
+            <tr>
+              <td style="color:#94a3b8;">{{ loop.index }}</td>
+              <td><strong>{{ it.description }}</strong></td>
+              <td style="font-family:monospace;font-size:12px;color:#64748b;">{{ it.hsn or '—' }}</td>
+              <td>{{ it.gst_rate|int }}%</td>
+              <td class="num">{{ it.quantity }} {{ it.unit }}</td>
+              <td class="num">₹ {{ "%.2f"|format(it.rate) }}</td>
+              <td class="num">{{ it.discount_percent|int }}%</td>
+              <td class="num" style="font-weight:700;">₹ {{ "%.2f"|format(it.amount) }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Totals -->
+      <div style="background:#f8fafc;padding:4px 0;">
+        <div class="sum-row"><span class="lbl">Subtotal</span><span>₹ {{ "%.2f"|format(proforma.subtotal) }}</span></div>
+        {% if proforma.total_discount > 0 %}
+        <div class="sum-row"><span class="lbl">Discount</span><span style="color:#dc2626;">- ₹ {{ "%.2f"|format(proforma.total_discount) }}</span></div>
+        {% endif %}
+        <div class="sum-row"><span class="lbl">Taxable Value</span><span>₹ {{ "%.2f"|format(proforma.taxable_value) }}</span></div>
+        {% if proforma.total_igst > 0 %}
+        <div class="sum-row"><span class="lbl">IGST</span><span style="color:#d97706;">₹ {{ "%.2f"|format(proforma.total_igst) }}</span></div>
+        {% else %}
+        <div class="sum-row"><span class="lbl">CGST</span><span style="color:#2563eb;">₹ {{ "%.2f"|format(proforma.total_cgst) }}</span></div>
+        <div class="sum-row"><span class="lbl">SGST</span><span style="color:#2563eb;">₹ {{ "%.2f"|format(proforma.total_sgst) }}</span></div>
+        {% endif %}
+        {% if proforma.freight > 0 %}
+        <div class="sum-row"><span class="lbl">Freight</span><span>₹ {{ "%.2f"|format(proforma.freight) }}</span></div>
+        {% endif %}
+        <div class="sum-row total"><span>Grand Total</span><span style="color:#7c3aed;">₹ {{ "%.2f"|format(proforma.grand_total) }}</span></div>
+      </div>
+    </div>
+
+    {% if proforma.notes %}
+    <div class="card">
+      <div class="card-body">
+        <div style="font-size:12px;font-weight:800;color:#94a3b8;text-transform:uppercase;margin-bottom:4px;">Notes / Terms</div>
+        <div style="font-size:13px;color:#475569;">{{ proforma.notes }}</div>
+      </div>
+    </div>
+    {% endif %}
+  </div><!-- /left -->
+
+  <!-- RIGHT: Actions -->
+  <div>
+    <!-- Download PDF with page size -->
+    <div class="card">
+      <div class="card-head">
+        <i class="bi bi-file-earmark-pdf" style="color:#dc2626;"></i>
+        <span class="card-title">Download PDF</span>
+      </div>
+      <div class="card-body">
+        <div style="font-size:11.5px;font-weight:800;color:#64748b;margin-bottom:8px;text-transform:uppercase;letter-spacing:.05em;">Page Size</div>
+        <div class="size-picker" id="sizePicker">
+          <div class="size-opt active" data-size="A4" onclick="setSize('A4',this)">
+            A4 <small>Vertical 210×297</small>
+          </div>
+          <div class="size-opt" data-size="A4L" onclick="setSize('A4L',this)">
+            A4 Land. <small>Horizontal 297×210</small>
+          </div>
+          <div class="size-opt" data-size="A5" onclick="setSize('A5',this)">
+            A5 <small>Vertical 148×210</small>
+          </div>
+          <div class="size-opt" data-size="A5L" onclick="setSize('A5L',this)">
+            A5 Land. <small>Horizontal 210×148</small>
+          </div>
+        </div>
+        <a id="pdfDownloadBtn"
+           href="{{ url_for('proforma_pdf', proforma_id=proforma.id) }}?size=A4"
+           class="action-btn btn-purple" style="color:white;text-decoration:none;">
+          <i class="bi bi-file-earmark-pdf"></i> Download PDF
+        </a>
+      </div>
+    </div>
+
+    <!-- Convert to Invoice -->
+    <div class="card">
+      <div class="card-head">
+        <i class="bi bi-arrow-right-circle" style="color:#059669;"></i>
+        <span class="card-title">Convert to Invoice</span>
+      </div>
+      <div class="card-body">
+        <div style="font-size:12px;color:#64748b;margin-bottom:12px;">
+          Quotation se Tax Invoice banayein. Stock automatically deduct hoga.
+        </div>
+        <form method="POST" action="{{ url_for('convert_proforma', proforma_id=proforma.id) }}"
+              onsubmit="return confirm('Is quotation ko Tax Invoice mein convert karein?')">
+          <div style="margin-bottom:10px;">
+            <label style="font-size:11px;font-weight:800;color:#64748b;text-transform:uppercase;">Payment Mode</label>
+            <select name="payment_mode" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;margin-top:4px;font-size:13px;">
+              <option>Credit</option><option>Cash</option><option>UPI</option>
+              <option>Bank Transfer</option><option>Cheque</option>
+            </select>
+          </div>
+          <div style="margin-bottom:10px;">
+            <label style="font-size:11px;font-weight:800;color:#64748b;text-transform:uppercase;">Amount Paid (₹)</label>
+            <input type="number" name="paid_amount" step="0.01" min="0" value="0"
+              style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;margin-top:4px;font-size:13px;" />
+          </div>
+          <button type="submit" class="action-btn btn-green">
+            <i class="bi bi-arrow-right-circle"></i> Convert to Tax Invoice
+          </button>
+        </form>
+      </div>
+    </div>
+
+    <!-- Delete -->
+    <div class="card">
+      <div class="card-body">
+        <form method="POST" action="{{ url_for('delete_proforma', proforma_id=proforma.id) }}"
+              onsubmit="return confirm('Is quotation ko delete karein? Yeh wapas nahi aayega.')">
+          <button type="submit" class="action-btn btn-red">
+            <i class="bi bi-trash3"></i> Delete Quotation
+          </button>
+        </form>
+        <a href="{{ url_for('proforma_list') }}" class="action-btn btn-outline" style="color:#475569;text-decoration:none;">
+          <i class="bi bi-arrow-left"></i> Back to List
+        </a>
+      </div>
+    </div>
+  </div><!-- /right -->
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function setSize(size, el) {
+  document.querySelectorAll('.size-opt').forEach(o=>o.classList.remove('active'));
+  el.classList.add('active');
+  document.getElementById('pdfDownloadBtn').href =
+    `{{ url_for('proforma_pdf', proforma_id=proforma.id) }}?size=${size}`;
+}
+</script>
+{% endblock %}

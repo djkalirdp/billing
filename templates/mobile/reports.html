@@ -109,18 +109,18 @@
 <!-- ── GSTR-3B ────────────────────────────────────────────── -->
 <div class="rep-card">
   <div class="rep-card-head">
-    <div class="rep-icon" style="background:#fff7ed;">
-      <i class="bi bi-calculator" style="color:#f59e0b;"></i>
+    <div class="rep-icon" style="background:#fef2f2;">
+      <i class="bi bi-bar-chart-line" style="color:#dc2626;"></i>
     </div>
     <div>
       <div class="rep-title">GSTR-3B</div>
-      <div class="rep-sub">Monthly summary · Tax liability · Rate-wise breakup</div>
+      <div class="rep-sub">Outward Tax · Section 4 ITC · Net Tax Payable</div>
     </div>
   </div>
   <div class="rep-body">
-    <div class="info-banner">
-      <i class="bi bi-lightbulb me-1"></i>
-      Summary return for filing on GST portal. CGST+SGST or IGST breakup included.
+    <div class="info-banner" style="background:#fef2f2;color:#7f1d1d;">
+      <i class="bi bi-info-circle me-1"></i>
+      Now includes <strong>Section 4 ITC</strong> from purchases &amp; Net Tax Payable calculation
     </div>
     <div class="month-grid" id="gstr3bMonths"></div>
     <div class="date-row">
@@ -144,6 +144,71 @@
   </div>
 </div>
 
+<!-- ── Purchase Register / GSTR-2B ──────────────────────────── -->
+<div class="rep-card" style="border-top:4px solid #059669;">
+  <div class="rep-card-head">
+    <div class="rep-icon" style="background:#ecfdf5;">
+      <i class="bi bi-cart3" style="color:#059669;"></i>
+    </div>
+    <div>
+      <div class="rep-title">Purchase Register (ITC)</div>
+      <div class="rep-sub">Supplier · GSTIN · Bill No · Place of Supply · RCM</div>
+    </div>
+  </div>
+  <div class="rep-body">
+    <div class="info-banner" style="background:#ecfdf5;color:#065f46;">
+      <i class="bi bi-info-circle me-1"></i>
+      All purchase bills with tax details — use for ITC claim &amp; CA reconciliation
+    </div>
+    <div class="month-grid" id="gstr2bMonths"></div>
+    <div class="date-row">
+      <div class="m-fg">
+        <label class="m-label">From</label>
+        <input type="date" id="gstr2bStart" class="m-input" />
+      </div>
+      <div class="m-fg">
+        <label class="m-label">To</label>
+        <input type="date" id="gstr2bEnd" class="m-input" />
+      </div>
+    </div>
+    <div class="btn-row">
+      <a href="#" class="btn-pdf" onclick="return dlReport('gstr2b','pdf')">
+        <i class="bi bi-file-earmark-pdf"></i> PDF
+      </a>
+      <a href="#" class="btn-excel" onclick="return dlReport('gstr2b','excel')">
+        <i class="bi bi-file-earmark-excel"></i> Excel
+      </a>
+    </div>
+  </div>
+</div>
+
+<!-- ── Batch Tracker Quick Link ──────────────────────────────── -->
+<div class="rep-card" style="border-top:4px solid #f59e0b;">
+  <div class="rep-card-head">
+    <div class="rep-icon" style="background:#fff7ed;">
+      <i class="bi bi-boxes" style="color:#f59e0b;"></i>
+    </div>
+    <div>
+      <div class="rep-title">Batch Tracker</div>
+      <div class="rep-sub">Batch No · Expiry Alerts · Which batch went to which customer</div>
+    </div>
+  </div>
+  <div class="rep-body">
+    <div class="info-banner" style="background:#fff7ed;color:#92400e;">
+      <i class="bi bi-exclamation-triangle me-1"></i>
+      Expiry alerts 30 days in advance. Full movement history per batch.
+    </div>
+    <div class="btn-row">
+      <a href="{{ url_for('batch_list') }}" class="btn-excel" style="background:#f59e0b;">
+        <i class="bi bi-boxes"></i> View Batches
+      </a>
+      <a href="{{ url_for('purchases') }}" class="btn-pdf" style="background:#7c3aed;">
+        <i class="bi bi-cart-plus"></i> Purchases
+      </a>
+    </div>
+  </div>
+</div>
+
 <div style="height:80px;"></div>
 {% endblock %}
 
@@ -155,6 +220,7 @@ const MONTH_SECTIONS = [
   { id: 'stockMonths',  startId: 'stockStart',  endId: 'stockEnd'  },
   { id: 'gstr1Months',  startId: 'gstr1Start',  endId: 'gstr1End'  },
   { id: 'gstr3bMonths', startId: 'gstr3bStart', endId: 'gstr3bEnd' },
+  { id: 'gstr2bMonths', startId: 'gstr2bStart', endId: 'gstr2bEnd' },
 ];
 
 const today     = new Date();
@@ -164,17 +230,13 @@ const thisMonth = today.getMonth(); // 0-indexed
 function padZ(n){ return String(n).padStart(2,'0'); }
 
 function setRange(startId, endId, year, month) {
-  const first = new Date(year, month, 1);
   const last  = new Date(year, month + 1, 0);
-  document.getElementById(startId).value =
-    `${year}-${padZ(month+1)}-01`;
-  document.getElementById(endId).value =
-    `${year}-${padZ(month+1)}-${padZ(last.getDate())}`;
+  document.getElementById(startId).value = `${year}-${padZ(month+1)}-01`;
+  document.getElementById(endId).value   = `${year}-${padZ(month+1)}-${padZ(last.getDate())}`;
 }
 
 function buildMonthGrid(containerId, startId, endId) {
   const container = document.getElementById(containerId);
-  // Show last 6 months + current
   for (let i = 5; i >= 0; i--) {
     let d = new Date(thisYear, thisMonth - i, 1);
     let yr = d.getFullYear(), mo = d.getMonth();
@@ -189,7 +251,6 @@ function buildMonthGrid(containerId, startId, endId) {
       setRange(startId, endId, yr, mo);
     };
     container.appendChild(btn);
-    // Set current month as default
     if (i === 0) setRange(startId, endId, yr, mo);
   }
 }
@@ -202,28 +263,23 @@ function dlReport(type, fmt) {
     stock : { start: 'stockStart',  end: 'stockEnd'  },
     gstr1 : { start: 'gstr1Start',  end: 'gstr1End'  },
     gstr3b: { start: 'gstr3bStart', end: 'gstr3bEnd' },
+    gstr2b: { start: 'gstr2bStart', end: 'gstr2bEnd' },
   };
   const m = map[type];
   const start = document.getElementById(m.start).value;
   const end   = document.getElementById(m.end).value;
 
-  if (!start || !end) {
-    alert('Please select start and end dates.');
-    return false;
-  }
-  if (start > end) {
-    alert('Start date cannot be after end date.');
-    return false;
-  }
+  if (!start || !end) { alert('Please select start and end dates.'); return false; }
+  if (start > end)    { alert('Start date cannot be after end date.'); return false; }
 
   const urls = {
     stock : '{{ url_for("stock_report") }}',
     gstr1 : '{{ url_for("gstr1_report") }}',
     gstr3b: '{{ url_for("gstr3b_report") }}',
+    gstr2b: '{{ url_for("gstr2b_report") }}',
   };
 
-  const url = `${urls[type]}?start=${start}&end=${end}&format=${fmt}`;
-  window.location.href = url;
+  window.location.href = `${urls[type]}?start=${start}&end=${end}&format=${fmt}`;
   return false;
 }
 </script>

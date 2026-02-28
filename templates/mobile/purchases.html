@@ -1,6 +1,6 @@
 {% extends 'mobile/base_mobile.html' %}
 {% block title %}Purchases{% endblock %}
-{% block page_title %}Purchases{% endblock %}
+{% block page_title %}Purchase Bills{% endblock %}
 
 {% block topbar_actions %}
 <button class="m-icon-btn accent" onclick="openAddSheet()"><i class="bi bi-plus-lg"></i></button>
@@ -8,174 +8,324 @@
 
 {% block head %}
 <style>
-.purch-card{
-  background:white;border-radius:14px;box-shadow:var(--shadow);
-  margin:0 14px 10px;padding:14px;
-  border-left:4px solid var(--border);
-}
-.purch-card.unpaid{border-left-color:var(--danger);}
-.purch-card.partial{border-left-color:var(--warning);}
-.purch-card.paid{border-left-color:var(--success);}
-.purch-vendor{font-weight:700;font-size:14px;}
-.purch-bill{font-size:12px;color:var(--text-muted);}
-.purch-footer{display:flex;align-items:center;justify-content:space-between;margin-top:10px;}
-.purch-amount{font-family:var(--font-head);font-size:18px;font-weight:800;}
-.m-pay-bar{height:5px;border-radius:99px;background:#f1f5f9;margin-top:6px;overflow:hidden;}
-.m-pay-bar-fill{height:100%;border-radius:99px;}
+/* ── Cards ── */
+.purch-card{background:white;border-radius:14px;box-shadow:var(--shadow);margin:0 14px 12px;overflow:hidden;border-left:4px solid #7c3aed;}
+.purch-card.paid{border-left-color:#059669;}
+.purch-card.partial{border-left-color:#f59e0b;}
+.purch-head{padding:11px 14px 8px;display:flex;justify-content:space-between;align-items:flex-start;gap:8px;}
+.purch-vendor{font-weight:800;font-size:14px;color:#1e293b;}
+.purch-meta{font-size:11px;color:var(--text-muted);margin-top:2px;}
+.purch-body{padding:0 14px 12px;}
+.gst-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:8px;}
+.gst-cell{background:#f8fafc;border-radius:8px;padding:7px 8px;text-align:center;}
+.gst-cell-lbl{font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;}
+.gst-cell-val{font-size:13px;font-weight:800;color:#1e293b;margin-top:2px;}
+.badge-rcm{background:#fff7ed;color:#f59e0b;border-radius:6px;padding:2px 8px;font-size:11px;font-weight:700;display:inline-block;}
+.badge-igst{background:#eff6ff;color:var(--accent);border-radius:6px;padding:2px 8px;font-size:11px;font-weight:700;display:inline-block;}
+.pay-bar{height:5px;background:#f1f5f9;border-radius:99px;margin:8px 0;overflow:hidden;}
+.pay-bar-fill{height:100%;border-radius:99px;}
+/* ── Add Sheet ── */
+.add-section{background:#f8fafc;border-radius:12px;padding:12px 14px;margin-bottom:12px;}
+.add-section-title{font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px;}
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+.g3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;}
+.item-box{background:white;border:1.5px solid var(--border);border-radius:12px;padding:12px;margin-bottom:8px;position:relative;}
+.item-num{font-size:11px;font-weight:800;color:#7c3aed;margin-bottom:8px;}
+.del-btn{position:absolute;top:8px;right:8px;background:#fef2f2;border:none;border-radius:8px;padding:4px 10px;color:#dc2626;font-size:13px;cursor:pointer;}
+.item-tax-preview{font-size:11px;color:#64748b;margin-top:6px;background:#f8fafc;border-radius:6px;padding:5px 8px;display:none;}
+.gst-summary{background:#eff6ff;border-radius:12px;padding:12px 14px;margin-top:4px;display:none;}
+.gst-sum-row{display:flex;justify-content:space-between;padding:4px 0;font-size:13px;border-bottom:1px solid rgba(0,0,0,.05);}
+.gst-sum-row:last-child{border:none;font-weight:800;color:#1e40af;font-size:14px;}
+.gst-type-bar{border-radius:10px;padding:8px 12px;margin-bottom:12px;font-size:13px;font-weight:600;}
+/* ── Expiry Alert ── */
+.expiry-alert{background:#fff7ed;border:1px solid #fde68a;border-radius:12px;margin:0 14px 12px;padding:12px 14px;}
+/* aclist reuse */
+.aclist{position:absolute;top:calc(100% + 4px);left:0;right:0;background:white;border:2px solid var(--accent);border-radius:10px;max-height:200px;overflow-y:auto;z-index:9999;box-shadow:0 10px 30px rgba(0,0,0,.18);}
+.acitem{padding:10px 14px;border-bottom:1px solid #f1f5f9;cursor:pointer;}
+.acitem:last-child{border-bottom:none;}
+.acname{font-weight:700;font-size:14px;}
+.acsub{font-size:12px;color:#64748b;margin-top:2px;}
+.acitem:active{background:#eff6ff;}
 </style>
 {% endblock %}
 
 {% block content %}
 
-<!-- Stats -->
-{% set total_due = namespace(val=0) %}
-{% for p in purchases %}{% set total_due.val = total_due.val + (p.total_amount - p.amount_paid) %}{% endfor %}
+<!-- Expiry Alerts -->
+{% if expiring %}
+<div class="expiry-alert">
+  <div style="font-weight:800;font-size:13px;color:#d97706;margin-bottom:6px;">
+    <i class="bi bi-exclamation-triangle-fill me-1"></i>{{ expiring|length }} Batch(es) Expiring Soon
+  </div>
+  {% for b in expiring[:3] %}
+  <div style="font-size:12px;color:#92400e;padding:2px 0;">
+    <i class="bi bi-circle-fill" style="font-size:6px;vertical-align:middle;margin-right:5px;color:{% if b.expired %}#dc2626{% else %}#f59e0b{% endif %};"></i>
+    <strong>{{ b.product_name }}</strong> — Batch {{ b.batch_no }} —
+    {% if b.expired %}EXPIRED{% else %}Exp: {{ b.expiry_date }}{% endif %}
+    (Qty: {{ b.balance }})
+  </div>
+  {% endfor %}
+  <a href="{{ url_for('batch_list') }}" style="font-size:12px;font-weight:700;color:#d97706;display:block;margin-top:6px;">
+    View all batches <i class="bi bi-arrow-right"></i>
+  </a>
+</div>
+{% endif %}
 
+<!-- KPI -->
+{% set total_due = namespace(val=0) %}
+{% set total_tax = namespace(val=0) %}
+{% for p in purchases %}
+  {% set total_due.val = total_due.val + (p.total_amount - (p.amount_paid or 0)) %}
+  {% set total_tax.val = total_tax.val + (p.total_tax or 0) %}
+{% endfor %}
 <div class="m-kpi-grid">
   <div class="m-kpi">
-    <div class="m-kpi-icon" style="background:#eff6ff;color:#2563eb;"><i class="bi bi-cart3"></i></div>
+    <div class="m-kpi-icon" style="background:#eff6ff;color:#7c3aed;"><i class="bi bi-cart3"></i></div>
     <div class="m-kpi-val">{{ purchases|length }}</div>
     <div class="m-kpi-lbl">Total Bills</div>
   </div>
   <div class="m-kpi">
     <div class="m-kpi-icon" style="background:#fef2f2;color:#dc2626;"><i class="bi bi-currency-rupee"></i></div>
-    <div class="m-kpi-val" style="font-size:17px;">₹{{ "%.0f"|format(total_due.val) }}</div>
-    <div class="m-kpi-lbl">Payable</div>
+    <div class="m-kpi-val" style="font-size:16px;">₹{{ "%.0f"|format(total_due.val) }}</div>
+    <div class="m-kpi-lbl">Total Due</div>
+  </div>
+  <div class="m-kpi">
+    <div class="m-kpi-icon" style="background:#ecfdf5;color:#059669;"><i class="bi bi-percent"></i></div>
+    <div class="m-kpi-val" style="font-size:16px;">₹{{ "%.0f"|format(total_tax.val) }}</div>
+    <div class="m-kpi-lbl">Total Tax Paid</div>
   </div>
 </div>
 
 <div class="m-section-lbl">Purchase Bills</div>
 
 {% if purchases %}
-  {% for p in purchases %}
-  {% set due = p.total_amount - p.amount_paid %}
-  {% set pct = ((p.amount_paid / p.total_amount) * 100) | round if p.total_amount > 0 else 0 %}
-  <div class="purch-card {{ p.payment_status | lower }}">
-    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;">
-      <div>
-        <div class="purch-vendor">{{ p.name }}</div>
-        <div class="purch-bill">Bill: {{ p.bill_no or '—' }} · {{ p.purchase_date }}</div>
+{% for p in purchases %}
+{% set due = p.total_amount - (p.amount_paid or 0) %}
+{% set pct = ((p.amount_paid / p.total_amount) * 100)|round if p.total_amount > 0 else 0 %}
+{% set has_tax = p.total_tax and p.total_tax > 0 %}
+<div class="purch-card {{ p.payment_status|lower if p.payment_status else 'unpaid' }}">
+  <div class="purch-head">
+    <div>
+      <div class="purch-vendor">{{ p.vendor_name }}</div>
+      <div class="purch-meta">
+        Bill: <strong>{{ p.bill_no or '—' }}</strong> · {{ p.purchase_date }}
+        {% if p.vendor_gstin %} · GSTIN: {{ p.vendor_gstin }}{% endif %}
       </div>
-      <span class="m-badge {{ 'm-badge-success' if p.payment_status=='Paid' else ('m-badge-warning' if p.payment_status=='Partial' else 'm-badge-danger') }}">
-        {{ p.payment_status }}
-      </span>
-    </div>
-    <div class="m-pay-bar">
-      <div class="m-pay-bar-fill"
-           style="width:{{ pct }}%;background:{{ '#059669' if pct==100 else ('#d97706' if pct>0 else '#dc2626') }};"></div>
-    </div>
-    <div class="purch-footer">
-      <div>
-        <div class="purch-amount">₹{{ "%.0f"|format(p.total_amount) }}</div>
-        {% if due > 0 %}
-        <div style="font-size:12px;color:var(--danger);">Due: ₹{{ "%.0f"|format(due) }}</div>
+      {% if p.place_of_supply %}
+      <div class="purch-meta" style="margin-top:3px;">
+        <i class="bi bi-geo-alt-fill me-1"></i>{{ p.place_of_supply }}
+        {% if p.igst_amount and p.igst_amount > 0 %}
+          <span class="badge-igst ms-1">IGST</span>
         {% endif %}
+        {% if p.reverse_charge %}<span class="badge-rcm ms-1">RCM</span>{% endif %}
       </div>
-      {% if p.payment_status != 'Paid' %}
-      <button class="m-btn m-btn-success" style="width:auto;padding:9px 16px;font-size:13px;"
-              onclick="openPaySheet({{ p.id }}, '{{ p.name|e }}', '{{ p.bill_no or '' }}', {{ due }})">
-        <i class="bi bi-cash"></i> Pay
-      </button>
-      {% else %}
-      <span style="font-size:13px;color:var(--success);font-weight:700;">
-        <i class="bi bi-check-circle-fill me-1"></i>Paid
-      </span>
       {% endif %}
     </div>
+    <div style="text-align:right;flex-shrink:0;">
+      <div style="font-size:17px;font-weight:800;color:#1e293b;">₹{{ "%.2f"|format(p.total_amount) }}</div>
+      <span class="m-badge {{ 'm-badge-success' if p.payment_status=='Paid' else ('m-badge-warning' if p.payment_status=='Partial' else 'm-badge-danger') }}">
+        {{ p.payment_status or 'Unpaid' }}
+      </span>
+    </div>
   </div>
-  {% endfor %}
+  <div class="purch-body">
+    {% if has_tax %}
+    <div class="gst-grid">
+      <div class="gst-cell">
+        <div class="gst-cell-lbl">Taxable</div>
+        <div class="gst-cell-val">₹{{ "%.0f"|format(p.taxable_amount or p.total_amount) }}</div>
+      </div>
+      <div class="gst-cell">
+        <div class="gst-cell-lbl">CGST</div>
+        <div class="gst-cell-val" style="color:#2563eb;">₹{{ "%.0f"|format(p.cgst_amount or 0) }}</div>
+      </div>
+      <div class="gst-cell">
+        <div class="gst-cell-lbl">SGST</div>
+        <div class="gst-cell-val" style="color:#2563eb;">₹{{ "%.0f"|format(p.sgst_amount or 0) }}</div>
+      </div>
+      <div class="gst-cell">
+        <div class="gst-cell-lbl">{% if p.igst_amount and p.igst_amount > 0 %}IGST{% else %}Total Tax{% endif %}</div>
+        <div class="gst-cell-val" style="color:#7c3aed;">
+          {% if p.igst_amount and p.igst_amount > 0 %}
+            ₹{{ "%.0f"|format(p.igst_amount) }}
+          {% else %}
+            ₹{{ "%.0f"|format(p.total_tax or 0) }}
+          {% endif %}
+        </div>
+      </div>
+    </div>
+    {% endif %}
+    <div class="pay-bar">
+      <div class="pay-bar-fill" style="width:{{ pct }}%;background:{{ '#059669' if pct==100 else ('#f59e0b' if pct > 0 else '#dc2626') }};"></div>
+    </div>
+    <div style="display:flex;justify-content:space-between;font-size:12px;font-weight:600;">
+      <span style="color:#059669;">Paid: ₹{{ "%.2f"|format(p.amount_paid or 0) }}</span>
+      <span style="color:#dc2626;">Due: ₹{{ "%.2f"|format(due) }}</span>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:10px;">
+      {% if due > 0 %}
+      <button class="m-btn m-btn-success" style="flex:1;font-size:13px;"
+        onclick="openPaySheet({{ p.id }},'{{ p.vendor_name|e }}','{{ p.bill_no or '' }}',{{ due }})">
+        <i class="bi bi-cash"></i> Pay
+      </button>
+      {% endif %}
+      <button class="m-btn" style="flex:1;font-size:13px;background:#eff6ff;color:var(--accent);"
+        onclick="showItems({{ p.id }})">
+        <i class="bi bi-list-ul"></i> Items
+      </button>
+    </div>
+    <!-- Items detail (hidden) -->
+    <div id="items_{{ p.id }}" style="display:none;margin-top:10px;background:#f8fafc;border-radius:10px;padding:10px;font-size:12px;"></div>
+  </div>
+</div>
+{% endfor %}
 {% else %}
 <div class="m-empty">
   <i class="bi bi-cart-x"></i>
-  <p>No purchase bills yet.</p>
+  <p>No purchase bills yet</p>
   <button class="m-btn m-btn-primary" style="width:auto;padding:12px 24px;" onclick="openAddSheet()">
     <i class="bi bi-plus"></i> Add Purchase
   </button>
 </div>
 {% endif %}
 
-<!-- Add Purchase Sheet -->
+<div style="height:90px;"></div>
+<button class="m-fab" onclick="openAddSheet()"><i class="bi bi-plus-lg"></i></button>
+
+<!-- ══ ADD PURCHASE SHEET ════════════════════════════════ -->
 <div class="m-overlay" id="addSheet">
-  <div class="m-sheet">
+  <div class="m-sheet" style="max-height:92vh;overflow-y:auto;">
     <div class="m-sheet-handle"></div>
-    <div class="m-sheet-title"><i class="bi bi-cart-plus me-2" style="color:var(--accent);"></i>Add Purchase Bill</div>
+    <div class="m-sheet-title"><i class="bi bi-cart-plus me-2" style="color:#7c3aed;"></i>New Purchase Bill</div>
+
     <form method="POST" action="{{ url_for('add_purchase') }}" id="addForm">
-      <div class="m-fg">
-        <label class="m-label">Vendor <span style="color:red">*</span></label>
-        <select name="vendor_id" class="m-select" required>
-          <option value="">— Select Vendor —</option>
-          {% for v in vendors %}
-          <option value="{{ v.id }}">{{ v.name }}</option>
-          {% endfor %}
-        </select>
+
+      <!-- Supplier -->
+      <div class="add-section">
+        <div class="add-section-title" style="color:#7c3aed;"><i class="bi bi-building me-1"></i>Supplier Details</div>
+        <div class="m-fg">
+          <label class="m-label">Vendor <span style="color:red;">*</span></label>
+          <select name="vendor_id" class="m-select" required>
+            <option value="">— Select Vendor —</option>
+            {% for v in vendors %}
+            <option value="{{ v.id }}">{{ v.name }}{% if v.gstin %} · {{ v.gstin }}{% endif %}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="g2 mt-2">
+          <div class="m-fg">
+            <label class="m-label">Bill / Invoice No.</label>
+            <input type="text" name="bill_no" class="m-input" placeholder="BILL-001" />
+          </div>
+          <div class="m-fg">
+            <label class="m-label">Bill Date <span style="color:red;">*</span></label>
+            <input type="date" name="purchase_date" class="m-input" value="{{ today }}" required />
+          </div>
+        </div>
+        <div class="g2 mt-2">
+          <div class="m-fg">
+            <label class="m-label">Place of Supply <span style="font-size:11px;color:#94a3b8;">(Supplier State)</span></label>
+            <select name="place_of_supply" class="m-select" onchange="updateGstType(this.value)">
+              <option value="">— Same State (CGST+SGST) —</option>
+              {% set states=['Andaman & Nicobar','Andhra Pradesh','Arunachal Pradesh','Assam','Bihar','Chandigarh','Chhattisgarh','Dadra & Nagar Haveli','Daman & Diu','Delhi','Goa','Gujarat','Haryana','Himachal Pradesh','Jammu & Kashmir','Jharkhand','Karnataka','Kerala','Ladakh','Lakshadweep','Madhya Pradesh','Maharashtra','Manipur','Meghalaya','Mizoram','Nagaland','Odisha','Puducherry','Punjab','Rajasthan','Sikkim','Tamil Nadu','Telangana','Tripura','Uttar Pradesh','Uttarakhand','West Bengal'] %}
+              {% for s in states %}<option value="{{ s }}">{{ s }}</option>{% endfor %}
+            </select>
+          </div>
+          <div class="m-fg">
+            <label class="m-label">Reverse Charge (RCM)?</label>
+            <div style="display:flex;gap:14px;margin-top:10px;">
+              <label style="font-size:14px;font-weight:700;display:flex;align-items:center;gap:5px;">
+                <input type="radio" name="reverse_charge" value="0" checked /> No
+              </label>
+              <label style="font-size:14px;font-weight:700;display:flex;align-items:center;gap:5px;">
+                <input type="radio" name="reverse_charge" value="1" /> Yes (RCM)
+              </label>
+            </div>
+            <div style="font-size:11px;color:#94a3b8;margin-top:3px;">Kya aapko khud tax bharna hai?</div>
+          </div>
+        </div>
       </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
-        <div class="m-fg">
-          <label class="m-label">Bill No.</label>
-          <input type="text" name="bill_no" class="m-input" placeholder="BILL-001" />
-        </div>
-        <div class="m-fg">
-          <label class="m-label">Date</label>
-          <input type="date" name="purchase_date" class="m-input" value="{{ now.strftime('%Y-%m-%d') }}" />
-        </div>
-        <div class="m-fg">
-          <label class="m-label">Total (₹) <span style="color:red">*</span></label>
-          <input type="number" name="total_amount" class="m-input" step="0.01" min="0" required placeholder="0.00" />
-        </div>
-        <div class="m-fg">
-          <label class="m-label">Paid (₹)</label>
-          <input type="number" name="amount_paid" class="m-input" step="0.01" min="0" value="0" placeholder="0.00" />
-        </div>
+
+      <!-- GST Type indicator -->
+      <div id="gstTypeBar" class="gst-type-bar" style="background:#eff6ff;color:#1e40af;">
+        <i class="bi bi-info-circle me-1"></i>
+        <span id="gstTypeText">Intra-State: CGST + SGST lagega</span>
       </div>
-      <div style="display:flex;gap:10px;margin-top:4px;">
-        <button type="button" class="m-btn m-btn-outline"
-                onclick="document.getElementById('addSheet').classList.remove('open')" style="flex:1;">
-          Cancel
+
+      <!-- Items -->
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+        <div style="font-size:13px;font-weight:800;color:#1e293b;"><i class="bi bi-list-ul me-1" style="color:#7c3aed;"></i>Items / Products</div>
+        <button type="button" onclick="addItem()" style="background:#eff6ff;border:none;border-radius:8px;padding:6px 14px;color:var(--accent);font-size:12px;font-weight:700;cursor:pointer;">
+          <i class="bi bi-plus"></i> Add Item
         </button>
+      </div>
+      <div id="itemsContainer"></div>
+
+      <!-- GST Summary -->
+      <div class="gst-summary" id="gstSummary">
+        <div style="font-weight:800;font-size:13px;color:#1e40af;margin-bottom:8px;"><i class="bi bi-calculator me-1"></i>GST Summary</div>
+        <div class="gst-sum-row"><span>Taxable Amount</span><span id="sTaxable">₹0.00</span></div>
+        <div class="gst-sum-row" id="sCgstRow"><span>CGST</span><span id="sCgst">₹0.00</span></div>
+        <div class="gst-sum-row" id="sSgstRow"><span>SGST</span><span id="sSgst">₹0.00</span></div>
+        <div class="gst-sum-row" id="sIgstRow" style="display:none;"><span>IGST</span><span id="sIgst">₹0.00</span></div>
+        <div class="gst-sum-row"><span>Total Tax</span><span id="sTax">₹0.00</span></div>
+        <div class="gst-sum-row"><span>Grand Total</span><span id="sTotal">₹0.00</span></div>
+      </div>
+
+      <!-- Payment -->
+      <div class="add-section mt-2">
+        <div class="add-section-title" style="color:#059669;"><i class="bi bi-cash-stack me-1"></i>Payment</div>
+        <div class="g2">
+          <div class="m-fg">
+            <label class="m-label">Paid Amount (₹)</label>
+            <input type="number" name="amount_paid" class="m-input" step="0.01" min="0" value="0" placeholder="0" />
+          </div>
+          <div class="m-fg">
+            <label class="m-label">Payment Mode</label>
+            <select name="payment_mode" class="m-select">
+              <option>Cash</option><option>UPI</option><option>Bank Transfer</option><option>Cheque</option>
+            </select>
+          </div>
+        </div>
+        <div class="m-fg mt-2">
+          <label class="m-label">Notes (optional)</label>
+          <input type="text" name="notes" class="m-input" placeholder="e.g. Medical supplies for Feb" />
+        </div>
+      </div>
+
+      <div style="display:flex;gap:10px;padding-bottom:4px;">
+        <button type="button" onclick="closeAddSheet()" class="m-btn" style="flex:1;background:#f1f5f9;color:#64748b;">Cancel</button>
         <button type="submit" class="m-btn m-btn-primary" style="flex:2;" id="addBtn">
-          <i class="bi bi-save2"></i> Save
+          <i class="bi bi-save2"></i> Save Purchase Bill
         </button>
       </div>
     </form>
   </div>
 </div>
 
-<!-- Pay Sheet -->
+<!-- ══ PAY SHEET ════════════════════════════════════════ -->
 <div class="m-overlay" id="paySheet">
   <div class="m-sheet">
     <div class="m-sheet-handle"></div>
-    <div class="m-sheet-title" style="color:var(--success);"><i class="bi bi-cash-coin me-2"></i>Record Payment</div>
-    <div id="payInfo" style="background:#f8fafc;border-radius:10px;padding:10px;margin-bottom:14px;font-size:13px;color:var(--text-muted);"></div>
+    <div class="m-sheet-title" style="color:#059669;"><i class="bi bi-cash-coin me-2"></i>Record Payment</div>
+    <div id="payInfo" style="background:#f8fafc;border-radius:10px;padding:10px 12px;margin-bottom:12px;font-size:13px;"></div>
     <form method="POST" id="payForm">
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
-        <div class="m-fg">
-          <label class="m-label">Date</label>
-          <input type="date" name="payment_date" class="m-input" value="{{ now.strftime('%Y-%m-%d') }}" />
-        </div>
-        <div class="m-fg">
-          <label class="m-label">Amount (₹)</label>
-          <input type="number" name="amount" class="m-input" id="payAmt" step="0.01" min="0.01" required />
-        </div>
-      </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
-        <div class="m-fg">
-          <label class="m-label">Mode</label>
+      <div class="g2">
+        <div class="m-fg"><label class="m-label">Date</label>
+          <input type="date" name="payment_date" class="m-input" value="{{ today }}" /></div>
+        <div class="m-fg"><label class="m-label">Amount (₹)</label>
+          <input type="number" name="amount" id="payAmt" class="m-input" step="0.01" min="0.01" required /></div>
+        <div class="m-fg"><label class="m-label">Mode</label>
           <select name="payment_mode" class="m-select">
-            <option>Cash</option><option>Bank Transfer</option><option>UPI</option><option>Cheque</option>
-          </select>
-        </div>
-        <div class="m-fg">
-          <label class="m-label">Ref No.</label>
-          <input type="text" name="reference_no" class="m-input" placeholder="UTR / Cheque" />
-        </div>
+            <option>Cash</option><option>UPI</option><option>Bank Transfer</option><option>Cheque</option>
+          </select></div>
+        <div class="m-fg"><label class="m-label">Ref No.</label>
+          <input type="text" name="reference_no" class="m-input" placeholder="UTR / Cheque" /></div>
       </div>
-      <div style="display:flex;gap:10px;">
-        <button type="button" class="m-btn m-btn-outline"
-                onclick="document.getElementById('paySheet').classList.remove('open')" style="flex:1;">
-          Cancel
-        </button>
+      <div style="display:flex;gap:10px;margin-top:10px;">
+        <button type="button" onclick="closePaySheet()" class="m-btn" style="flex:1;background:#f1f5f9;color:#64748b;">Cancel</button>
         <button type="submit" class="m-btn m-btn-success" style="flex:2;" id="payBtn">
-          <i class="bi bi-check-circle"></i> Record
+          <i class="bi bi-check-circle"></i> Record Payment
         </button>
       </div>
     </form>
@@ -186,30 +336,233 @@
 
 {% block scripts %}
 <script>
-function openAddSheet(){ document.getElementById('addSheet').classList.add('open'); }
+const PROD_API  = '{{ url_for("product_search_api") }}';
+const COMP_STATE = '{{ settings.get("company_info",{}).get("state","") | lower }}';
+let isIGST   = false;
+let itemIdx  = 0;
+const timers = {};
 
-function openPaySheet(id, vendor, billNo, due){
-  document.getElementById('payInfo').innerHTML=`<strong>${vendor}</strong> | Bill: ${billNo||'—'}<br><span style="color:var(--danger);font-weight:700;">Due: ₹${due.toFixed(2)}</span>`;
-  document.getElementById('payForm').action=`/purchases/${id}/payment`;
-  document.getElementById('payAmt').value=due.toFixed(2);
-  document.getElementById('paySheet').classList.add('open');
+/* ── GST Type ──────────────────────────────────────────────── */
+function updateGstType(place) {
+  isIGST = place !== '' && place.toLowerCase() !== COMP_STATE;
+  const bar  = document.getElementById('gstTypeBar');
+  const txt  = document.getElementById('gstTypeText');
+  if (isIGST) {
+    bar.style.background = '#fff7ed'; bar.style.color = '#d97706';
+    txt.textContent = `Inter-State (${place}): IGST lagega`;
+  } else {
+    bar.style.background = '#eff6ff'; bar.style.color = '#1e40af';
+    txt.textContent = 'Intra-State: CGST + SGST lagega';
+  }
+  recalc();
 }
 
-['addSheet','paySheet'].forEach(id=>{
-  document.getElementById(id).addEventListener('click',function(e){
-    if(e.target===this)this.classList.remove('open');
+/* ── Add Item Row ──────────────────────────────────────────── */
+function addItem() {
+  const idx = itemIdx++;
+  const d   = document.createElement('div');
+  d.className = 'item-box';
+  d.id = `ib_${idx}`;
+  d.innerHTML = `
+    <div class="item-num">Item #${idx+1}</div>
+    <button type="button" class="del-btn" onclick="delItem(${idx})"><i class="bi bi-x-lg"></i></button>
+    <!-- Product search -->
+    <div class="m-fg" style="position:relative;">
+      <label class="m-label">Product / Item Name <span style="color:red">*</span></label>
+      <input type="text" name="description[]" id="desc_${idx}" class="m-input"
+             placeholder="Search product or type item…" autocomplete="off"
+             style="font-size:15px;" oninput="searchProd(${idx},this.value)" />
+      <input type="hidden" name="product_id[]" id="pid_${idx}" value="" />
+      <div class="aclist" id="ac_${idx}" style="display:none;"></div>
+    </div>
+    <!-- Qty, Rate, GST -->
+    <div class="g3 mt-2">
+      <div class="m-fg">
+        <label class="m-label">Qty</label>
+        <input type="number" name="quantity[]" id="qty_${idx}" class="m-input"
+               step="0.001" min="0" placeholder="0" oninput="recalc()" />
+      </div>
+      <div class="m-fg">
+        <label class="m-label">Rate ₹</label>
+        <input type="number" name="rate[]" id="rate_${idx}" class="m-input"
+               step="0.01" min="0" placeholder="0.00" oninput="recalc()" />
+      </div>
+      <div class="m-fg">
+        <label class="m-label">GST %</label>
+        <select name="gst_rate[]" id="gst_${idx}" class="m-select" onchange="recalc()">
+          <option value="0">0%</option><option value="0.1">0.1%</option>
+          <option value="0.25">0.25%</option><option value="1">1%</option>
+          <option value="1.5">1.5%</option><option value="3">3%</option>
+          <option value="5">5%</option><option value="6">6%</option>
+          <option value="7.5">7.5%</option><option value="9">9%</option>
+          <option value="12">12%</option><option value="14">14%</option>
+          <option value="18">18%</option><option value="28">28%</option>
+        </select>
+      </div>
+    </div>
+    <!-- Batch & Expiry -->
+    <div class="g2 mt-2">
+      <div class="m-fg">
+        <label class="m-label" style="color:#7c3aed;"><i class="bi bi-upc me-1"></i>Batch No.</label>
+        <input type="text" name="batch_no[]" class="m-input"
+               placeholder="e.g. B2024-01" autocapitalize="characters" />
+      </div>
+      <div class="m-fg">
+        <label class="m-label" style="color:#dc2626;"><i class="bi bi-calendar-x me-1"></i>Expiry Date</label>
+        <input type="date" name="expiry_date[]" class="m-input" />
+      </div>
+    </div>
+    <div class="item-tax-preview" id="tp_${idx}"></div>`;
+  document.getElementById('itemsContainer').appendChild(d);
+  document.getElementById(`desc_${idx}`).focus();
+  recalc();
+}
+
+function delItem(idx) {
+  const el = document.getElementById(`ib_${idx}`);
+  if (el) el.remove();
+  recalc();
+}
+
+/* ── Product Search ────────────────────────────────────────── */
+function searchProd(idx, q) {
+  clearTimeout(timers[idx]);
+  const ac = document.getElementById(`ac_${idx}`);
+  if (!ac || !q.trim()) { if(ac) ac.style.display='none'; return; }
+  timers[idx] = setTimeout(async () => {
+    try {
+      const r = await fetch(`${PROD_API}?q=${encodeURIComponent(q)}`);
+      const list = await r.json();
+      if (!list.length) { ac.style.display='none'; return; }
+      ac.innerHTML = list.slice(0,8).map(p => {
+        const sub = [
+          p.rate ? `Cost: Rs.${parseFloat(p.rate).toFixed(2)}` : null,
+          p.gst_rate != null ? `GST: ${p.gst_rate}%` : null,
+          (p.stock_qty != null) ? `Stock: ${p.stock_qty} ${p.unit||''}`.trim() : null
+        ].filter(Boolean).join(' | ');
+        return `<div class="acitem" onclick='pickProd(${idx},${JSON.stringify(p)})'>
+          <div class="acname">${p.name}</div>
+          ${sub ? `<div class="acsub">${sub}</div>` : ''}
+        </div>`;
+      }).join('');
+      ac.style.display = 'block';
+    } catch(e) { if(ac) ac.style.display='none'; }
+  }, 220);
+}
+
+function pickProd(idx, p) {
+  document.getElementById(`desc_${idx}`).value = p.name;
+  document.getElementById(`pid_${idx}`).value  = p.id || '';
+  const gEl = document.getElementById(`gst_${idx}`);
+  if (gEl && p.gst_rate != null) {
+    const allRates = ['0','0.1','0.25','1','1.5','3','5','6','7.5','9','12','14','18','28'];
+    const exact = allRates.find(r => parseFloat(r) === parseFloat(p.gst_rate));
+    gEl.value = exact !== undefined ? exact : allRates.reduce((a,b) =>
+      Math.abs(+b-p.gst_rate) < Math.abs(+a-p.gst_rate) ? b : a);
+  }
+  const rEl = document.getElementById(`rate_${idx}`);
+  if (rEl && p.rate) rEl.value = parseFloat(p.rate).toFixed(2);
+  document.getElementById(`ac_${idx}`).style.display = 'none';
+  recalc();
+}
+
+document.addEventListener('click', e => {
+  if (!e.target.closest('.item-box'))
+    document.querySelectorAll('.aclist').forEach(el => el.style.display='none');
+});
+
+/* ── Recalculate ───────────────────────────────────────────── */
+function fmt(n) { return '₹' + parseFloat(n||0).toFixed(2); }
+function recalc() {
+  let totTax=0, totCgst=0, totSgst=0, totIgst=0;
+  document.querySelectorAll('.item-box').forEach(box => {
+    const idx  = box.id.replace('ib_','');
+    const qty  = parseFloat(document.getElementById(`qty_${idx}`)?.value)  || 0;
+    const rate = parseFloat(document.getElementById(`rate_${idx}`)?.value) || 0;
+    const gst  = parseFloat(document.getElementById(`gst_${idx}`)?.value)  || 0;
+    const tp   = document.getElementById(`tp_${idx}`);
+    if (!qty || !rate) { if(tp){tp.style.display='none';tp.textContent='';} return; }
+    const taxable = qty * rate;
+    const cgst    = isIGST ? 0 : taxable * gst / 200;
+    const sgst    = isIGST ? 0 : taxable * gst / 200;
+    const igst    = isIGST ? taxable * gst / 100 : 0;
+    const total   = taxable + cgst + sgst + igst;
+    totTax  += taxable; totCgst += cgst; totSgst += sgst; totIgst += igst;
+    if (tp) {
+      tp.style.display = 'block';
+      tp.textContent = isIGST
+        ? `Taxable: ${fmt(taxable)} | IGST ${gst}%: ${fmt(igst)} | Total: ${fmt(total)}`
+        : `Taxable: ${fmt(taxable)} | CGST: ${fmt(cgst)} | SGST: ${fmt(sgst)} | Total: ${fmt(total)}`;
+    }
+  });
+  const totalTax = totCgst + totSgst + totIgst;
+  const grand    = totTax + totalTax;
+  const sumEl    = document.getElementById('gstSummary');
+  if (grand > 0) {
+    sumEl.style.display = 'block';
+    document.getElementById('sTaxable').textContent = fmt(totTax);
+    document.getElementById('sCgst').textContent    = fmt(totCgst);
+    document.getElementById('sSgst').textContent    = fmt(totSgst);
+    document.getElementById('sIgst').textContent    = fmt(totIgst);
+    document.getElementById('sTax').textContent     = fmt(totalTax);
+    document.getElementById('sTotal').textContent   = fmt(grand);
+    document.getElementById('sCgstRow').style.display = isIGST ? 'none' : 'flex';
+    document.getElementById('sSgstRow').style.display = isIGST ? 'none' : 'flex';
+    document.getElementById('sIgstRow').style.display = isIGST ? 'flex' : 'none';
+  } else { sumEl.style.display = 'none'; }
+}
+
+/* ── Show Items ────────────────────────────────────────────── */
+async function showItems(purchaseId) {
+  const el = document.getElementById(`items_${purchaseId}`);
+  if (el.style.display !== 'none') { el.style.display = 'none'; return; }
+  el.style.display = 'block';
+  el.innerHTML = '<span style="color:#64748b;font-size:12px;">Loading…</span>';
+  try {
+    const r    = await fetch(`/purchases/${purchaseId}/items`);
+    const list = await r.json();
+    if (!list.length) { el.innerHTML = '<span style="color:#64748b;font-size:12px;">No items recorded</span>'; return; }
+    el.innerHTML = list.map(it => {
+      const batch = it.batch_no ? `<span style="background:#eff6ff;color:var(--accent);border-radius:5px;padding:1px 6px;font-size:10px;font-weight:700;">Batch: ${it.batch_no}</span>` : '';
+      const exp   = it.expiry_date ? `<span style="background:#fef2f2;color:#dc2626;border-radius:5px;padding:1px 6px;font-size:10px;font-weight:700;margin-left:4px;">Exp: ${it.expiry_date}</span>` : '';
+      return `<div style="padding:6px 0;border-bottom:1px solid #e2e8f0;">
+        <div style="font-weight:700;font-size:12px;">${it.description||it.product_name||'—'}</div>
+        <div style="font-size:11px;color:#64748b;margin-top:2px;">
+          Qty: ${it.quantity} × ₹${parseFloat(it.rate||0).toFixed(2)} | GST: ${it.gst_rate||0}% | Total: ₹${parseFloat(it.total_amount||0).toFixed(2)}
+        </div>
+        <div style="margin-top:3px;">${batch}${exp}</div>
+      </div>`;
+    }).join('') + '<div style="text-align:right;margin-top:4px;"><a href="{{ url_for("batch_list") }}" style="font-size:11px;color:var(--accent);font-weight:700;">View Batch Tracker →</a></div>';
+  } catch(e) { el.innerHTML = '<span style="color:#dc2626;font-size:12px;">Could not load items</span>'; }
+}
+
+/* ── Sheets ────────────────────────────────────────────────── */
+function openAddSheet() {
+  document.getElementById('addSheet').classList.add('open');
+  if (!document.querySelector('.item-box')) addItem();
+}
+function closeAddSheet() { document.getElementById('addSheet').classList.remove('open'); }
+
+function openPaySheet(id, vendor, bill, due) {
+  document.getElementById('payInfo').innerHTML =
+    `<strong>${vendor}</strong> &nbsp;·&nbsp; Bill: ${bill||'—'}<br>
+     <span style="color:#dc2626;font-weight:700;">Due: ₹${due.toFixed(2)}</span>`;
+  document.getElementById('payForm').action = `/purchases/${id}/payment`;
+  document.getElementById('payAmt').value   = due.toFixed(2);
+  document.getElementById('paySheet').classList.add('open');
+}
+function closePaySheet() { document.getElementById('paySheet').classList.remove('open'); }
+
+['addSheet','paySheet'].forEach(id => {
+  document.getElementById(id).addEventListener('click', function(e) {
+    if (e.target === this) this.classList.remove('open');
   });
 });
 
-document.getElementById('addForm').addEventListener('submit',function(){
-  const btn=document.getElementById('addBtn');
-  btn.innerHTML='<span class="spinner-border spinner-border-sm me-2"></span>Saving...';
-  btn.disabled=true;
-});
-document.getElementById('payForm').addEventListener('submit',function(){
-  const btn=document.getElementById('payBtn');
-  btn.innerHTML='<span class="spinner-border spinner-border-sm me-2"></span>Recording...';
-  btn.disabled=true;
+document.getElementById('addForm').addEventListener('submit', function() {
+  const btn = document.getElementById('addBtn');
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Saving…';
+  btn.disabled = true;
 });
 </script>
 {% endblock %}

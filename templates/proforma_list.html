@@ -1,0 +1,102 @@
+{% extends 'base.html' %}
+{% block title %}Sales Quotations{% endblock %}
+{% block page_title %}Sales Quotations / Proforma Invoices{% endblock %}
+
+{% block head %}
+<style>
+  .stats-strip{display:flex;gap:14px;flex-wrap:wrap;margin-bottom:18px;}
+  .sstat{background:white;border:1.5px solid var(--border);border-radius:12px;padding:14px 18px;display:flex;align-items:center;gap:12px;flex:1;min-width:160px;}
+  .sstat-icon{width:38px;height:38px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px;}
+  .sstat-label{font-size:11px;color:var(--text-muted);font-weight:700;text-transform:uppercase;}
+  .sstat-val{font-size:20px;font-weight:800;color:var(--text-main);}
+  .table-wrap{background:white;border:1.5px solid var(--border);border-radius:14px;overflow:hidden;box-shadow:var(--shadow);}
+  .table-head-bar{padding:13px 20px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border);background:#f8fafc;}
+  .table-head-title{font-weight:800;font-size:14px;display:flex;align-items:center;gap:8px;}
+  .table-custom{width:100%;border-collapse:collapse;font-size:13px;}
+  .table-custom thead th{padding:10px 14px;background:#f1f5f9;font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;color:#64748b;border-bottom:1.5px solid var(--border);white-space:nowrap;}
+  .table-custom tbody tr{border-bottom:1px solid #f1f5f9;transition:background .1s;}
+  .table-custom tbody tr:hover{background:#f8fafc;}
+  .table-custom tbody td{padding:11px 14px;vertical-align:middle;}
+  .badge-custom{border-radius:20px;padding:3px 10px;font-size:11px;font-weight:800;}
+  .badge-active{background:#ecfdf5;color:#059669;}
+  .badge-draft{background:#f1f5f9;color:#94a3b8;}
+  .tbl-btn{background:#f8fafc;border:1.5px solid var(--border);border-radius:8px;padding:5px 10px;font-size:12px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;gap:4px;color:#475569;text-decoration:none;white-space:nowrap;}
+  .tbl-btn:hover{background:#e2e8f0;}
+</style>
+{% endblock %}
+
+{% block topbar_actions %}
+<a href="{{ url_for('new_proforma') }}" class="btn-primary-custom">
+  <i class="bi bi-plus-lg"></i> New Quotation
+</a>
+{% endblock %}
+
+{% block content %}
+<!-- Stats -->
+<div class="stats-strip">
+  <div class="sstat">
+    <div class="sstat-icon" style="background:#eff6ff;color:#2563eb;"><i class="bi bi-file-earmark-text"></i></div>
+    <div><div class="sstat-label">Total Quotations</div><div class="sstat-val">{{ proformas|length }}</div></div>
+  </div>
+  <div class="sstat">
+    <div class="sstat-icon" style="background:#ecfdf5;color:#059669;"><i class="bi bi-currency-rupee"></i></div>
+    <div><div class="sstat-label">Total Value</div>
+    <div class="sstat-val">₹ {{ "%.0f"|format(proformas|sum(attribute='grand_total')) }}</div></div>
+  </div>
+</div>
+
+<div class="table-wrap">
+  <div class="table-head-bar">
+    <div class="table-head-title"><i class="bi bi-file-earmark-text" style="color:#7c3aed;"></i> All Quotations</div>
+    <a href="{{ url_for('new_proforma') }}" class="tbl-btn" style="background:#eff6ff;color:#7c3aed;">
+      <i class="bi bi-plus"></i> New
+    </a>
+  </div>
+  {% if proformas %}
+  <div style="overflow-x:auto;">
+    <table class="table-custom">
+      <thead>
+        <tr>
+          <th>Quotation No.</th><th>Date</th><th>Buyer</th>
+          <th style="text-align:right;">Grand Total</th>
+          <th>Status</th><th>Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for q in proformas %}
+        <tr>
+          <td><div style="font-weight:800;color:#7c3aed;">{{ q.quotation_no }}</div></td>
+          <td style="color:#64748b;font-size:12.5px;">{{ q.quotation_date }}</td>
+          <td>
+            <div style="font-weight:700;">{{ q.buyer_name or q.buyer_display or '—' }}</div>
+            {% if q.buyer_gstin %}<div style="font-size:11px;color:#94a3b8;">{{ q.buyer_gstin }}</div>{% endif %}
+          </td>
+          <td style="text-align:right;font-weight:800;font-size:14px;">₹ {{ "%.2f"|format(q.grand_total) }}</td>
+          <td><span class="badge-custom badge-{{ 'active' if q.status=='Active' else 'draft' }}">{{ q.status }}</span></td>
+          <td>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;">
+              <a href="{{ url_for('proforma_detail', proforma_id=q.id) }}" class="tbl-btn">
+                <i class="bi bi-eye"></i> View
+              </a>
+              <a href="{{ url_for('proforma_pdf', proforma_id=q.id) }}" class="tbl-btn" style="color:#059669;">
+                <i class="bi bi-file-earmark-pdf"></i> PDF
+              </a>
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div style="text-align:center;padding:80px 20px;color:#94a3b8;">
+    <i class="bi bi-file-earmark-text" style="font-size:48px;display:block;margin-bottom:14px;opacity:.4;"></i>
+    <div style="font-weight:800;font-size:16px;color:#64748b;">Koi quotation nahi hai</div>
+    <p style="margin-top:6px;">Naya quotation banane ke liye "New Quotation" click karein.</p>
+    <a href="{{ url_for('new_proforma') }}" class="btn-primary-custom" style="display:inline-flex;margin-top:12px;text-decoration:none;">
+      <i class="bi bi-plus-lg"></i> New Quotation
+    </a>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

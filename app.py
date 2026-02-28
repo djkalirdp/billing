@@ -368,6 +368,7 @@ def billing():
     rates           = request.form.getlist('rate[]')
     discounts       = request.form.getlist('discount_percent[]')
     amounts         = request.form.getlist('amount[]')
+    batch_nos       = request.form.getlist('batch_no[]')
 
     items_data = []
 
@@ -394,6 +395,7 @@ def billing():
             var_ids    = request.form.getlist('variation_id[]')
             var_id_raw = var_ids[i].strip() if i < len(var_ids) else ''
             var_id     = int(var_id_raw) if var_id_raw and var_id_raw.isdigit() and int(var_id_raw) > 0 else None
+            batch_no   = batch_nos[i].strip() if i < len(batch_nos) else ''
             items_data.append({
                 'product_id'      : pid,
                 'variation_id'    : var_id,
@@ -403,6 +405,7 @@ def billing():
                 'quantity'        : qty,
                 'rate'            : rate,
                 'discount_percent': disc,
+                'batch_no'        : batch_no,
                 'amount'          : round(amount, 4),
             })
         except (ValueError, IndexError, AttributeError):
@@ -557,6 +560,23 @@ def product_search_api():
         return jsonify([])
 
 
+@app.route('/products/<int:product_id>/batches')
+@login_required
+def product_batches_api(product_id):
+    """JSON API — active batches for a product (for billing batch selection)."""
+    try:
+        batches = db.get_batches_for_product(product_id=product_id, include_expired=False)
+        return jsonify([{
+            'batch_no'    : b['batch_no'],
+            'expiry_date' : b['expiry_date'] or '',
+            'balance'     : round(float(b['balance'] or 0), 3),
+            'unit'        : b['unit'] or '',
+        } for b in batches if float(b.get('balance') or 0) > 0])
+    except Exception as e:
+        app.logger.error(f"product_batches_api error: {e}")
+        return jsonify([])
+
+
 # ─────────────────────────────────────────────
 #  INVOICES / REPORTS
 # ─────────────────────────────────────────────
@@ -606,7 +626,7 @@ def view_invoice(invoice_id):
 @app.route('/invoices/<int:invoice_id>/pdf')
 @login_required
 def download_invoice_pdf(invoice_id):
-    """Download / reprint invoice as PDF."""
+    """Download / reprint invoice as PDF. Accepts ?size=A4|A4L|A5|A5L"""
     inv, items = db.get_full_invoice_details(invoice_id)
     if not inv:
         flash('Invoice not found.', 'danger')
@@ -616,19 +636,20 @@ def download_invoice_pdf(invoice_id):
         flash('Cannot download PDF for a cancelled invoice.', 'warning')
         return redirect(url_for('invoices'))
 
-    settings  = load_settings()
-    paid      = float(inv.get('paid_amount')      or 0)
-    prev_bal  = float(inv.get('previous_balance') or 0)
-    pdf_bytes = pdf_generator.create_invoice_pdf(
+    settings   = load_settings()
+    paid       = float(inv.get('paid_amount')      or 0)
+    prev_bal   = float(inv.get('previous_balance') or 0)
+    page_size  = request.args.get('size', 'A4').upper()
+    pdf_bytes  = pdf_generator.create_invoice_pdf(
         inv, items, settings,
         previous_balance=prev_bal,
         paid_amount=paid,
-        save_to_disk=True
+        save_to_disk=(page_size == 'A4'),
+        page_size=page_size
     )
-    # Sanitize filename — remove chars invalid in filenames (e.g. / : * in prefix)
     safe_name = "".join(c if c.isalnum() or c in ('-', '_', '.') else '_'
                         for c in str(inv['invoice_no']))
-    filename  = f"{safe_name}.pdf"
+    filename  = f"{safe_name}_{page_size}.pdf"
     return pdf_generator.get_pdf_response(pdf_bytes, filename)
 
 
@@ -695,6 +716,45 @@ def products():
     return mrender('products.html', products=prod_list, search=search)
 
 
+
+
+@app.route('/products/rate-list')
+@login_required
+def product_rate_list():
+    """Product Rate List — shows all products + variations with HSN, cost, rate, GST, MRP, stock."""
+    q = request.args.get('q', '').strip()
+    conn = db.get_db_connection()
+    c = conn.cursor()
+
+    like = f'%{q}%'
+    where = "WHERE p.name LIKE ? OR p.hsn LIKE ?" if q else ""
+    params = (like, like) if q else ()
+
+    rows = c.execute(f"""
+        SELECT p.*,
+               COALESCE(p.selling_price, p.rate) AS sp,
+               ROUND(COALESCE(p.selling_price, p.rate) * (1 + p.gst_rate/100.0), 2) AS price_with_gst
+        FROM products p
+        {where}
+        ORDER BY p.name
+    """, params).fetchall()
+
+    products_list = []
+    for r in rows:
+        prod = dict(r)
+        # Fetch variations for this product
+        vars_rows = c.execute("""
+            SELECT * FROM product_variations WHERE product_id = ? ORDER BY variation_name
+        """, (prod['id'],)).fetchall()
+        prod['variations'] = [dict(v) for v in vars_rows]
+        products_list.append(prod)
+
+    conn.close()
+    settings = load_settings()
+    return mrender('product_rate_list.html',
+                   products=products_list, q=q,
+                   settings=settings)
+
 @app.route('/products/add', methods=['GET', 'POST'])
 @admin_required
 def add_product():
@@ -704,6 +764,8 @@ def add_product():
             name        = f.get('name', '').strip()
             added_stock = float(f.get('add_stock', 0) or 0)
             purch_rate  = float(f.get('purchase_rate', 0) or 0)
+            batch_no    = f.get('batch_no', '').strip()
+            expiry_date = f.get('expiry_date', '').strip()
 
             if not name:
                 flash('Product name is required.', 'danger')
@@ -720,6 +782,17 @@ def add_product():
                 'rate'           : purch_rate,
             })
             if new_id:
+                # Record batch_tracking entry if batch_no provided
+                if batch_no and added_stock > 0:
+                    db.add_batch_tracking_entry({
+                        'product_id'  : new_id,
+                        'batch_no'    : batch_no,
+                        'expiry_date' : expiry_date,
+                        'qty_in'      : added_stock,
+                        'qty_out'     : 0,
+                        'tracking_date': datetime.now().strftime('%Y-%m-%d'),
+                        'notes'       : 'Opening stock entry',
+                    })
                 flash(f'Product "{name}" added successfully!', 'success')
             else:
                 flash('Product name already exists.', 'danger')
@@ -761,6 +834,20 @@ def edit_product(product_id):
                 new_qty   = old_qty + added_stock
                 update_data['stock_qty'] = new_qty
                 update_data['rate']      = round(total_val / new_qty, 2) if new_qty > 0 else purch_rate
+
+                # Record batch_tracking entry if batch_no given
+                batch_no    = f.get('batch_no', '').strip()
+                expiry_date = f.get('expiry_date', '').strip()
+                if batch_no:
+                    db.add_batch_tracking_entry({
+                        'product_id'   : product_id,
+                        'batch_no'     : batch_no,
+                        'expiry_date'  : expiry_date,
+                        'qty_in'       : added_stock,
+                        'qty_out'      : 0,
+                        'tracking_date': datetime.now().strftime('%Y-%m-%d'),
+                        'notes'        : f'Stock added via product edit',
+                    })
             else:
                 update_data['stock_qty'] = product['stock_qty']
                 update_data['rate']      = product['rate']
@@ -935,6 +1022,46 @@ def delete_buyer(buyer_id):
     return redirect(url_for('buyers'))
 
 
+
+
+@app.route('/payments/<int:payment_id>/delete', methods=['POST'])
+@admin_required
+def delete_payment(payment_id):
+    """Delete a customer payment entry from ledger."""
+    pay = db.get_customer_payment(payment_id)
+    if not pay:
+        flash('Payment not found.', 'danger')
+        return redirect(url_for('buyers'))
+    buyer_id = pay['buyer_id']
+    if db.delete_customer_payment(payment_id):
+        flash('Payment entry deleted.', 'success')
+    else:
+        flash('Failed to delete payment.', 'danger')
+    return redirect(url_for('buyer_ledger', buyer_id=buyer_id))
+
+
+@app.route('/payments/<int:payment_id>/edit', methods=['POST'])
+@admin_required
+def edit_payment(payment_id):
+    """Edit a customer payment entry."""
+    pay = db.get_customer_payment(payment_id)
+    if not pay:
+        flash('Payment not found.', 'danger')
+        return redirect(url_for('buyers'))
+    buyer_id = pay['buyer_id']
+    f = request.form
+    data = {
+        'payment_date': f.get('payment_date', pay['payment_date']),
+        'amount'      : f.get('amount', pay['amount']),
+        'payment_mode': f.get('payment_mode', pay['payment_mode']),
+        'notes'       : f.get('notes', ''),
+    }
+    if db.update_customer_payment(payment_id, data):
+        flash('Payment updated successfully.', 'success')
+    else:
+        flash('Failed to update payment.', 'danger')
+    return redirect(url_for('buyer_ledger', buyer_id=buyer_id))
+
 @app.route('/buyers/<int:buyer_id>/ledger')
 @login_required
 def buyer_ledger(buyer_id):
@@ -968,11 +1095,14 @@ def buyer_ledger_pdf(buyer_id):
     start = request.args.get('start', (datetime.now() - timedelta(days=30)).strftime('%Y-%m-%d'))
     end   = request.args.get('end',   datetime.now().strftime('%Y-%m-%d'))
 
+    page_size   = request.args.get('size', 'A4').upper()
     ledger_data, _ = db.get_buyer_ledger(buyer_id, start, end)
     settings  = load_settings()
-    pdf_bytes = pdf_generator.create_ledger_pdf(dict(buyer), ledger_data, start, end, settings)
+    pdf_bytes = pdf_generator.create_ledger_pdf(
+        dict(buyer), ledger_data, start, end, settings, page_size=page_size
+    )
     safe_name = "".join(c for c in buyer['name'] if c.isalnum() or c in ' _').strip()
-    return pdf_generator.get_pdf_response(pdf_bytes, f"Ledger_{safe_name}.pdf")
+    return pdf_generator.get_pdf_response(pdf_bytes, f"Ledger_{safe_name}_{page_size}.pdf")
 
 
 @app.route('/buyers/<int:buyer_id>/payment', methods=['POST'])
@@ -1073,9 +1203,17 @@ def delete_vendor(vendor_id):
 @app.route('/purchases')
 @admin_required
 def purchases():
-    purchase_list = db.get_all_purchases_with_vendor()
-    vendors       = db.get_all('vendors')
-    return mrender('purchases.html', purchases=purchase_list, vendors=vendors)
+    purchase_list   = db.get_all_purchases_with_vendor()
+    vendors         = db.get_all('vendors')
+    expiring        = db.get_expiring_batches(days_ahead=30)
+    settings        = load_settings()
+    today_str       = datetime.now().strftime('%Y-%m-%d')
+    return mrender('purchases.html',
+                   purchases=purchase_list,
+                   vendors=vendors,
+                   expiring=expiring,
+                   settings=settings,
+                   today=today_str)
 
 
 @app.route('/purchases/add', methods=['POST'])
@@ -1084,38 +1222,231 @@ def add_purchase():
     f = request.form
     try:
         vendor_id    = int(f.get('vendor_id', 0))
-        total_amount = float(f.get('total_amount', 0))
-        amount_paid  = float(f.get('amount_paid', 0))
         purch_date   = f.get('purchase_date', datetime.now().strftime('%Y-%m-%d'))
-        bill_no      = f.get('bill_no', '')
+        bill_no      = f.get('bill_no', '').strip()
+        amount_paid  = float(f.get('amount_paid', 0))
 
         if vendor_id <= 0:
             flash('Please select a vendor.', 'danger')
             return redirect(url_for('purchases'))
 
-        pid = db.add_record('purchases', {
+        # ── Parse line items ──────────────────────────────────────
+        descriptions  = f.getlist('description[]')
+        product_ids   = f.getlist('product_id[]')
+        quantities    = f.getlist('quantity[]')
+        rates         = f.getlist('rate[]')
+        gst_rates     = f.getlist('gst_rate[]')
+        batch_nos     = f.getlist('batch_no[]')
+        expiry_dates  = f.getlist('expiry_date[]')
+
+        # Get company state to determine IGST/CGST
+        settings      = load_settings()
+        company_state = settings.get('company_info', {}).get('state', '').strip().lower()
+        place_of_supply = f.get('place_of_supply', '').strip()
+        is_igst       = (place_of_supply.strip().lower() != company_state) if place_of_supply else False
+        reverse_charge = f.get('reverse_charge') == '1'
+
+        items_data   = []
+        total_taxable = 0.0
+        total_cgst   = 0.0
+        total_sgst   = 0.0
+        total_igst   = 0.0
+
+        for i, desc in enumerate(descriptions):
+            if not desc.strip():
+                continue
+            qty      = float(quantities[i]) if i < len(quantities) else 0
+            rate     = float(rates[i])      if i < len(rates)      else 0
+            gst_rate = float(gst_rates[i])  if i < len(gst_rates)  else 0
+            if qty <= 0 or rate <= 0:
+                continue
+
+            taxable = round(qty * rate, 2)
+            cgst    = round(taxable * gst_rate / 200, 2) if not is_igst else 0
+            sgst    = round(taxable * gst_rate / 200, 2) if not is_igst else 0
+            igst    = round(taxable * gst_rate / 100, 2) if is_igst     else 0
+
+            total_taxable += taxable
+            total_cgst    += cgst
+            total_sgst    += sgst
+            total_igst    += igst
+
+            items_data.append({
+                'product_id' : int(product_ids[i]) if i < len(product_ids) and product_ids[i].strip().isdigit() else None,
+                'description': desc.strip(),
+                'batch_no'   : batch_nos[i].strip()   if i < len(batch_nos)    else '',
+                'expiry_date': expiry_dates[i].strip() if i < len(expiry_dates) else '',
+                'quantity'   : qty,
+                'rate'       : rate,
+                'gst_rate'   : gst_rate,
+                'is_igst'    : is_igst,
+            })
+
+        total_tax    = total_cgst + total_sgst + total_igst
+        total_amount = round(total_taxable + total_tax, 2)
+
+        purchase_data = {
             'vendor_id'     : vendor_id,
             'bill_no'       : bill_no,
             'purchase_date' : purch_date,
+            'taxable_amount': round(total_taxable, 2),
+            'gst_rate'      : 0,   # mixed rates — individual items have rates
+            'cgst_amount'   : round(total_cgst, 2),
+            'sgst_amount'   : round(total_sgst, 2),
+            'igst_amount'   : round(total_igst, 2),
+            'total_tax'     : round(total_tax, 2),
             'total_amount'  : total_amount,
-            'amount_paid'   : 0,
-            'payment_status': 'Unpaid',
+            'amount_paid'   : amount_paid,
+            'place_of_supply': place_of_supply,
+            'reverse_charge' : reverse_charge,
             'notes'         : f.get('notes', ''),
-        })
+            'purchase_type' : f.get('purchase_type', 'Resale'),  # Resale or Raw Material
+        }
 
-        if pid and amount_paid > 0:
-            db.add_purchase_payment(pid, {
-                'payment_date': purch_date,
-                'amount'      : amount_paid,
-                'payment_mode': 'Cash',
-                'reference_no': '',
-            })
+        if items_data:
+            pid = db.save_purchase_with_items(purchase_data, items_data)
+        else:
+            # Fallback: old simple form (no items)
+            manual_total = float(f.get('total_amount', total_amount))
+            manual_gst   = float(f.get('gst_amount', 0))
+            purchase_data['total_amount']  = manual_total
+            purchase_data['total_tax']     = manual_gst
+            pid = db.save_purchase_with_items(purchase_data, [])
 
-        flash('Purchase bill saved!', 'success')
-    except ValueError:
-        flash('Invalid number in form.', 'danger')
+        if pid:
+            if amount_paid > 0:
+                db.add_purchase_payment(pid, {
+                    'payment_date': purch_date,
+                    'amount'      : amount_paid,
+                    'payment_mode': f.get('payment_mode', 'Cash'),
+                    'reference_no': f.get('ref_no', ''),
+                })
+            flash('Purchase bill saved with GST details!', 'success')
+        else:
+            flash('Failed to save purchase bill.', 'danger')
+
+    except (ValueError, IndexError) as e:
+        flash(f'Invalid data in form: {e}', 'danger')
 
     return redirect(url_for('purchases'))
+
+
+
+@app.route('/purchases/new')
+@admin_required
+def new_purchase():
+    """Full-page form to add a new purchase bill."""
+    vendors  = db.get_all('vendors')
+    products = db.get_all('products')
+    settings = load_settings()
+    today_str = datetime.now().strftime('%Y-%m-%d')
+    return mrender('purchase_form.html',
+                   purchase=None, items=[],
+                   vendors=vendors, products=products,
+                   settings=settings, today=today_str,
+                   action='New')
+
+
+@app.route('/purchases/<int:purchase_id>/edit', methods=['GET', 'POST'])
+@admin_required
+def edit_purchase(purchase_id):
+    """Full-page form to edit an existing purchase bill."""
+    purchase = db.get_purchase_with_vendor(purchase_id)
+    if not purchase:
+        flash('Purchase bill not found.', 'danger')
+        return redirect(url_for('purchases'))
+
+    if request.method == 'POST':
+        f = request.form
+        try:
+            vendor_id   = int(f.get('vendor_id', purchase['vendor_id']))
+            purch_date  = f.get('purchase_date', purchase['purchase_date'])
+            bill_no     = f.get('bill_no', '').strip()
+
+            settings_d    = load_settings()
+            company_state = settings_d.get('company_info', {}).get('state', '').strip().lower()
+            place_of_supply = f.get('place_of_supply', '').strip()
+            is_igst = (place_of_supply.strip().lower() != company_state) if place_of_supply else False
+            reverse_charge = f.get('reverse_charge') == '1'
+            purchase_type  = f.get('purchase_type', 'Resale')
+
+            descriptions = f.getlist('description[]')
+            product_ids  = f.getlist('product_id[]')
+            quantities   = f.getlist('quantity[]')
+            rates        = f.getlist('rate[]')
+            gst_rates    = f.getlist('gst_rate[]')
+            batch_nos    = f.getlist('batch_no[]')
+            expiry_dates = f.getlist('expiry_date[]')
+
+            items_data    = []
+            total_taxable = total_cgst = total_sgst = total_igst = 0.0
+
+            for i, desc in enumerate(descriptions):
+                if not desc.strip(): continue
+                qty  = float(quantities[i]) if i < len(quantities) else 0
+                rate = float(rates[i])      if i < len(rates)      else 0
+                gst  = float(gst_rates[i])  if i < len(gst_rates)  else 0
+                if qty <= 0 or rate <= 0: continue
+
+                taxable = round(qty * rate, 2)
+                cgst = round(taxable * gst / 200, 2) if not is_igst else 0
+                sgst = round(taxable * gst / 200, 2) if not is_igst else 0
+                igst = round(taxable * gst / 100, 2) if is_igst     else 0
+
+                total_taxable += taxable
+                total_cgst += cgst; total_sgst += sgst; total_igst += igst
+
+                items_data.append({
+                    'product_id'   : int(product_ids[i]) if i < len(product_ids) and product_ids[i].strip().isdigit() else None,
+                    'description'  : desc.strip(),
+                    'batch_no'     : batch_nos[i].strip()    if i < len(batch_nos)    else '',
+                    'expiry_date'  : expiry_dates[i].strip() if i < len(expiry_dates) else '',
+                    'quantity'     : qty, 'rate': rate, 'gst_rate': gst,
+                    'purchase_type': purchase_type,
+                })
+
+            total_tax    = round(total_cgst + total_sgst + total_igst, 2)
+            total_amount = round(total_taxable + total_tax, 2)
+            amount_paid  = float(f.get('amount_paid', purchase.get('amount_paid', 0)) or 0)
+
+            upd = {
+                'vendor_id'      : vendor_id,
+                'bill_no'        : bill_no,
+                'purchase_date'  : purch_date,
+                'taxable_amount' : round(total_taxable, 2),
+                'cgst_amount'    : round(total_cgst, 2),
+                'sgst_amount'    : round(total_sgst, 2),
+                'igst_amount'    : round(total_igst, 2),
+                'total_tax'      : total_tax,
+                'total_amount'   : total_amount,
+                'amount_paid'    : amount_paid,
+                'place_of_supply': place_of_supply,
+                'reverse_charge' : reverse_charge,
+                'notes'          : f.get('notes', ''),
+                'purchase_type'  : purchase_type,
+            }
+
+            db.update_purchase_header(purchase_id, upd)
+            db.delete_purchase_items(purchase_id)
+            for item in items_data:
+                db.save_purchase_item(purchase_id, item, is_igst)
+
+            flash('Purchase bill updated successfully!', 'success')
+            return redirect(url_for('purchases'))
+
+        except (ValueError, IndexError) as e:
+            flash(f'Error updating purchase: {e}', 'danger')
+
+    vendors  = db.get_all('vendors')
+    products = db.get_all('products')
+    items    = db.get_purchase_items(purchase_id)
+    settings = load_settings()
+    today_str = datetime.now().strftime('%Y-%m-%d')
+    return mrender('purchase_form.html',
+                   purchase=purchase, items=items,
+                   vendors=vendors, products=products,
+                   settings=settings, today=today_str,
+                   action='Edit')
 
 
 @app.route('/purchases/<int:purchase_id>/payment', methods=['POST'])
@@ -1288,6 +1619,43 @@ def server_error(e):
 
 
 # ─────────────────────────────────────────────
+#  BATCH TRACKING
+# ─────────────────────────────────────────────
+@app.route('/batches')
+@login_required
+def batch_list():
+    """All active batches with balance and expiry status."""
+    batches        = db.get_batches_for_product(include_expired=False)
+    expiring       = db.get_expiring_batches(days_ahead=30)
+    all_batches    = db.get_batches_for_product(include_expired=True)
+    return mrender('batches.html',
+                   batches=batches,
+                   expiring=expiring,
+                   all_batches=all_batches)
+
+
+@app.route('/batches/history')
+@login_required
+def batch_history():
+    """Full movement history for a batch."""
+    product_id = request.args.get('product_id', type=int)
+    batch_no   = request.args.get('batch_no', '')
+    history    = db.get_batch_history(product_id=product_id, batch_no=batch_no)
+    return mrender('batch_history.html',
+                   history=history,
+                   batch_no=batch_no,
+                   product_id=product_id)
+
+
+@app.route('/purchases/<int:purchase_id>/items')
+@login_required
+def purchase_items_view(purchase_id):
+    """View line items for a purchase bill (JSON)."""
+    items = db.get_purchase_items(purchase_id)
+    return jsonify([dict(i) for i in items])
+
+
+# ─────────────────────────────────────────────
 #  REPORTS
 # ─────────────────────────────────────────────
 @app.route('/reports')
@@ -1373,7 +1741,9 @@ def gstr3b_report():
         flash('Please provide start and end dates.', 'danger')
         return redirect(url_for('reports'))
 
-    data = db.get_gstr3b_data(start, end)
+    data     = db.get_gstr3b_data(start, end)
+    itc_data = db.get_purchase_itc_summary(start, end)
+    data['itc'] = itc_data
 
     if fmt == 'excel':
         from flask import send_file
@@ -1395,8 +1765,307 @@ def gstr3b_report():
         )
 
 
+@app.route('/reports/gstr2b')
+@login_required
+def gstr2b_report():
+    start = request.args.get('start', '')
+    end   = request.args.get('end', '')
+    fmt   = request.args.get('format', 'pdf')
+
+    if not start or not end:
+        flash('Please provide start and end dates.', 'danger')
+        return redirect(url_for('reports'))
+
+    try:
+        data = db.get_gstr2b_data(start, end)
+
+        if fmt == 'excel':
+            from flask import send_file
+            xlsx_bytes = rg.create_gstr2b_excel(data)
+            return send_file(
+                io.BytesIO(xlsx_bytes),
+                mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                as_attachment=True,
+                download_name=f'Purchase_Register_{start}_to_{end}.xlsx'
+            )
+        else:
+            from flask import send_file
+            pdf_bytes = rg.create_gstr2b_pdf(data)
+            return send_file(
+                io.BytesIO(pdf_bytes),
+                mimetype='application/pdf',
+                as_attachment=True,
+                download_name=f'Purchase_Register_{start}_to_{end}.pdf'
+            )
+    except Exception as e:
+        app.logger.error(f"GSTR-2B report error: {e}", exc_info=True)
+        flash(f'Report generation error: {e}', 'danger')
+        return redirect(url_for('reports'))
+
+
 # ─────────────────────────────────────────────
 #  ENTRY POINT
+
+# ══════════════════════════════════════════════════════════════
+#  PROFORMA INVOICE / SALES QUOTATION ROUTES
+# ══════════════════════════════════════════════════════════════
+
+@app.route('/proforma')
+@login_required
+def proforma_list():
+    """List all proforma invoices / sales quotations."""
+    proformas = db.get_all_proformas()
+    today_str = datetime.now().strftime('%Y-%m-%d')
+    return mrender('proforma_list.html', proformas=proformas, today=today_str)
+
+
+@app.route('/proforma/new', methods=['GET','POST'])
+@login_required
+def new_proforma():
+    """Create a new proforma invoice / sales quotation."""
+    if request.method == 'POST':
+        f = request.form
+        settings_d    = load_settings()
+        company_state = settings_d.get('company_info',{}).get('state','').strip().lower()
+        buyer_state   = f.get('buyer_state','').strip()
+        is_igst       = buyer_state.strip().lower() != company_state if buyer_state else False
+
+        # Parse line items
+        descs   = f.getlist('description[]')
+        pids    = f.getlist('product_id[]')
+        hsns    = f.getlist('hsn[]')
+        qtys    = f.getlist('quantity[]')
+        rates   = f.getlist('rate[]')
+        gst_rs  = f.getlist('gst_rate[]')
+        units   = f.getlist('unit[]')
+        discs   = f.getlist('discount[]')
+
+        items        = []
+        subtotal     = 0.0
+        total_disc   = 0.0
+        total_cgst = total_sgst = total_igst = 0.0
+
+        for i, desc in enumerate(descs):
+            if not desc.strip(): continue
+            qty  = float(qtys[i])  if i < len(qtys)  else 0
+            rate = float(rates[i]) if i < len(rates)  else 0
+            gst  = float(gst_rs[i])if i < len(gst_rs) else 0
+            disc = float(discs[i]) if i < len(discs)  else 0
+            if qty <= 0: continue
+
+            gross    = round(qty * rate, 2)
+            disc_amt = round(gross * disc / 100, 2)
+            amount   = round(gross - disc_amt, 2)
+            cgst = round(amount * gst / 200, 2) if not is_igst else 0
+            sgst = round(amount * gst / 200, 2) if not is_igst else 0
+            igst = round(amount * gst / 100, 2) if is_igst     else 0
+
+            subtotal   += gross
+            total_disc += disc_amt
+            total_cgst += cgst; total_sgst += sgst; total_igst += igst
+
+            items.append({
+                'product_id'     : int(pids[i]) if i < len(pids) and pids[i].strip().isdigit() else None,
+                'description'    : desc.strip(),
+                'hsn'            : hsns[i].strip() if i < len(hsns) else '',
+                'quantity'       : qty, 'unit': units[i] if i < len(units) else '',
+                'rate'           : rate, 'gst_rate': gst,
+                'discount_percent': disc, 'amount': amount,
+            })
+
+        taxable   = round(subtotal - total_disc, 2)
+        total_gst = round(total_cgst + total_sgst + total_igst, 2)
+        freight   = float(f.get('freight', 0) or 0)
+        grand     = round(taxable + total_gst + freight, 2)
+
+        data = {
+            'quotation_no'  : db.get_next_quotation_number(),
+            'quotation_date': f.get('quotation_date', datetime.now().strftime('%Y-%m-%d')),
+            'valid_until'   : f.get('valid_until', ''),
+            'buyer_id'      : int(f.get('buyer_id') or 0) or None,
+            'buyer_name'    : f.get('buyer_name',''),
+            'buyer_address' : f.get('buyer_address',''),
+            'buyer_gstin'   : f.get('buyer_gstin',''),
+            'buyer_state'   : buyer_state,
+            'buyer_phone'   : f.get('buyer_phone',''),
+            'payment_mode'  : 'Advance',
+            'order_ref'     : f.get('order_ref',''),
+            'subtotal'      : round(subtotal,2),
+            'total_discount': round(total_disc,2),
+            'taxable_value' : taxable,
+            'total_gst'     : total_gst,
+            'total_cgst'    : round(total_cgst,2),
+            'total_sgst'    : round(total_sgst,2),
+            'total_igst'    : round(total_igst,2),
+            'freight'       : freight,
+            'round_off'     : 0,
+            'grand_total'   : grand,
+            'notes'         : f.get('notes',''),
+        }
+
+        pid = db.save_proforma(data, items)
+        if pid:
+            flash(f"Quotation {data['quotation_no']} saved!", 'success')
+            return redirect(url_for('proforma_detail', proforma_id=pid))
+        else:
+            flash('Failed to save quotation.', 'danger')
+
+    # GET
+    buyers   = db.get_all('buyers')
+    products = db.get_all('products')
+    settings = load_settings()
+    today_str= datetime.now().strftime('%Y-%m-%d')
+    next_qno = db.get_next_quotation_number()
+    return mrender('proforma_form.html',
+                   buyers=buyers, products=products,
+                   settings=settings, today=today_str,
+                   next_qno=next_qno, proforma=None)
+
+
+@app.route('/proforma/<int:proforma_id>')
+@login_required
+def proforma_detail(proforma_id):
+    """View a proforma invoice detail."""
+    proforma, items = db.get_proforma_detail(proforma_id)
+    if not proforma:
+        flash('Quotation not found.', 'danger')
+        return redirect(url_for('proforma_list'))
+    settings = load_settings()
+    return mrender('proforma_detail.html', proforma=proforma, items=items, settings=settings)
+
+
+@app.route('/proforma/<int:proforma_id>/pdf')
+@login_required
+def proforma_pdf(proforma_id):
+    """Download proforma invoice as PDF. ?size=A4|A4L|A5|A5L"""
+    proforma, items = db.get_proforma_detail(proforma_id)
+    if not proforma:
+        flash('Quotation not found.', 'danger')
+        return redirect(url_for('proforma_list'))
+
+    settings  = load_settings()
+    page_size = request.args.get('size', 'A4').upper()
+
+    # Build invoice_data-compatible dict for create_invoice_pdf
+    inv_data = {
+        'invoice_no'     : proforma['quotation_no'],
+        'quotation_no'   : proforma['quotation_no'],
+        'invoice_date'   : proforma['quotation_date'],
+        'quotation_date' : proforma['quotation_date'],
+        'valid_until'    : proforma.get('valid_until',''),
+        'buyer_name'     : proforma.get('buyer_name',''),
+        'buyer_address'  : proforma.get('buyer_address',''),
+        'buyer_gstin'    : proforma.get('buyer_gstin',''),
+        'buyer_state'    : proforma.get('buyer_state',''),
+        'payment_mode'   : 'Advance',
+        'order_ref'      : proforma.get('order_ref',''),
+        'dispatch_info'  : '',
+        'subtotal'       : proforma.get('subtotal',0),
+        'total_discount' : proforma.get('total_discount',0),
+        'taxable_value'  : proforma.get('taxable_value',0),
+        'total_gst'      : proforma.get('total_gst',0),
+        'total_cgst'     : proforma.get('total_cgst',0),
+        'total_sgst'     : proforma.get('total_sgst',0),
+        'total_igst'     : proforma.get('total_igst',0),
+        'freight'        : proforma.get('freight',0),
+        'round_off'      : proforma.get('round_off',0),
+        'grand_total'    : proforma.get('grand_total',0),
+    }
+    # Convert proforma items to invoice-item format
+    inv_items = []
+    for it in items:
+        inv_items.append({
+            'description'     : it.get('description',''),
+            'hsn'             : it.get('hsn',''),
+            'gst_rate'        : it.get('gst_rate',0),
+            'quantity'        : it.get('quantity',0),
+            'unit'            : it.get('unit',''),
+            'rate'            : it.get('rate',0),
+            'discount_percent': it.get('discount_percent',0),
+            'amount'          : it.get('amount',0),
+        })
+
+    pdf_bytes = pdf_generator.create_invoice_pdf(
+        inv_data, inv_items, settings,
+        previous_balance=0, paid_amount=0,
+        save_to_disk=False,
+        page_size=page_size,
+        is_proforma=True
+    )
+    safe_name = "".join(c if c.isalnum() or c in ('-','_') else '_'
+                        for c in proforma['quotation_no'])
+    return pdf_generator.get_pdf_response(pdf_bytes, f"{safe_name}_{page_size}.pdf")
+
+
+@app.route('/proforma/<int:proforma_id>/delete', methods=['POST'])
+@admin_required
+def delete_proforma(proforma_id):
+    """Delete a proforma invoice."""
+    if db.delete_proforma(proforma_id):
+        flash('Quotation deleted.', 'success')
+    else:
+        flash('Failed to delete quotation.', 'danger')
+    return redirect(url_for('proforma_list'))
+
+
+@app.route('/proforma/<int:proforma_id>/convert', methods=['POST'])
+@admin_required
+def convert_proforma(proforma_id):
+    """Convert a proforma to a regular Tax Invoice."""
+    proforma, items = db.get_proforma_detail(proforma_id)
+    if not proforma:
+        flash('Quotation not found.', 'danger')
+        return redirect(url_for('proforma_list'))
+
+    settings_d    = load_settings()
+    company_state = settings_d.get('company_info',{}).get('state','').strip().lower()
+    buyer_state   = (proforma.get('buyer_state') or '').strip().lower()
+    is_igst       = buyer_state != company_state if buyer_state else False
+
+    # Build inv_data
+    inv_data = {
+        'invoice_no'     : db.get_next_invoice_number(),
+        'invoice_date'   : datetime.now().strftime('%Y-%m-%d'),
+        'buyer_id'       : proforma.get('buyer_id'),
+        'payment_mode'   : request.form.get('payment_mode','Credit'),
+        'order_ref'      : proforma.get('order_ref',''),
+        'dispatch_info'  : '',
+        'subtotal'       : proforma.get('subtotal',0),
+        'total_discount' : proforma.get('total_discount',0),
+        'taxable_value'  : proforma.get('taxable_value',0),
+        'total_gst'      : proforma.get('total_gst',0),
+        'total_cgst'     : proforma.get('total_cgst',0) if not is_igst else 0,
+        'total_sgst'     : proforma.get('total_sgst',0) if not is_igst else 0,
+        'total_igst'     : proforma.get('total_igst',0) if is_igst else 0,
+        'freight'        : proforma.get('freight',0),
+        'round_off'      : 0,
+        'grand_total'    : proforma.get('grand_total',0),
+        'paid_amount'    : float(request.form.get('paid_amount',0) or 0),
+        'previous_balance': 0,
+    }
+    inv_items = []
+    for it in items:
+        inv_items.append({
+            'product_id'      : it.get('product_id'),
+            'description'     : it.get('description',''),
+            'hsn'             : it.get('hsn',''),
+            'gst_rate'        : it.get('gst_rate',0),
+            'quantity'        : it.get('quantity',0),
+            'unit'            : it.get('unit',''),
+            'rate'            : it.get('rate',0),
+            'discount_percent': it.get('discount_percent',0),
+            'amount'          : it.get('amount',0),
+        })
+
+    new_id = db.save_invoice(inv_data, inv_items, company_state)
+    if new_id:
+        flash(f"Invoice {inv_data['invoice_no']} created from quotation!", 'success')
+        return redirect(url_for('view_invoice', invoice_id=new_id))
+    else:
+        flash('Failed to convert quotation to invoice.', 'danger')
+        return redirect(url_for('proforma_detail', proforma_id=proforma_id))
+
+
 # ─────────────────────────────────────────────
 if __name__ == '__main__':
     print("=" * 60)
@@ -1404,4 +2073,4 @@ if __name__ == '__main__':
     print("  URL: http://localhost:5000")
     print("  Default Login → admin / admin123")
     print("=" * 60)
-    app.run(debug=True, host='0.0.0.0', port=8000)
+    app.run(debug=True, host='0.0.0.0', port=5000)

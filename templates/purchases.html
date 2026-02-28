@@ -1,215 +1,273 @@
 {% extends 'base.html' %}
-
 {% block title %}Purchases{% endblock %}
-{% block page_title %}Purchase Management{% endblock %}
+{% block page_title %}Purchase Bills{% endblock %}
 
 {% block head %}
 <style>
-  .page-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; }
-  @media(max-width:900px){ .page-grid{ grid-template-columns:1fr; } }
-
-  /* Add Purchase Form */
-  .add-card { background:white; border:1px solid var(--border); border-radius:var(--radius); overflow:hidden; margin-bottom:16px; }
-  .add-card-head { padding:14px 20px; border-bottom:1px solid var(--border); display:flex; align-items:center; gap:10px; }
-  .add-card-title { font-family:var(--font-head); font-size:14px; font-weight:700; }
-  .add-card-body  { padding:18px 20px; }
-  .form-grid-2 { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
-  @media(max-width:600px){ .form-grid-2{ grid-template-columns:1fr; } }
-  .fg { display:flex; flex-direction:column; gap:5px; }
-  .fg label { font-size:11px; font-weight:700; color:var(--text-muted); text-transform:uppercase; letter-spacing:.05em; }
-  .fg input,.fg select { padding:9px 12px; border:1.5px solid var(--border); border-radius:8px; font-family:var(--font-body); font-size:13.5px; background:#f8fafc; outline:none; transition:border-color .18s; width:100%; }
-  .fg input:focus,.fg select:focus { border-color:var(--accent); background:white; box-shadow:0 0 0 3px rgba(37,99,235,.1); }
-
-  /* Stats */
-  .stats-strip { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin-bottom:16px; }
-  @media(max-width:700px){ .stats-strip{ grid-template-columns:1fr; } }
-  .sstat { background:white; border:1px solid var(--border); border-radius:var(--radius-sm); padding:12px 16px; display:flex; align-items:center; gap:10px; }
-  .sstat-icon { width:36px;height:36px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0; }
-  .sstat-label { font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.04em; }
-  .sstat-val   { font-family:var(--font-head);font-size:18px;font-weight:800;color:var(--text-main); }
-
-  /* Table */
-  .table-wrap { background:white; border:1px solid var(--border); border-radius:var(--radius); overflow:hidden; }
-  .table-head-bar { padding:14px 20px; border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; }
-  .table-head-title { font-family:var(--font-head); font-size:14px; font-weight:700; }
-
-  /* Action btns */
-  .tbl-btn { padding:4px 10px; border-radius:6px; font-size:12px; font-weight:600; border:none; cursor:pointer; text-decoration:none; display:inline-flex; align-items:center; gap:4px; transition:all .18s; }
-  .tbl-btn-pay  { background:#ecfdf5;color:#059669; } .tbl-btn-pay:hover  { background:#059669;color:white; }
-  .tbl-btn-view { background:#eff6ff;color:#2563eb; } .tbl-btn-view:hover { background:#2563eb;color:white; }
-
-  /* Progress bar for payment */
-  .pay-bar-wrap { display:flex; align-items:center; gap:6px; }
-  .pay-bar { flex:1;height:5px;background:#f1f5f9;border-radius:99px;overflow:hidden;min-width:50px; }
-  .pay-bar-fill { height:100%;border-radius:99px;background:var(--success); }
-  .pay-bar-fill.partial { background:var(--warning); }
-  .pay-bar-fill.unpaid  { background:var(--danger);  }
-
-  /* Modal */
-  .modal-overlay { position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:5000;display:flex;align-items:center;justify-content:center;opacity:0;pointer-events:none;transition:opacity .2s; }
-  .modal-overlay.open { opacity:1;pointer-events:all; }
-  .modal-box { background:white;border-radius:var(--radius);padding:0;max-width:440px;width:94%;box-shadow:var(--shadow-lg);transform:translateY(20px);transition:transform .2s;overflow:hidden; }
-  .modal-overlay.open .modal-box { transform:translateY(0); }
-  .modal-head { padding:16px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;background:#f8fafc; }
-  .modal-title { font-family:var(--font-head);font-size:15px;font-weight:700;flex:1; }
-  .modal-body  { padding:20px; }
-  .modal-foot  { padding:14px 20px;border-top:1px solid var(--border);display:flex;gap:10px;justify-content:flex-end;background:#f8fafc; }
-
-  .empty-state { padding:60px;text-align:center;color:var(--text-muted); }
-  .empty-state i { font-size:48px;display:block;margin-bottom:12px;opacity:.3; }
+.stats-strip{display:flex;gap:14px;flex-wrap:wrap;margin-bottom:20px;}
+.sstat{background:white;border-radius:12px;box-shadow:var(--shadow);padding:14px 18px;display:flex;align-items:center;gap:12px;flex:1;min-width:140px;}
+.sstat-icon{width:38px;height:38px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;}
+.sstat-label{font-size:11px;color:var(--text-muted);font-weight:600;text-transform:uppercase;}
+.sstat-val{font-size:20px;font-weight:800;color:#1e293b;}
+/* Add form */
+.add-card{background:white;border-radius:14px;box-shadow:var(--shadow);overflow:hidden;margin-bottom:20px;}
+.add-card-head{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;background:#f8fafc;}
+.add-card-title{font-weight:800;font-size:15px;}
+.add-card-body{padding:20px;}
+.form-grid-2{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+.form-grid-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;}
+.fg label{font-size:12px;font-weight:700;color:#475569;display:block;margin-bottom:5px;}
+.fg input,.fg select,.fg textarea{width:100%;padding:9px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;outline:none;transition:border .2s;}
+.fg input:focus,.fg select:focus{border-color:var(--accent);}
+/* Items table inside add form */
+.items-section{background:#f8fafc;border-radius:12px;padding:14px;margin-top:10px;}
+.item-row-d{display:grid;grid-template-columns:2fr 1fr 1fr 1fr 1.5fr 1.5fr auto;gap:8px;align-items:end;margin-bottom:8px;background:white;border-radius:10px;padding:10px 12px;border:1.5px solid var(--border);}
+.item-row-d:hover{border-color:var(--accent);}
+.del-row-btn{background:#fef2f2;border:none;border-radius:8px;padding:8px 12px;color:#dc2626;cursor:pointer;font-size:14px;}
+.del-row-btn:hover{background:#fee2e2;}
+.item-preview{font-size:11px;color:#7c3aed;margin-top:3px;font-weight:600;}
+.gst-type-banner{border-radius:10px;padding:10px 14px;font-size:13px;font-weight:600;margin:8px 0;}
+.gst-summary-box{background:#eff6ff;border-radius:12px;padding:14px 18px;margin-top:12px;display:none;}
+.gst-sum-row{display:flex;justify-content:space-between;padding:4px 0;font-size:13px;border-bottom:1px solid rgba(37,99,235,.1);}
+.gst-sum-row:last-child{border:none;font-weight:800;color:#1e40af;font-size:15px;}
+/* Table */
+.table-wrap{background:white;border-radius:14px;box-shadow:var(--shadow);overflow:hidden;}
+.table-head-bar{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;background:#f8fafc;}
+.table-head-title{font-weight:800;font-size:15px;}
+.table-custom{width:100%;border-collapse:collapse;}
+.table-custom th{padding:10px 12px;font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;border-bottom:1.5px solid var(--border);background:#f8fafc;white-space:nowrap;}
+.table-custom td{padding:10px 12px;border-bottom:1px solid var(--border);font-size:13px;vertical-align:middle;}
+.table-custom tr:last-child td{border-bottom:none;}
+.table-custom tr:hover td{background:#fafafa;}
+.gst-chip{display:inline-block;background:#eff6ff;color:#2563eb;border-radius:5px;padding:1px 7px;font-size:11px;font-weight:700;margin-right:3px;}
+.igst-chip{background:#fff7ed;color:#f59e0b;}
+.rcm-chip{background:#f0fdf4;color:#059669;}
+.tbl-btn{border:none;border-radius:8px;padding:6px 12px;font-size:12px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;gap:4px;}
+.tbl-btn-pay{background:#eff6ff;color:var(--accent);}
+.tbl-btn-pay:hover{background:#dbeafe;}
+.badge-custom{display:inline-block;border-radius:6px;padding:2px 8px;font-size:11px;font-weight:700;}
+.badge-success{background:#ecfdf5;color:#059669;}
+.badge-warning{background:#fff7ed;color:#f59e0b;}
+.badge-danger{background:#fef2f2;color:#dc2626;}
+.pay-bar-wrap{width:80px;background:#f1f5f9;border-radius:99px;height:4px;display:inline-block;vertical-align:middle;}
+.pay-bar-fill{height:100%;border-radius:99px;background:#059669;}
+/* Modal */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:3000;display:none;align-items:center;justify-content:center;}
+.modal-overlay.open{display:flex;}
+.modal-box{background:white;border-radius:16px;width:480px;max-width:95vw;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.3);}
+.modal-head{padding:16px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;background:#f8fafc;}
+.modal-title{font-weight:800;font-size:15px;flex:1;}
+.modal-body{padding:20px;}
+.modal-foot{padding:14px 20px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:10px;}
+.btn-primary-custom{background:var(--accent);color:white;border:none;border-radius:10px;padding:10px 20px;font-size:13px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;gap:6px;}
+.btn-outline-custom{background:white;color:var(--accent);border:1.5px solid var(--accent);border-radius:10px;padding:9px 18px;font-size:13px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;gap:6px;}
+.btn-success-custom{background:#059669;color:white;border:none;border-radius:10px;padding:10px 20px;font-size:13px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;gap:6px;}
+.expiry-alert{background:#fff7ed;border:1px solid #fde68a;border-radius:12px;padding:14px 18px;margin-bottom:16px;}
+.page-grid{display:block;}
+.pos-rel{position:relative;}
+.ac-drop{position:absolute;top:calc(100%+4px);left:0;right:0;background:white;border:2px solid var(--accent);border-radius:10px;max-height:200px;overflow-y:auto;z-index:3000;box-shadow:0 8px 24px rgba(0,0,0,.15);display:none;}
+.ac-item-d{padding:9px 12px;cursor:pointer;border-bottom:1px solid #f1f5f9;font-size:13px;}
+.ac-item-d:last-child{border-bottom:none;}
+.ac-item-d:hover{background:#eff6ff;}
+.ac-item-d strong{display:block;}
+.ac-item-d small{color:#64748b;}
 </style>
 {% endblock %}
 
 {% block content %}
 
+<!-- Expiry Alerts -->
+{% if expiring %}
+<div class="expiry-alert">
+  <div style="font-weight:800;font-size:14px;color:#d97706;margin-bottom:8px;">
+    <i class="bi bi-exclamation-triangle-fill me-2"></i>{{ expiring|length }} Batch(es) Expiring Within 30 Days
+  </div>
+  <div style="display:flex;flex-wrap:wrap;gap:8px;">
+    {% for b in expiring %}
+    <div style="background:white;border-radius:8px;padding:6px 12px;font-size:12px;border:1px solid #fde68a;">
+      <strong>{{ b.product_name }}</strong> — Batch {{ b.batch_no }}
+      {% if b.expired %}<span style="color:#dc2626;font-weight:700;"> EXPIRED</span>
+      {% else %} — Exp: {{ b.expiry_date }}{% endif %}
+      (Qty: {{ b.balance }})
+    </div>
+    {% endfor %}
+  </div>
+  <a href="{{ url_for('batch_list') }}" style="font-size:12px;font-weight:700;color:#d97706;display:block;margin-top:8px;">
+    <i class="bi bi-boxes me-1"></i>View All Batches →
+  </a>
+</div>
+{% endif %}
+
 <!-- Stats -->
-{% set total_bills = purchases | length %}
-{% set unpaid = purchases | selectattr('payment_status','eq','Unpaid') | list | length %}
-{% set total_due = purchases | map(attribute='total_amount') | sum - purchases | map(attribute='amount_paid') | sum %}
+{% set total_due_sum = namespace(v=0) %}
+{% set total_tax_sum = namespace(v=0) %}
+{% for p in purchases %}
+  {% set total_due_sum.v = total_due_sum.v + (p.total_amount - (p.amount_paid or 0)) %}
+  {% set total_tax_sum.v = total_tax_sum.v + (p.total_tax or 0) %}
+{% endfor %}
 <div class="stats-strip">
   <div class="sstat">
-    <div class="sstat-icon" style="background:#eff6ff;color:#2563eb;"><i class="bi bi-cart3"></i></div>
-    <div><div class="sstat-label">Total Bills</div><div class="sstat-val">{{ total_bills }}</div></div>
+    <div class="sstat-icon" style="background:#eff6ff;color:#7c3aed;"><i class="bi bi-cart3"></i></div>
+    <div><div class="sstat-label">Total Bills</div><div class="sstat-val">{{ purchases|length }}</div></div>
   </div>
   <div class="sstat">
-    <div class="sstat-icon" style="background:#fef2f2;color:#dc2626;"><i class="bi bi-exclamation-circle"></i></div>
-    <div><div class="sstat-label">Unpaid Bills</div><div class="sstat-val">{{ unpaid }}</div></div>
+    <div class="sstat-icon" style="background:#fef2f2;color:#dc2626;"><i class="bi bi-currency-rupee"></i></div>
+    <div><div class="sstat-label">Total Due</div><div class="sstat-val">₹ {{ "%.0f"|format(total_due_sum.v) }}</div></div>
   </div>
   <div class="sstat">
-    <div class="sstat-icon" style="background:#fef3c7;color:#d97706;"><i class="bi bi-currency-rupee"></i></div>
-    <div><div class="sstat-label">Total Payable</div><div class="sstat-val">₹ {{ "%.0f"|format(total_due) }}</div></div>
+    <div class="sstat-icon" style="background:#ecfdf5;color:#059669;"><i class="bi bi-percent"></i></div>
+    <div><div class="sstat-label">Total Tax (ITC)</div><div class="sstat-val">₹ {{ "%.0f"|format(total_tax_sum.v) }}</div></div>
+  </div>
+  <div class="sstat">
+    <div class="sstat-icon" style="background:#fff7ed;color:#f59e0b;"><i class="bi bi-boxes"></i></div>
+    <div>
+      <div class="sstat-label">Batch Tracker</div>
+      <div class="sstat-val" style="font-size:14px;"><a href="{{ url_for('batch_list') }}" style="color:#f59e0b;">View All</a></div>
+    </div>
   </div>
 </div>
 
 <div class="page-grid">
 
-  <!-- ═══ LEFT: Add Purchase ════════════════════════════════════ -->
-  <div>
-    <div class="add-card">
-      <div class="add-card-head">
-        <i class="bi bi-plus-circle" style="color:var(--accent);"></i>
-        <span class="add-card-title">Add Purchase Bill</span>
-      </div>
-      <div class="add-card-body">
-        <form method="POST" action="{{ url_for('add_purchase') }}" id="purchaseForm">
-          <div class="fg mb-3">
-            <label>Vendor <span style="color:red">*</span></label>
-            <select name="vendor_id" required>
-              <option value="">— Select Vendor —</option>
-              {% for v in vendors %}
-              <option value="{{ v.id }}">{{ v.name }}</option>
-              {% endfor %}
-            </select>
-          </div>
-          <div class="form-grid-2">
-            <div class="fg">
-              <label>Bill / Invoice No.</label>
-              <input type="text" name="bill_no" placeholder="BILL-001" />
-            </div>
-            <div class="fg">
-              <label>Purchase Date</label>
-              <input type="date" name="purchase_date" value="{{ now.strftime('%Y-%m-%d') }}" />
-            </div>
-            <div class="fg">
-              <label>Total Amount (₹) <span style="color:red">*</span></label>
-              <input type="number" name="total_amount" step="0.01" min="0" required placeholder="0.00" />
-            </div>
-            <div class="fg">
-              <label>Amount Paid (₹)</label>
-              <input type="number" name="amount_paid" step="0.01" min="0" value="0" placeholder="0.00" />
-            </div>
-          </div>
-          <div class="fg mt-3">
-            <label>Notes (Optional)</label>
-            <input type="text" name="notes" placeholder="Any remarks..." />
-          </div>
-          <div style="display:flex;gap:10px;margin-top:16px;">
-            <button type="submit" class="btn-primary-custom" id="saveBtn">
-              <i class="bi bi-save2"></i> Save Purchase
-            </button>
-            <button type="reset" class="btn-outline-custom">
-              <i class="bi bi-arrow-counterclockwise"></i> Clear
-            </button>
-          </div>
-        </form>
-      </div>
+  <!-- ═══ Action Bar ══════════════════════════════════════════ -->
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+    <div>
+      <a href="{{ url_for('new_purchase') }}" target="_blank"
+         class="btn-primary-custom"
+         style="font-size:14px;padding:12px 24px;border-radius:12px;text-decoration:none;">
+        <i class="bi bi-plus-lg"></i> New Purchase Bill
+      </a>
+      <span style="font-size:12px;color:#94a3b8;margin-left:12px;">
+        Click to open full-page form in new tab
+      </span>
+    </div>
+    <div style="display:flex;gap:10px;">
+      <a href="{{ url_for('batch_list') }}" class="tbl-btn" style="background:#eff6ff;color:#7c3aed;font-size:13px;padding:8px 16px;">
+        <i class="bi bi-boxes"></i> Batch Tracker
+      </a>
     </div>
   </div>
-
-  <!-- ═══ RIGHT: Purchase History ══════════════════════════════ -->
-  <div>
+<div>
     <div class="table-wrap">
       <div class="table-head-bar">
-        <span class="table-head-title">
-          <i class="bi bi-clock-history me-2"></i>Purchase History
-        </span>
+        <span class="table-head-title"><i class="bi bi-clock-history me-2"></i>Purchase History</span>
       </div>
-
       {% if purchases %}
       <div style="overflow-x:auto;">
         <table class="table-custom">
           <thead>
             <tr>
-              <th>Vendor</th>
-              <th>Bill No.</th>
-              <th>Date</th>
-              <th style="text-align:right;">Total</th>
-              <th>Payment</th>
-              <th style="text-align:center;">Action</th>
+              <th>Supplier</th>
+              <th>Bill No. / Date</th>
+              <th>Place / Type</th>
+              <th style="text-align:right;">Taxable</th>
+              <th style="text-align:right;">CGST</th>
+              <th style="text-align:right;">SGST</th>
+              <th style="text-align:right;">IGST</th>
+              <th style="text-align:right;">Total Tax</th>
+              <th style="text-align:right;">Grand Total</th>
+              <th>Status</th>
+              <th>Action</th>
             </tr>
           </thead>
           <tbody>
             {% for p in purchases %}
-            {% set due = p.total_amount - p.amount_paid %}
-            {% set pct = ((p.amount_paid / p.total_amount) * 100) if p.total_amount > 0 else 0 %}
+            {% set due = p.total_amount - (p.amount_paid or 0) %}
+            {% set pct = ((p.amount_paid / p.total_amount) * 100)|int if p.total_amount > 0 else 0 %}
             <tr>
               <td>
-                <div style="font-weight:600;font-size:13px;">{{ p.name }}</div>
-                <div style="font-size:11.5px;color:var(--text-muted);">{{ p.bill_no or '—' }}</div>
-              </td>
-              <td style="font-size:12px;color:var(--text-muted);">{{ p.bill_no or '—' }}</td>
-              <td style="font-size:12.5px;color:var(--text-muted);">{{ p.purchase_date }}</td>
-              <td style="text-align:right;font-weight:700;">₹ {{ "%.0f"|format(p.total_amount) }}</td>
-              <td>
-                <div class="pay-bar-wrap">
-                  <div class="pay-bar">
-                    <div class="pay-bar-fill {{ 'unpaid' if pct == 0 else ('partial' if pct < 100 else '') }}"
-                         style="width:{{ pct }}%;"></div>
-                  </div>
-                </div>
-                <div style="margin-top:3px;">
-                  <span class="badge-custom
-                    {% if p.payment_status == 'Paid' %}badge-success
-                    {% elif p.payment_status == 'Partial' %}badge-warning
-                    {% else %}badge-danger{% endif %}">
-                    {{ p.payment_status }}
-                  </span>
-                  {% if due > 0 %}
-                  <span style="font-size:11.5px;color:#dc2626;margin-left:4px;">₹{{ "%.0f"|format(due) }} due</span>
-                  {% endif %}
-                </div>
-              </td>
-              <td style="text-align:center;">
-                {% if p.payment_status != 'Paid' %}
-                <button class="tbl-btn tbl-btn-pay"
-                        onclick="openPayModal({{ p.id }}, '{{ p.name | e }}', '{{ p.bill_no or '' }}', {{ due }})">
-                  <i class="bi bi-cash"></i> Pay
-                </button>
-                {% else %}
-                <span style="font-size:12px;color:var(--success);font-weight:600;">
-                  <i class="bi bi-check-circle-fill"></i> Paid
-                </span>
+                <div style="font-weight:700;font-size:13px;">{{ p.vendor_name }}</div>
+                {% if p.vendor_gstin %}
+                <div style="font-size:11px;color:#64748b;">{{ p.vendor_gstin }}</div>
                 {% endif %}
+              </td>
+              <td>
+                <div style="font-weight:600;font-size:13px;">{{ p.bill_no or '—' }}</div>
+                <div style="font-size:11px;color:#64748b;">{{ p.purchase_date }}</div>
+              </td>
+              <td>
+                {% if p.place_of_supply %}
+                <div style="font-size:12px;color:#64748b;"><i class="bi bi-geo-alt" style="font-size:10px;"></i> {{ p.place_of_supply }}</div>
+                {% endif %}
+                <div style="margin-top:2px;">
+                  {% if p.igst_amount and p.igst_amount > 0 %}
+                  <span class="gst-chip igst-chip">IGST</span>
+                  {% else %}
+                  <span class="gst-chip">C+S GST</span>
+                  {% endif %}
+                  {% if p.reverse_charge %}<span class="gst-chip rcm-chip">RCM</span>{% endif %}
+                </div>
+              </td>
+              <td style="text-align:right;font-size:12px;">₹ {{ "%.2f"|format(p.taxable_amount or p.total_amount) }}</td>
+              <td style="text-align:right;font-size:12px;color:#2563eb;">₹ {{ "%.2f"|format(p.cgst_amount or 0) }}</td>
+              <td style="text-align:right;font-size:12px;color:#2563eb;">₹ {{ "%.2f"|format(p.sgst_amount or 0) }}</td>
+              <td style="text-align:right;font-size:12px;color:#f59e0b;">₹ {{ "%.2f"|format(p.igst_amount or 0) }}</td>
+              <td style="text-align:right;font-size:12px;color:#7c3aed;font-weight:700;">₹ {{ "%.2f"|format(p.total_tax or 0) }}</td>
+              <td style="text-align:right;font-weight:800;font-size:13px;">₹ {{ "%.2f"|format(p.total_amount) }}</td>
+              <td>
+                <div style="margin-bottom:4px;">
+                  <span class="badge-custom {{ 'badge-success' if p.payment_status=='Paid' else ('badge-warning' if p.payment_status=='Partial' else 'badge-danger') }}">
+                    {{ p.payment_status or 'Unpaid' }}
+                  </span>
+                </div>
+                {% if due > 0 %}
+                <div style="font-size:11px;color:#dc2626;">₹{{ "%.2f"|format(due) }} due</div>
+                {% endif %}
+              </td>
+              <td>
+                <div style="display:flex;gap:6px;flex-direction:column;">
+                  <a href="{{ url_for('edit_purchase', purchase_id=p.id) }}" target="_blank"
+                     class="tbl-btn" style="background:#eff6ff;color:#7c3aed;font-size:11px;text-decoration:none;">
+                    <i class="bi bi-pencil"></i> Edit
+                  </a>
+                  {% if (p.payment_status or '') != 'Paid' %}
+                  <button class="tbl-btn tbl-btn-pay"
+                    onclick="openPayModal({{ p.id }},'{{ p.vendor_name|e }}','{{ p.bill_no or '' }}',{{ due }})">
+                    <i class="bi bi-cash"></i> Pay
+                  </button>
+                  {% endif %}
+                  <button class="tbl-btn" style="background:#f8fafc;color:#64748b;font-size:11px;"
+                    onclick="showPurchItems({{ p.id }},this)">
+                    <i class="bi bi-list-ul"></i> Items
+                  </button>
+                </div>
+              </td>
+            </tr>
+            <!-- Items expand row -->
+            <tr id="itemsRow_{{ p.id }}" style="display:none;">
+              <td colspan="11" style="background:#f8fafc;padding:0;">
+                <div id="itemsContent_{{ p.id }}" style="padding:12px 16px;font-size:12px;"></div>
               </td>
             </tr>
             {% endfor %}
           </tbody>
+          <!-- Totals footer -->
+          <tfoot>
+            <tr style="background:#f8fafc;font-weight:800;">
+              <td colspan="3" style="padding:10px 12px;font-size:13px;">TOTALS ({{ purchases|length }} bills)</td>
+              <td style="text-align:right;padding:10px 12px;">
+                ₹ {{ "%.2f"|format(purchases|sum(attribute='taxable_amount')) }}</td>
+              <td style="text-align:right;color:#2563eb;padding:10px 12px;">
+                ₹ {{ "%.2f"|format(purchases|sum(attribute='cgst_amount')) }}</td>
+              <td style="text-align:right;color:#2563eb;padding:10px 12px;">
+                ₹ {{ "%.2f"|format(purchases|sum(attribute='sgst_amount')) }}</td>
+              <td style="text-align:right;color:#f59e0b;padding:10px 12px;">
+                ₹ {{ "%.2f"|format(purchases|sum(attribute='igst_amount')) }}</td>
+              <td style="text-align:right;color:#7c3aed;padding:10px 12px;">
+                ₹ {{ "%.2f"|format(purchases|sum(attribute='total_tax')) }}</td>
+              <td style="text-align:right;padding:10px 12px;">
+                ₹ {{ "%.2f"|format(purchases|sum(attribute='total_amount')) }}</td>
+              <td colspan="2" style="padding:10px 12px;">
+                <span style="font-size:12px;color:#059669;">ITC Claimable: ₹{{ "%.2f"|format(purchases|sum(attribute='total_tax')) }}</span>
+              </td>
+            </tr>
+          </tfoot>
         </table>
       </div>
       {% else %}
-      <div class="empty-state">
-        <i class="bi bi-cart-x"></i>
-        <p>No purchase bills added yet.</p>
+      <div style="text-align:center;padding:60px 20px;color:#94a3b8;">
+        <i class="bi bi-cart-x" style="font-size:48px;display:block;margin-bottom:12px;"></i>
+        No purchase bills added yet.
       </div>
       {% endif %}
     </div>
@@ -217,48 +275,35 @@
 
 </div>
 
-<!-- ── Payment Modal ──────────────────────────────────────────── -->
+<!-- ── Payment Modal ─────────────────────────────────────── -->
 <div class="modal-overlay" id="payModal">
   <div class="modal-box">
     <div class="modal-head">
-      <i class="bi bi-cash-coin" style="color:var(--success);font-size:18px;"></i>
-      <span class="modal-title">Add Payment</span>
-      <button onclick="closePayModal()" style="background:none;border:none;cursor:pointer;color:var(--text-muted);font-size:18px;"><i class="bi bi-x"></i></button>
+      <i class="bi bi-cash-coin" style="color:#059669;font-size:18px;"></i>
+      <span class="modal-title">Record Payment</span>
+      <button onclick="closePayModal()" style="background:none;border:none;cursor:pointer;color:#94a3b8;font-size:20px;"><i class="bi bi-x"></i></button>
     </div>
     <div class="modal-body">
-      <div id="payModalInfo" style="background:#f8fafc;border-radius:var(--radius-sm);padding:12px 14px;margin-bottom:16px;font-size:13px;">
-        <!-- filled by JS -->
-      </div>
+      <div id="payModalInfo" style="background:#f8fafc;border-radius:10px;padding:12px 14px;margin-bottom:16px;font-size:13px;"></div>
       <form method="POST" id="payModalForm">
-        <div class="form-grid-2" style="margin-bottom:12px;">
-          <div class="fg">
-            <label>Payment Date</label>
-            <input type="date" name="payment_date" id="payDate" />
-          </div>
-          <div class="fg">
-            <label>Amount (₹) <span style="color:red">*</span></label>
-            <input type="number" name="amount" id="payAmount" step="0.01" min="0.01" required placeholder="0.00" />
-          </div>
+        <div class="form-grid-2 mb-3">
+          <div class="fg"><label>Payment Date</label>
+            <input type="date" name="payment_date" value="{{ today }}" /></div>
+          <div class="fg"><label>Amount (₹) <span style="color:red">*</span></label>
+            <input type="number" name="amount" id="payAmount" step="0.01" min="0.01" required placeholder="0.00" /></div>
         </div>
         <div class="form-grid-2">
-          <div class="fg">
-            <label>Payment Mode</label>
-            <select name="payment_mode">
-              <option>Cash</option><option>Bank Transfer</option>
-              <option>UPI</option><option>Cheque</option>
-            </select>
-          </div>
-          <div class="fg">
-            <label>Reference No.</label>
-            <input type="text" name="reference_no" placeholder="UTR / Cheque no." />
-          </div>
+          <div class="fg"><label>Payment Mode</label>
+            <select name="payment_mode"><option>Cash</option><option>Bank Transfer</option><option>UPI</option><option>Cheque</option></select></div>
+          <div class="fg"><label>Reference No.</label>
+            <input type="text" name="reference_no" placeholder="UTR / Cheque no." /></div>
         </div>
       </form>
     </div>
     <div class="modal-foot">
       <button class="btn-outline-custom" onclick="closePayModal()"><i class="bi bi-x"></i> Cancel</button>
-      <button class="btn-success-custom" onclick="submitPayment()">
-        <i class="bi bi-check-circle"></i> Record Payment
+      <button class="btn-success-custom" onclick="document.getElementById('payModalForm').submit()">
+        <i class="bi bi-check-circle"></i> Save Payment
       </button>
     </div>
   </div>
@@ -268,26 +313,204 @@
 
 {% block scripts %}
 <script>
-const today = '{{ now.strftime("%Y-%m-%d") }}';
+const PROD_API   = '{{ url_for("product_search_api") }}';
+const COMP_STATE = '{{ settings.get("company_info",{}).get("state","") | lower }}';
+let isIGST  = false;
+let rowIdx  = 0;
+const acTimers = {};
 
-function openPayModal(id, vendor, billNo, due) {
-  document.getElementById('payModalInfo').innerHTML = `
-    <strong>${vendor}</strong> &nbsp;|&nbsp; Bill: ${billNo || '—'}
-    <br><span style="color:#dc2626;font-weight:700;">Amount Due: ₹ ${due.toFixed(2)}</span>
+/* ── GST Type ────────────────────────────────────────── */
+function updateGstType(place) {
+  isIGST = place !== '' && place.toLowerCase() !== COMP_STATE;
+  const banner = document.getElementById('gstTypeBanner');
+  const txt    = document.getElementById('gstTypeText');
+  if (isIGST) {
+    banner.style.background = '#fff7ed'; banner.style.color = '#d97706';
+    txt.textContent = `Inter-State (${place}): IGST lagega`;
+  } else {
+    banner.style.background = '#eff6ff'; banner.style.color = '#1e40af';
+    txt.textContent = 'Intra-State: CGST + SGST lagega';
+  }
+  recalc();
+}
+
+/* ── Add Item Row ────────────────────────────────────── */
+function addRow() {
+  const idx = rowIdx++;
+  const d   = document.createElement('div');
+  d.id      = `dr_${idx}`;
+  d.style.cssText = 'display:grid;grid-template-columns:2fr 1fr 1fr 1fr 1.2fr 1.2fr 36px;gap:8px;align-items:end;margin-bottom:8px;background:white;border-radius:10px;padding:10px 12px;border:1.5px solid var(--border);';
+  d.innerHTML = `
+    <div class="pos-rel">
+      <input type="text" name="description[]" id="dd_${idx}" class="fg" placeholder="Item / product…"
+             oninput="acSearch(${idx},this.value)"
+             style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;" />
+      <input type="hidden" name="product_id[]" id="dpid_${idx}" value="" />
+      <div class="ac-drop" id="dac_${idx}"></div>
+    </div>
+    <input type="number" name="quantity[]" id="dq_${idx}"  step="0.001" min="0" placeholder="0"
+           oninput="recalc()"
+           style="padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;width:100%;" />
+    <input type="number" name="rate[]"     id="dr2_${idx}" step="0.01"  min="0" placeholder="0.00"
+           oninput="recalc()"
+           style="padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;width:100%;" />
+    <select name="gst_rate[]" id="dg_${idx}" onchange="recalc()"
+            style="padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;width:100%;">
+      <option value="0">0%</option><option value="0.1">0.1%</option>
+      <option value="0.25">0.25%</option><option value="1">1%</option>
+      <option value="1.5">1.5%</option><option value="3">3%</option>
+      <option value="5">5%</option><option value="6">6%</option>
+      <option value="7.5">7.5%</option><option value="9">9%</option>
+      <option value="12" selected>12%</option><option value="14">14%</option>
+      <option value="18">18%</option><option value="28">28%</option>
+    </select>
+    <input type="text" name="batch_no[]" placeholder="B2024-01"
+           style="padding:8px 10px;border:1.5px solid #c4b5fd;border-radius:8px;font-size:13px;width:100%;" />
+    <input type="date" name="expiry_date[]"
+           style="padding:8px 10px;border:1.5px solid #fca5a5;border-radius:8px;font-size:12px;width:100%;" />
+    <button type="button" onclick="delRow(${idx})"
+            style="background:#fef2f2;border:none;border-radius:8px;padding:8px;color:#dc2626;cursor:pointer;font-size:14px;">
+      <i class="bi bi-x-lg"></i>
+    </button>
   `;
+  document.getElementById('itemRows').appendChild(d);
+}
+
+function delRow(idx) {
+  const el = document.getElementById(`dr_${idx}`);
+  if (el) el.remove();
+  recalc();
+}
+function clearItems() {
+  document.getElementById('itemRows').innerHTML = '';
+  rowIdx = 0;
+  document.getElementById('gstSummaryBox').style.display = 'none';
+}
+
+/* ── Product Autocomplete ────────────────────────────── */
+function acSearch(idx, q) {
+  clearTimeout(acTimers[idx]);
+  const ac = document.getElementById(`dac_${idx}`);
+  if (!ac || !q.trim()) { if (ac) ac.style.display='none'; return; }
+  acTimers[idx] = setTimeout(async () => {
+    try {
+      const r = await fetch(`${PROD_API}?q=${encodeURIComponent(q)}`);
+      const list = await r.json();
+      if (!list.length) { ac.style.display='none'; return; }
+      ac.innerHTML = list.slice(0,8).map(p => `
+        <div class="ac-item-d" onclick='acPick(${idx},${JSON.stringify(p)})'>
+          <strong>${p.name}</strong>
+          <small>Rate: Rs.${parseFloat(p.rate||0).toFixed(2)} | GST: ${p.gst_rate||0}% | Stock: ${p.stock_qty||0} ${p.unit||''}</small>
+        </div>`).join('');
+      ac.style.display = 'block';
+    } catch(e) { if (ac) ac.style.display='none'; }
+  }, 220);
+}
+function acPick(idx, p) {
+  document.getElementById(`dd_${idx}`).value   = p.name;
+  document.getElementById(`dpid_${idx}`).value = p.id || '';
+  const g = document.getElementById(`dg_${idx}`);
+  if (g && p.gst_rate != null) {
+    const allRates = ['0','0.1','0.25','1','1.5','3','5','6','7.5','9','12','14','18','28'];
+    const exact = allRates.find(r => parseFloat(r) === parseFloat(p.gst_rate));
+    g.value = exact !== undefined ? exact : allRates.reduce((a,b) =>
+      Math.abs(+b-p.gst_rate) < Math.abs(+a-p.gst_rate) ? b : a);
+  }
+  const r = document.getElementById(`dr2_${idx}`);
+  if (r && p.rate) r.value = parseFloat(p.rate).toFixed(2);
+  document.getElementById(`dac_${idx}`).style.display = 'none';
+  recalc();
+}
+document.addEventListener('click', e => {
+  if (!e.target.closest('.pos-rel'))
+    document.querySelectorAll('.ac-drop').forEach(el => el.style.display='none');
+});
+
+/* ── Recalculate ─────────────────────────────────────── */
+function fmt(n) { return '₹ ' + parseFloat(n||0).toFixed(2); }
+function recalc() {
+  let totTax=0, totCgst=0, totSgst=0, totIgst=0;
+  document.querySelectorAll('#itemRows > div').forEach(row => {
+    const idx  = row.id.replace('dr_','');
+    const qty  = parseFloat(document.getElementById(`dq_${idx}`)?.value)   || 0;
+    const rate = parseFloat(document.getElementById(`dr2_${idx}`)?.value)  || 0;
+    const gst  = parseFloat(document.getElementById(`dg_${idx}`)?.value)   || 0;
+    if (!qty || !rate) return;
+    const taxable = qty * rate;
+    const cgst    = isIGST ? 0 : taxable * gst / 200;
+    const sgst    = isIGST ? 0 : taxable * gst / 200;
+    const igst    = isIGST ? taxable * gst / 100 : 0;
+    totTax  += taxable; totCgst += cgst; totSgst += sgst; totIgst += igst;
+  });
+  const tax   = totCgst + totSgst + totIgst;
+  const grand = totTax  + tax;
+  const box   = document.getElementById('gstSummaryBox');
+  if (grand > 0) {
+    box.style.display = 'block';
+    document.getElementById('dTaxable').textContent = fmt(totTax);
+    document.getElementById('dCgst').textContent    = fmt(totCgst);
+    document.getElementById('dSgst').textContent    = fmt(totSgst);
+    document.getElementById('dIgst').textContent    = fmt(totIgst);
+    document.getElementById('dTax').textContent     = fmt(tax);
+    document.getElementById('dTotal').textContent   = fmt(grand);
+    document.getElementById('dCgstRow').style.display = isIGST ? 'none' : 'flex';
+    document.getElementById('dSgstRow').style.display = isIGST ? 'none' : 'flex';
+    document.getElementById('dIgstRow').style.display = isIGST ? 'flex' : 'none';
+  } else { box.style.display = 'none'; }
+}
+
+/* ── Show Items ──────────────────────────────────────── */
+async function showPurchItems(pid, btn) {
+  const row = document.getElementById(`itemsRow_${pid}`);
+  const cnt = document.getElementById(`itemsContent_${pid}`);
+  if (row.style.display !== 'none') { row.style.display = 'none'; return; }
+  row.style.display = 'table-row';
+  cnt.innerHTML = 'Loading…';
+  try {
+    const r    = await fetch(`/purchases/${pid}/items`);
+    const list = await r.json();
+    if (!list.length) { cnt.innerHTML = '<span style="color:#94a3b8;">No items recorded.</span>'; return; }
+    cnt.innerHTML = `<table style="width:100%;border-collapse:collapse;">
+      <tr style="background:#e2e8f0;">
+        <th style="padding:6px 10px;font-size:11px;text-align:left;">Item</th>
+        <th style="padding:6px 10px;font-size:11px;text-align:right;">Qty</th>
+        <th style="padding:6px 10px;font-size:11px;text-align:right;">Rate</th>
+        <th style="padding:6px 10px;font-size:11px;text-align:right;">GST%</th>
+        <th style="padding:6px 10px;font-size:11px;text-align:right;">Tax</th>
+        <th style="padding:6px 10px;font-size:11px;text-align:right;">Total</th>
+        <th style="padding:6px 10px;font-size:11px;">Batch</th>
+        <th style="padding:6px 10px;font-size:11px;">Expiry</th>
+      </tr>
+      ${list.map(it => `<tr style="border-bottom:1px solid #e2e8f0;">
+        <td style="padding:6px 10px;font-weight:600;">${it.description||it.product_name||'—'}</td>
+        <td style="padding:6px 10px;text-align:right;">${it.quantity}</td>
+        <td style="padding:6px 10px;text-align:right;">₹${parseFloat(it.rate||0).toFixed(2)}</td>
+        <td style="padding:6px 10px;text-align:right;">${it.gst_rate||0}%</td>
+        <td style="padding:6px 10px;text-align:right;color:#7c3aed;">
+          ₹${(parseFloat(it.cgst_amount||0)+parseFloat(it.sgst_amount||0)+parseFloat(it.igst_amount||0)).toFixed(2)}
+        </td>
+        <td style="padding:6px 10px;text-align:right;font-weight:700;">₹${parseFloat(it.total_amount||0).toFixed(2)}</td>
+        <td style="padding:6px 10px;">
+          ${it.batch_no ? `<span style="background:#eff6ff;color:#2563eb;border-radius:5px;padding:2px 8px;font-size:11px;font-weight:700;">${it.batch_no}</span>` : '—'}
+        </td>
+        <td style="padding:6px 10px;">
+          ${it.expiry_date ? `<span style="background:#fef2f2;color:#dc2626;border-radius:5px;padding:2px 8px;font-size:11px;font-weight:700;">${it.expiry_date}</span>` : '—'}
+        </td>
+      </tr>`).join('')}
+    </table>`;
+  } catch(e) { cnt.innerHTML = '<span style="color:#dc2626;">Error loading items</span>'; }
+}
+
+/* ── Payment Modal ───────────────────────────────────── */
+function openPayModal(id, vendor, bill, due) {
+  document.getElementById('payModalInfo').innerHTML =
+    `<strong>${vendor}</strong> &nbsp;·&nbsp; Bill: ${bill||'—'}<br>
+     <span style="color:#dc2626;font-weight:700;">Outstanding: ₹${due.toFixed(2)}</span>`;
   document.getElementById('payModalForm').action = `/purchases/${id}/payment`;
-  document.getElementById('payDate').value   = today;
-  document.getElementById('payAmount').value = due.toFixed(2);
+  document.getElementById('payAmount').value     = due.toFixed(2);
   document.getElementById('payModal').classList.add('open');
 }
-
-function closePayModal() {
-  document.getElementById('payModal').classList.remove('open');
-}
-
-function submitPayment() {
-  document.getElementById('payModalForm').submit();
-}
+function closePayModal() { document.getElementById('payModal').classList.remove('open'); }
 
 document.getElementById('payModal').addEventListener('click', function(e) {
   if (e.target === this) closePayModal();
@@ -295,8 +518,11 @@ document.getElementById('payModal').addEventListener('click', function(e) {
 
 document.getElementById('purchaseForm').addEventListener('submit', function() {
   const btn = document.getElementById('saveBtn');
-  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Saving...';
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Saving…';
   btn.disabled = true;
 });
+
+// Add first row on load
+addRow();
 </script>
 {% endblock %}

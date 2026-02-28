@@ -179,6 +179,17 @@ def create_tables():
             rate REAL DEFAULT 0,
             FOREIGN KEY (product_id) REFERENCES products(id))""",
         "ALTER TABLE invoice_items ADD COLUMN variation_id INTEGER DEFAULT NULL",
+        "ALTER TABLE invoice_items ADD COLUMN batch_no TEXT DEFAULT ''",
+        # Purchase GST columns (for existing DBs)
+        "ALTER TABLE purchases ADD COLUMN taxable_amount REAL DEFAULT 0",
+        "ALTER TABLE purchases ADD COLUMN gst_rate REAL DEFAULT 0",
+        "ALTER TABLE purchases ADD COLUMN cgst_amount REAL DEFAULT 0",
+        "ALTER TABLE purchases ADD COLUMN sgst_amount REAL DEFAULT 0",
+        "ALTER TABLE purchases ADD COLUMN igst_amount REAL DEFAULT 0",
+        "ALTER TABLE purchases ADD COLUMN total_tax REAL DEFAULT 0",
+        "ALTER TABLE purchases ADD COLUMN place_of_supply TEXT DEFAULT ''",
+        "ALTER TABLE purchases ADD COLUMN reverse_charge INTEGER DEFAULT 0",
+        "ALTER TABLE purchases ADD COLUMN purchase_type TEXT DEFAULT 'Resale'",  # Resale or Raw Material
     ]:
         try:
             c.execute(col_sql)
@@ -221,15 +232,69 @@ def create_tables():
     # ── Purchase Bills ────────────────────────
     c.execute('''
         CREATE TABLE IF NOT EXISTS purchases (
-            id             INTEGER PRIMARY KEY AUTOINCREMENT,
-            vendor_id      INTEGER NOT NULL,
-            bill_no        TEXT,
-            purchase_date  TEXT,
-            total_amount   REAL DEFAULT 0,
-            amount_paid    REAL DEFAULT 0,
-            payment_status TEXT DEFAULT 'Unpaid',
-            notes          TEXT,
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            vendor_id       INTEGER NOT NULL,
+            bill_no         TEXT,
+            purchase_date   TEXT,
+            taxable_amount  REAL DEFAULT 0,
+            gst_rate        REAL DEFAULT 0,
+            cgst_amount     REAL DEFAULT 0,
+            sgst_amount     REAL DEFAULT 0,
+            igst_amount     REAL DEFAULT 0,
+            total_tax       REAL DEFAULT 0,
+            total_amount    REAL DEFAULT 0,
+            amount_paid     REAL DEFAULT 0,
+            payment_status  TEXT DEFAULT 'Unpaid',
+            place_of_supply TEXT DEFAULT '',
+            reverse_charge  INTEGER DEFAULT 0,
+            notes           TEXT,
+            purchase_type   TEXT DEFAULT 'Resale',
             FOREIGN KEY (vendor_id) REFERENCES vendors(id)
+        )
+    ''')
+
+    # ── Purchase Items (with Batch & Expiry tracking) ──
+    c.execute(''' 
+        CREATE TABLE IF NOT EXISTS purchase_items (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            purchase_id     INTEGER NOT NULL,
+            product_id      INTEGER,
+            description     TEXT,
+            batch_no        TEXT,
+            expiry_date     TEXT,
+            quantity        REAL DEFAULT 0,
+            rate            REAL DEFAULT 0,
+            gst_rate        REAL DEFAULT 0,
+            taxable_amount  REAL DEFAULT 0,
+            cgst_amount     REAL DEFAULT 0,
+            sgst_amount     REAL DEFAULT 0,
+            igst_amount     REAL DEFAULT 0,
+            total_amount    REAL DEFAULT 0,
+            FOREIGN KEY (purchase_id) REFERENCES purchases(id),
+            FOREIGN KEY (product_id)  REFERENCES products(id)
+        )
+    ''')
+
+    # ── Batch Tracking (which batch → which customer invoice) ──
+    c.execute(''' 
+        CREATE TABLE IF NOT EXISTS batch_tracking (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            product_id      INTEGER NOT NULL,
+            batch_no        TEXT NOT NULL,
+            expiry_date     TEXT,
+            purchase_id     INTEGER,
+            purchase_item_id INTEGER,
+            invoice_id      INTEGER,
+            invoice_item_id INTEGER,
+            buyer_id        INTEGER,
+            qty_in          REAL DEFAULT 0,
+            qty_out         REAL DEFAULT 0,
+            tracking_date   TEXT,
+            notes           TEXT,
+            FOREIGN KEY (product_id)  REFERENCES products(id),
+            FOREIGN KEY (purchase_id) REFERENCES purchases(id),
+            FOREIGN KEY (invoice_id)  REFERENCES invoices(id),
+            FOREIGN KEY (buyer_id)    REFERENCES buyers(id)
         )
     ''')
 
@@ -278,6 +343,56 @@ def create_tables():
             ('admin', hashed_pw, 'Admin')
         )
         print("[INFO] Default admin created → username: admin | password: admin123")
+
+    
+    # ── Proforma Invoices / Sales Quotations ──────────────────
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS proforma_invoices (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            quotation_no    TEXT    UNIQUE NOT NULL,
+            quotation_date  TEXT    NOT NULL,
+            valid_until     TEXT,
+            buyer_id        INTEGER,
+            buyer_name      TEXT,
+            buyer_address   TEXT,
+            buyer_gstin     TEXT,
+            buyer_state     TEXT,
+            buyer_phone     TEXT,
+            payment_mode    TEXT    DEFAULT 'Advance',
+            order_ref       TEXT,
+            subtotal        REAL    DEFAULT 0,
+            total_discount  REAL    DEFAULT 0,
+            taxable_value   REAL    DEFAULT 0,
+            total_gst       REAL    DEFAULT 0,
+            total_cgst      REAL    DEFAULT 0,
+            total_sgst      REAL    DEFAULT 0,
+            total_igst      REAL    DEFAULT 0,
+            freight         REAL    DEFAULT 0,
+            round_off       REAL    DEFAULT 0,
+            grand_total     REAL    DEFAULT 0,
+            status          TEXT    DEFAULT 'Active',
+            notes           TEXT,
+            FOREIGN KEY (buyer_id) REFERENCES buyers(id)
+        )
+    ''')
+
+    # ── Proforma Invoice Items ─────────────────────────────────
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS proforma_items (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            proforma_id     INTEGER NOT NULL,
+            product_id      INTEGER,
+            description     TEXT,
+            hsn             TEXT,
+            gst_rate        REAL    DEFAULT 0,
+            quantity        REAL    DEFAULT 0,
+            unit            TEXT,
+            rate            REAL    DEFAULT 0,
+            discount_percent REAL   DEFAULT 0,
+            amount          REAL    DEFAULT 0,
+            FOREIGN KEY (proforma_id) REFERENCES proforma_invoices(id)
+        )
+    ''')
 
     conn.commit()
     conn.close()
@@ -735,8 +850,8 @@ def save_invoice(inv_data, items, company_state):
             c.execute('''
                 INSERT INTO invoice_items
                   (invoice_id, product_id, description, hsn,
-                   gst_rate, quantity, rate, discount_percent, amount, variation_id)
-                VALUES (?,?,?,?,?,?,?,?,?,?)
+                   gst_rate, quantity, rate, discount_percent, amount, variation_id, batch_no)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?)
             ''', (
                 invoice_id,
                 item['product_id'],
@@ -747,8 +862,33 @@ def save_invoice(inv_data, items, company_state):
                 item['rate'],
                 item.get('discount_percent', 0),
                 item['amount'],
-                item.get('variation_id') or None
+                item.get('variation_id') or None,
+                item.get('batch_no', '') or ''
             ))
+            item_id = c.lastrowid
+
+            # ── Batch Tracking: record OUT movement for this sale ──
+            batch_no = item.get('batch_no', '').strip()
+            pid_val = item.get('product_id')
+            qty_val = item['quantity']
+            if batch_no and pid_val and int(pid_val) > 0:
+                from datetime import date as _date
+                c.execute("""
+                    INSERT INTO batch_tracking
+                      (product_id, batch_no, invoice_id, invoice_item_id,
+                       buyer_id, qty_in, qty_out, tracking_date, notes)
+                    VALUES (?,?,?,?,?,0,?,?,?)
+                """, (
+                    int(pid_val),
+                    batch_no,
+                    invoice_id,
+                    item_id,
+                    inv_data.get('buyer_id'),
+                    qty_val,
+                    inv_data.get('invoice_date', _date.today().isoformat()),
+                    f"Sale OUT — Invoice {inv_data.get('invoice_no','')}",
+                ))
+
             # Deduct stock — from variation if set, else from parent product
             vid = item.get('variation_id')
             pid = item.get('product_id')
@@ -909,6 +1049,55 @@ def add_customer_payment(payment_data):
     return add_record('customer_payments', payment_data)
 
 
+
+
+def delete_customer_payment(payment_id):
+    """Delete a customer payment entry."""
+    conn = get_db_connection()
+    c = conn.cursor()
+    try:
+        c.execute("DELETE FROM customer_payments WHERE id = ?", (payment_id,))
+        conn.commit()
+        return c.rowcount > 0
+    except Exception as e:
+        print(f"[delete_customer_payment ERROR] {e}")
+        return False
+    finally:
+        conn.close()
+
+
+def update_customer_payment(payment_id, data):
+    """Update a customer payment entry."""
+    conn = get_db_connection()
+    c = conn.cursor()
+    try:
+        c.execute("""
+            UPDATE customer_payments
+               SET payment_date = ?, amount = ?, payment_mode = ?, notes = ?
+             WHERE id = ?
+        """, (
+            data.get('payment_date', ''),
+            float(data.get('amount', 0)),
+            data.get('payment_mode', 'Cash'),
+            data.get('notes', ''),
+            payment_id,
+        ))
+        conn.commit()
+        return c.rowcount > 0
+    except Exception as e:
+        print(f"[update_customer_payment ERROR] {e}")
+        return False
+    finally:
+        conn.close()
+
+
+def get_customer_payment(payment_id):
+    """Fetch a single customer payment row."""
+    return execute_query(
+        "SELECT * FROM customer_payments WHERE id = ?",
+        (payment_id,), fetchone=True
+    )
+
 def get_buyer_ledger(buyer_id, start_date=None, end_date=None):
     """
     Generates a full ledger for a buyer showing:
@@ -929,7 +1118,7 @@ def get_buyer_ledger(buyer_id, start_date=None, end_date=None):
 
     # Build invoice query
     q_inv = """
-        SELECT invoice_date AS date, invoice_no AS ref,
+        SELECT id, invoice_date AS date, invoice_no AS ref,
                'Invoice' AS type, grand_total AS debit, 0 AS credit, '' AS payment_mode
         FROM invoices
         WHERE buyer_id = ? AND invoice_no NOT LIKE '[CANCELLED]%'
@@ -938,7 +1127,7 @@ def get_buyer_ledger(buyer_id, start_date=None, end_date=None):
 
     # Build payment query
     q_pay = """
-        SELECT payment_date AS date, 'Payment' AS ref,
+        SELECT id, payment_date AS date, 'Payment' AS ref,
                'Payment' AS type, 0 AS debit, amount AS credit, payment_mode
         FROM customer_payments
         WHERE buyer_id = ?
@@ -1030,14 +1219,28 @@ def get_all_buyer_balances():
 # ─────────────────────────────────────────────
 def get_all_purchases_with_vendor():
     """
-    All purchase bills joined with vendor name.
-    Ordered by most recent first.
+    All purchase bills joined with vendor name + GSTIN.
+    Includes GST breakdown columns for display & GSTR reporting.
     """
     return execute_query('''
         SELECT
-            p.id, v.name AS vendor_name,
-            p.bill_no, p.purchase_date,
-            p.total_amount, p.amount_paid, p.payment_status, p.notes
+            p.id,
+            v.name        AS vendor_name,
+            v.gstin       AS vendor_gstin,
+            p.bill_no,
+            p.purchase_date,
+            p.taxable_amount,
+            p.gst_rate,
+            p.cgst_amount,
+            p.sgst_amount,
+            p.igst_amount,
+            p.total_tax,
+            p.total_amount,
+            p.amount_paid,
+            p.payment_status,
+            p.place_of_supply,
+            p.reverse_charge,
+            p.notes
         FROM purchases p
         JOIN vendors v ON p.vendor_id = v.id
         ORDER BY p.purchase_date DESC, p.id DESC
@@ -1291,6 +1494,470 @@ def get_item_wise_report(start_date, end_date):
 
 
 # ─────────────────────────────────────────────
+#  PURCHASE ITEMS & BATCH TRACKING
+# ─────────────────────────────────────────────
+def save_purchase_with_items(purchase_data, items_data):
+    """
+    Save a purchase bill with line items.
+    Automatically updates product stock_qty.
+    Records batch tracking entries.
+    Returns: new purchase_id or None.
+    """
+    conn = get_db_connection()
+    c    = conn.cursor()
+    try:
+        # Insert purchase header
+        c.execute("""
+            INSERT INTO purchases
+              (vendor_id, bill_no, purchase_date, taxable_amount,
+               gst_rate, cgst_amount, sgst_amount, igst_amount,
+               total_tax, total_amount, amount_paid,
+               payment_status, place_of_supply, reverse_charge, notes, purchase_type)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+        """, (
+            purchase_data['vendor_id'],
+            purchase_data.get('bill_no',''),
+            purchase_data.get('purchase_date',''),
+            purchase_data.get('taxable_amount', 0),
+            purchase_data.get('gst_rate', 0),
+            purchase_data.get('cgst_amount', 0),
+            purchase_data.get('sgst_amount', 0),
+            purchase_data.get('igst_amount', 0),
+            purchase_data.get('total_tax', 0),
+            purchase_data.get('total_amount', 0),
+            purchase_data.get('amount_paid', 0),
+            'Unpaid' if purchase_data.get('amount_paid', 0) <= 0
+                     else ('Paid' if purchase_data.get('amount_paid', 0) >= purchase_data.get('total_amount', 0)
+                     else 'Partial'),
+            purchase_data.get('place_of_supply', ''),
+            1 if purchase_data.get('reverse_charge') else 0,
+            purchase_data.get('notes', ''),
+            purchase_data.get('purchase_type', 'Resale'),
+        ))
+        purchase_id = c.lastrowid
+
+        for item in items_data:
+            qty      = float(item.get('quantity', 0))
+            rate     = float(item.get('rate', 0))
+            gst_rate = float(item.get('gst_rate', 0))
+            taxable  = round(qty * rate, 2)
+            is_igst  = bool(item.get('is_igst', False))
+
+            cgst = round(taxable * gst_rate / 200, 2) if not is_igst else 0
+            sgst = round(taxable * gst_rate / 200, 2) if not is_igst else 0
+            igst = round(taxable * gst_rate / 100, 2) if is_igst     else 0
+            total_item = taxable + cgst + sgst + igst
+
+            c.execute("""
+                INSERT INTO purchase_items
+                  (purchase_id, product_id, description, batch_no, expiry_date,
+                   quantity, rate, gst_rate, taxable_amount,
+                   cgst_amount, sgst_amount, igst_amount, total_amount)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
+            """, (
+                purchase_id,
+                item.get('product_id') or None,
+                item.get('description', ''),
+                item.get('batch_no', '') or '',
+                item.get('expiry_date', '') or '',
+                qty, rate, gst_rate, taxable,
+                cgst, sgst, igst, total_item,
+            ))
+            item_id = c.lastrowid
+
+            # Update product stock
+            if item.get('product_id'):
+                c.execute(
+                    "UPDATE products SET stock_qty = stock_qty + ? WHERE id = ?",
+                    (qty, item['product_id'])
+                )
+
+            # Batch tracking entry (IN)
+            if item.get('batch_no'):
+                c.execute("""
+                    INSERT INTO batch_tracking
+                      (product_id, batch_no, expiry_date, purchase_id,
+                       purchase_item_id, qty_in, qty_out, tracking_date, notes)
+                    VALUES (?,?,?,?,?,?,0,?,?)
+                """, (
+                    item.get('product_id'),
+                    item['batch_no'],
+                    item.get('expiry_date', ''),
+                    purchase_id,
+                    item_id,
+                    qty,
+                    purchase_data.get('purchase_date', ''),
+                    f"Stock IN from purchase bill {purchase_data.get('bill_no','')}",
+                ))
+
+        conn.commit()
+        return purchase_id
+    except Exception as e:
+        conn.rollback()
+        import traceback; traceback.print_exc()
+        print(f"[save_purchase_with_items ERROR] {e}")
+        return None
+    finally:
+        conn.close()
+
+
+def get_purchase_items(purchase_id):
+    """Return line items for a purchase bill."""
+    return execute_query(
+        """SELECT pi.*, p.name AS product_name
+           FROM purchase_items pi
+           LEFT JOIN products p ON pi.product_id = p.id
+           WHERE pi.purchase_id = ?
+           ORDER BY pi.id""",
+        (purchase_id,), fetchall=True
+    ) or []
+
+
+def get_purchase_with_vendor(purchase_id):
+    """Return a single purchase bill with vendor info."""
+    return execute_query(
+        """SELECT p.*,
+                  COALESCE(v.name,  'Unknown') AS supplier_name,
+                  COALESCE(v.gstin, '')         AS supplier_gstin
+           FROM purchases p
+           LEFT JOIN vendors v ON p.vendor_id = v.id
+           WHERE p.id = ?""",
+        (purchase_id,), fetchone=True
+    )
+
+
+def update_purchase_header(purchase_id, data):
+    """Update purchase bill header fields (not items — items require re-save)."""
+    conn = get_db_connection()
+    c    = conn.cursor()
+    try:
+        c.execute("""
+            UPDATE purchases SET
+              vendor_id       = ?,
+              bill_no         = ?,
+              purchase_date   = ?,
+              taxable_amount  = ?,
+              cgst_amount     = ?,
+              sgst_amount     = ?,
+              igst_amount     = ?,
+              total_tax       = ?,
+              total_amount    = ?,
+              amount_paid     = ?,
+              place_of_supply = ?,
+              reverse_charge  = ?,
+              notes           = ?,
+              purchase_type   = ?,
+              payment_status  = ?
+            WHERE id = ?
+        """, (
+            data['vendor_id'],
+            data.get('bill_no', ''),
+            data.get('purchase_date', ''),
+            data.get('taxable_amount', 0),
+            data.get('cgst_amount', 0),
+            data.get('sgst_amount', 0),
+            data.get('igst_amount', 0),
+            data.get('total_tax', 0),
+            data.get('total_amount', 0),
+            data.get('amount_paid', 0),
+            data.get('place_of_supply', ''),
+            1 if data.get('reverse_charge') else 0,
+            data.get('notes', ''),
+            data.get('purchase_type', 'Resale'),
+            'Unpaid' if data.get('amount_paid', 0) <= 0
+                     else ('Paid' if data.get('amount_paid', 0) >= data.get('total_amount', 0)
+                     else 'Partial'),
+            purchase_id,
+        ))
+        conn.commit()
+        return True
+    except Exception as e:
+        print(f"[update_purchase_header ERROR] {e}")
+        conn.rollback()
+        return False
+    finally:
+        conn.close()
+
+
+
+def save_purchase_item(purchase_id, item, is_igst=False):
+    """Save a single purchase line item. Used by edit_purchase route."""
+    conn = get_db_connection()
+    c    = conn.cursor()
+    try:
+        qty      = float(item.get('quantity', 0))
+        rate     = float(item.get('rate', 0))
+        gst_rate = float(item.get('gst_rate', 0))
+        taxable  = round(qty * rate, 2)
+        cgst     = round(taxable * gst_rate / 200, 2) if not is_igst else 0
+        sgst     = round(taxable * gst_rate / 200, 2) if not is_igst else 0
+        igst     = round(taxable * gst_rate / 100, 2) if is_igst     else 0
+        total    = round(taxable + cgst + sgst + igst, 2)
+
+        c.execute("""
+            INSERT INTO purchase_items
+              (purchase_id, product_id, description, batch_no, expiry_date,
+               quantity, rate, gst_rate, taxable_amount,
+               cgst_amount, sgst_amount, igst_amount, total_amount)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
+        """, (
+            purchase_id,
+            item.get('product_id') or None,
+            item.get('description', ''),
+            item.get('batch_no', '') or '',
+            item.get('expiry_date', '') or '',
+            qty, rate, gst_rate,
+            taxable, cgst, sgst, igst, total
+        ))
+        item_id = c.lastrowid
+
+        # Update product stock (only if product_id exists and purchase_type != Raw Material)
+        pid = item.get('product_id')
+        purchase_type = item.get('purchase_type', 'Resale')
+        if pid and int(pid) > 0 and purchase_type != 'Raw Material' and qty > 0:
+            c.execute("UPDATE products SET stock_qty = stock_qty + ? WHERE id = ?", (qty, int(pid)))
+
+        # Batch tracking
+        batch_no = (item.get('batch_no') or '').strip()
+        if batch_no and pid and int(pid) > 0:
+            from datetime import date as _date
+            c.execute("""
+                INSERT INTO batch_tracking
+                  (product_id, batch_no, expiry_date, purchase_id, purchase_item_id,
+                   qty_in, qty_out, tracking_date, notes)
+                VALUES (?,?,?,?,?,?,0,?,?)
+            """, (
+                int(pid), batch_no,
+                item.get('expiry_date', '') or '',
+                purchase_id, item_id,
+                qty,
+                _date.today().isoformat(),
+                f"Stock IN (Edit) — Purchase #{purchase_id}",
+            ))
+
+        conn.commit()
+        return item_id
+    except Exception as e:
+        print(f"[save_purchase_item ERROR] {e}")
+        conn.rollback()
+        return None
+    finally:
+        conn.close()
+
+
+def delete_purchase_items(purchase_id):
+    """Delete all line items for a purchase (before re-saving edited items)."""
+    conn = get_db_connection()
+    c    = conn.cursor()
+    try:
+        c.execute("DELETE FROM purchase_items WHERE purchase_id = ?", (purchase_id,))
+        conn.commit()
+    except Exception as e:
+        print(f"[delete_purchase_items ERROR] {e}")
+    finally:
+        conn.close()
+
+
+def add_batch_tracking_entry(data):
+    """
+    Insert a single batch_tracking row (IN movement).
+    data keys: product_id, batch_no, expiry_date, purchase_id (opt),
+               invoice_id (opt), buyer_id (opt), qty_in, qty_out,
+               tracking_date, notes
+    """
+    conn = get_db_connection()
+    c    = conn.cursor()
+    try:
+        c.execute("""
+            INSERT INTO batch_tracking
+              (product_id, batch_no, expiry_date, purchase_id, invoice_id,
+               buyer_id, qty_in, qty_out, tracking_date, notes)
+            VALUES (?,?,?,?,?,?,?,?,?,?)
+        """, (
+            data.get('product_id'),
+            data.get('batch_no', ''),
+            data.get('expiry_date', '') or '',
+            data.get('purchase_id'),
+            data.get('invoice_id'),
+            data.get('buyer_id'),
+            data.get('qty_in', 0),
+            data.get('qty_out', 0),
+            data.get('tracking_date', ''),
+            data.get('notes', ''),
+        ))
+        conn.commit()
+        return c.lastrowid
+    except Exception as e:
+        print(f"[add_batch_tracking_entry ERROR] {e}")
+        conn.rollback()
+        return None
+    finally:
+        conn.close()
+
+
+def get_batches_for_product(product_id=None, include_expired=False):
+    """
+    Return batch summary for a product (or all products).
+    Groups by product + batch_no, shows qty_in, qty_out, balance, expiry.
+    """
+    conn = get_db_connection()
+    c    = conn.cursor()
+    try:
+        from datetime import date
+        today = date.today().isoformat()
+        where = "WHERE 1=1"
+        params = []
+        if product_id:
+            where += " AND bt.product_id = ?"
+            params.append(product_id)
+        if not include_expired:
+            where += " AND (bt.expiry_date = '' OR bt.expiry_date IS NULL OR bt.expiry_date >= ?)"
+            params.append(today)
+
+        rows = c.execute(f"""
+            SELECT bt.product_id,
+                   p.name  AS product_name,
+                   p.unit  AS unit,
+                   bt.batch_no,
+                   bt.expiry_date,
+                   SUM(bt.qty_in)  AS total_in,
+                   SUM(bt.qty_out) AS total_out,
+                   SUM(bt.qty_in) - SUM(bt.qty_out) AS balance,
+                   MAX(bt.purchase_id) AS last_purchase_id
+            FROM batch_tracking bt
+            JOIN products p ON bt.product_id = p.id
+            {where}
+            GROUP BY bt.product_id, bt.batch_no
+            ORDER BY p.name, bt.expiry_date
+        """, params).fetchall()
+        return [dict(r) for r in rows]
+    except Exception as e:
+        print(f"[get_batches_for_product ERROR] {e}")
+        return []
+    finally:
+        conn.close()
+
+
+def get_batch_history(product_id=None, batch_no=None):
+    """
+    Full movement history for a batch — shows which customers received it.
+    """
+    conn = get_db_connection()
+    c    = conn.cursor()
+    try:
+        where  = "WHERE 1=1"
+        params = []
+        if product_id:
+            where += " AND bt.product_id = ?"
+            params.append(product_id)
+        if batch_no:
+            where += " AND bt.batch_no = ?"
+            params.append(batch_no)
+
+        rows = c.execute(f"""
+            SELECT bt.*,
+                   p.name  AS product_name,
+                   b.name  AS buyer_name,
+                   i.invoice_no,
+                   v.name  AS vendor_name,
+                   pu.bill_no AS purchase_bill_no
+            FROM batch_tracking bt
+            LEFT JOIN products p  ON bt.product_id  = p.id
+            LEFT JOIN buyers   b  ON bt.buyer_id    = b.id
+            LEFT JOIN invoices i  ON bt.invoice_id  = i.id
+            LEFT JOIN purchases pu ON bt.purchase_id = pu.id
+            LEFT JOIN vendors  v  ON pu.vendor_id   = v.id
+            {where}
+            ORDER BY bt.tracking_date DESC, bt.id DESC
+        """, params).fetchall()
+        return [dict(r) for r in rows]
+    except Exception as e:
+        print(f"[get_batch_history ERROR] {e}")
+        return []
+    finally:
+        conn.close()
+
+
+def get_expiring_batches(days_ahead=30):
+    """Return batches expiring within N days — for reminders."""
+    conn = get_db_connection()
+    c    = conn.cursor()
+    try:
+        from datetime import date, timedelta
+        today  = date.today().isoformat()
+        cutoff = (date.today() + timedelta(days=days_ahead)).isoformat()
+        rows   = c.execute("""
+            SELECT bt.product_id,
+                   p.name  AS product_name,
+                   p.unit  AS unit,
+                   bt.batch_no,
+                   bt.expiry_date,
+                   SUM(bt.qty_in) - SUM(bt.qty_out) AS balance,
+                   CASE WHEN bt.expiry_date < ? THEN 1 ELSE 0 END AS expired
+            FROM batch_tracking bt
+            JOIN products p ON bt.product_id = p.id
+            WHERE bt.expiry_date != '' AND bt.expiry_date IS NOT NULL
+              AND bt.expiry_date <= ?
+            GROUP BY bt.product_id, bt.batch_no
+            HAVING balance > 0
+            ORDER BY bt.expiry_date
+        """, (today, cutoff)).fetchall()
+        return [dict(r) for r in rows]
+    except Exception as e:
+        print(f"[get_expiring_batches ERROR] {e}")
+        return []
+    finally:
+        conn.close()
+
+
+def get_purchase_itc_summary(start_date, end_date):
+    """
+    ITC summary for GSTR-3B Table 4.
+    Returns total CGST, SGST, IGST from purchases in date range.
+    Excludes RCM purchases (they are reported separately).
+    """
+    conn = get_db_connection()
+    c    = conn.cursor()
+    try:
+        row = c.execute("""
+            SELECT
+              COALESCE(SUM(taxable_amount), 0) AS taxable,
+              COALESCE(SUM(cgst_amount),    0) AS cgst,
+              COALESCE(SUM(sgst_amount),    0) AS sgst,
+              COALESCE(SUM(igst_amount),    0) AS igst,
+              COALESCE(SUM(total_tax),      0) AS total_tax,
+              COUNT(*)                          AS purchase_count
+            FROM purchases
+            WHERE purchase_date BETWEEN ? AND ?
+              AND reverse_charge = 0
+        """, (start_date, end_date)).fetchone()
+
+        rcm_row = c.execute("""
+            SELECT
+              COALESCE(SUM(cgst_amount), 0) AS cgst,
+              COALESCE(SUM(sgst_amount), 0) AS sgst,
+              COALESCE(SUM(igst_amount), 0) AS igst,
+              COALESCE(SUM(total_tax),   0) AS total_tax,
+              COUNT(*)                       AS count
+            FROM purchases
+            WHERE purchase_date BETWEEN ? AND ?
+              AND reverse_charge = 1
+        """, (start_date, end_date)).fetchone()
+
+        return {
+            'eligible_itc' : dict(row),
+            'rcm_itc'      : dict(rcm_row),
+            'start_date'   : start_date,
+            'end_date'     : end_date,
+        }
+    except Exception as e:
+        print(f"[get_purchase_itc_summary ERROR] {e}")
+        return {'eligible_itc': {}, 'rcm_itc': {}, 'start_date': start_date, 'end_date': end_date}
+    finally:
+        conn.close()
+
+
+# ─────────────────────────────────────────────
 #  STOCK REPORT
 # ─────────────────────────────────────────────
 def get_stock_report(start_date, end_date):
@@ -1496,21 +2163,118 @@ def get_gstr3b_data(start_date, end_date):
               AND invoice_no NOT LIKE '[CANCELLED]%'
         """, (start_date, end_date)).fetchone()
 
+        # ── Section 4: ITC from Purchases ─────────────────────────────
+        # Eligible ITC = purchases where reverse_charge = 0
+        ei_row = c.execute("""
+            SELECT
+              COALESCE(SUM(taxable_amount), 0) AS taxable,
+              COALESCE(SUM(cgst_amount),    0) AS cgst,
+              COALESCE(SUM(sgst_amount),    0) AS sgst,
+              COALESCE(SUM(igst_amount),    0) AS igst,
+              COALESCE(SUM(total_tax),      0) AS total_tax,
+              COUNT(*)                          AS bill_count
+            FROM purchases
+            WHERE purchase_date BETWEEN ? AND ?
+              AND (reverse_charge = 0 OR reverse_charge IS NULL)
+        """, (start_date, end_date)).fetchone()
+
+        # RCM ITC = purchases where reverse_charge = 1
+        rcm_row = c.execute("""
+            SELECT
+              COALESCE(SUM(cgst_amount), 0) AS cgst,
+              COALESCE(SUM(sgst_amount), 0) AS sgst,
+              COALESCE(SUM(igst_amount), 0) AS igst,
+              COALESCE(SUM(total_tax),   0) AS total_tax,
+              COUNT(*)                       AS bill_count
+            FROM purchases
+            WHERE purchase_date BETWEEN ? AND ?
+              AND reverse_charge = 1
+        """, (start_date, end_date)).fetchone()
+
+        itc = {
+            'eligible_itc': dict(ei_row)  if ei_row  else {},
+            'rcm_itc'     : dict(rcm_row) if rcm_row else {},
+        }
+
         return {
             'rate_wise'  : rate_wise,
             'tax_totals' : dict(tax_totals),
+            'itc'        : itc,
             'start_date' : start_date,
             'end_date'   : end_date,
         }
     except Exception as e:
+        import traceback; traceback.print_exc()
         print(f"[get_gstr3b_data ERROR] {e}")
-        return {'rate_wise':[], 'tax_totals':{}, 'start_date':start_date, 'end_date':end_date}
+        return {'rate_wise':[], 'tax_totals':{}, 'itc':{}, 'start_date':start_date, 'end_date':end_date}
     finally:
         conn.close()
 
 # ─────────────────────────────────────────────
 #  ENTRY POINT (for direct testing)
 # ─────────────────────────────────────────────
+# ─────────────────────────────────────────────
+#  ENTRY POINT (for direct testing)
+# ─────────────────────────────────────────────
+def get_gstr2b_data(start_date, end_date):
+    """
+    GSTR-2B style Purchase Register — ITC details from purchases.
+    Returns all purchase bills in the date range with GST breakdown.
+    Columns: Supplier, GSTIN, Bill No, Bill Date, Place of Supply,
+             RCM, Taxable, CGST, SGST, IGST, Total Tax.
+    """
+    conn = get_db_connection()
+    c    = conn.cursor()
+    try:
+        rows = c.execute("""
+            SELECT p.*,
+                   COALESCE(v.name,  'Unknown Vendor')  AS supplier_name,
+                   COALESCE(v.gstin, '')                 AS supplier_gstin,
+                   COALESCE(v.phone, '')                 AS supplier_phone
+            FROM purchases p
+            LEFT JOIN vendors v ON p.vendor_id = v.id
+            WHERE p.purchase_date BETWEEN ? AND ?
+            ORDER BY p.purchase_date, p.id
+        """, (start_date, end_date)).fetchall()
+
+        purchases = [dict(r) for r in rows]
+
+        # Totals — taxable_amount fallback for old bills without GST breakdown
+        def _tax(r, k):     return float(r.get(k,0) or 0)
+        def _taxable(r):
+            ta = _tax(r,'taxable_amount')
+            if ta > 0: return ta
+            # Fallback: total_amount - total_tax
+            return max(0, _tax(r,'total_amount') - _tax(r,'total_tax'))
+
+        for r in purchases:
+            if not r.get('taxable_amount'):
+                r['taxable_amount'] = _taxable(r)
+
+        totals = {
+            'taxable'   : sum(_taxable(r)              for r in purchases),
+            'cgst'      : sum(_tax(r,'cgst_amount')    for r in purchases),
+            'sgst'      : sum(_tax(r,'sgst_amount')    for r in purchases),
+            'igst'      : sum(_tax(r,'igst_amount')    for r in purchases),
+            'total_tax' : sum(_tax(r,'total_tax')      for r in purchases),
+            'grand'     : sum(_tax(r,'total_amount')   for r in purchases),
+            'bill_count': len(purchases),
+        }
+
+        return {
+            'purchases' : purchases,
+            'totals'    : totals,
+            'start_date': start_date,
+            'end_date'  : end_date,
+        }
+    except Exception as e:
+        import traceback; traceback.print_exc()
+        print(f"[get_gstr2b_data ERROR] {e}")
+        return {'purchases':[], 'totals':{}, 'start_date':start_date, 'end_date':end_date}
+    finally:
+        conn.close()
+
+
 if __name__ == "__main__":
     create_tables()
     print("=" * 50)
@@ -1525,3 +2289,120 @@ if __name__ == "__main__":
     print(f"  Total Due     : ₹{kpi[1]:,.2f}")
     print(f"  Est. Profit   : ₹{kpi[2]:,.2f}")
     print(f"  Low Stock     : {kpi[3]} items")
+
+
+# ─────────────────────────────────────────────────────────────
+#  PROFORMA INVOICE / SALES QUOTATION FUNCTIONS
+# ─────────────────────────────────────────────────────────────
+
+def get_next_quotation_number():
+    """Auto-generates next quotation number: QT-0001, QT-0002 ..."""
+    conn = get_db_connection()
+    c    = conn.cursor()
+    c.execute("SELECT quotation_no FROM proforma_invoices ORDER BY id DESC LIMIT 1")
+    last = c.fetchone()
+    conn.close()
+    prefix = "QT-"
+    if last:
+        try:
+            return f"{prefix}{int(last['quotation_no'].split(prefix)[-1]) + 1:04d}"
+        except Exception:
+            pass
+    return f"{prefix}0001"
+
+
+def save_proforma(data, items):
+    """Save a new proforma invoice with line items. Returns new id or None."""
+    conn = get_db_connection()
+    c    = conn.cursor()
+    try:
+        c.execute("""
+            INSERT INTO proforma_invoices
+              (quotation_no, quotation_date, valid_until, buyer_id,
+               buyer_name, buyer_address, buyer_gstin, buyer_state, buyer_phone,
+               payment_mode, order_ref,
+               subtotal, total_discount, taxable_value,
+               total_gst, total_cgst, total_sgst, total_igst,
+               freight, round_off, grand_total, status, notes)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+        """, (
+            data['quotation_no'], data['quotation_date'], data.get('valid_until',''),
+            data.get('buyer_id'), data.get('buyer_name',''),
+            data.get('buyer_address',''), data.get('buyer_gstin',''),
+            data.get('buyer_state',''),  data.get('buyer_phone',''),
+            data.get('payment_mode','Advance'), data.get('order_ref',''),
+            data.get('subtotal',0), data.get('total_discount',0),
+            data.get('taxable_value',0), data.get('total_gst',0),
+            data.get('total_cgst',0), data.get('total_sgst',0),
+            data.get('total_igst',0), data.get('freight',0),
+            data.get('round_off',0), data.get('grand_total',0),
+            data.get('status','Active'), data.get('notes',''),
+        ))
+        pid = c.lastrowid
+        for item in items:
+            c.execute("""
+                INSERT INTO proforma_items
+                  (proforma_id, product_id, description, hsn, gst_rate,
+                   quantity, unit, rate, discount_percent, amount)
+                VALUES (?,?,?,?,?,?,?,?,?,?)
+            """, (
+                pid,
+                item.get('product_id'),   item.get('description',''),
+                item.get('hsn',''),        item.get('gst_rate',0),
+                item.get('quantity',0),    item.get('unit',''),
+                item.get('rate',0),        item.get('discount_percent',0),
+                item.get('amount',0),
+            ))
+        conn.commit()
+        return pid
+    except Exception as e:
+        print(f"[save_proforma ERROR] {e}")
+        conn.rollback()
+        return None
+    finally:
+        conn.close()
+
+
+def get_all_proformas():
+    """Return all proforma invoices, newest first."""
+    conn = get_db_connection()
+    rows = conn.execute("""
+        SELECT p.*, b.name AS buyer_display
+        FROM proforma_invoices p
+        LEFT JOIN buyers b ON p.buyer_id = b.id
+        ORDER BY p.id DESC
+    """).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def get_proforma_detail(proforma_id):
+    """Return (proforma_dict, items_list) for a single quotation."""
+    conn = get_db_connection()
+    row  = conn.execute(
+        "SELECT * FROM proforma_invoices WHERE id = ?", (proforma_id,)
+    ).fetchone()
+    if not row:
+        conn.close()
+        return None, []
+    items = conn.execute(
+        "SELECT * FROM proforma_items WHERE proforma_id = ? ORDER BY id", (proforma_id,)
+    ).fetchall()
+    conn.close()
+    return dict(row), [dict(i) for i in items]
+
+
+def delete_proforma(proforma_id):
+    """Delete a proforma invoice and its items."""
+    conn = get_db_connection()
+    try:
+        conn.execute("DELETE FROM proforma_items WHERE proforma_id = ?", (proforma_id,))
+        conn.execute("DELETE FROM proforma_invoices WHERE id = ?", (proforma_id,))
+        conn.commit()
+        return True
+    except Exception as e:
+        print(f"[delete_proforma ERROR] {e}")
+        return False
+    finally:
+        conn.close()
+

@@ -317,6 +317,21 @@
               <span class="field-hint">Used for profit calculation</span>
             </div>
 
+            <div class="form-group">
+              <label class="form-label" style="color:#7c3aed;"><i class="bi bi-upc me-1"></i>Batch No. <span style="font-weight:400;color:#94a3b8;">(optional)</span></label>
+              <input type="text" name="batch_no" class="form-input"
+                     placeholder="e.g. B2025-01"
+                     style="border-color:#c4b5fd;" />
+              <span class="field-hint">Track which batch this stock belongs to</span>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label" style="color:#dc2626;"><i class="bi bi-calendar-x me-1"></i>Expiry Date <span style="font-weight:400;color:#94a3b8;">(optional)</span></label>
+              <input type="date" name="expiry_date" class="form-input"
+                     style="border-color:#fca5a5;" />
+              <span class="field-hint">Get alerts 30 days before expiry</span>
+            </div>
+
           </div>
         </div>
       </div>
@@ -370,7 +385,7 @@
             <span class="field-hint">Leave 0 to update prices only</span>
           </div>
 
-          <div class="form-group">
+          <div class="form-group mb-3">
             <label class="form-label">Purchase Rate for New Stock (₹)</label>
             <div class="price-input-wrap">
               <span class="prefix">₹</span>
@@ -379,6 +394,22 @@
                      value="0" step="0.01" min="0"
                      placeholder="0.00"
                      oninput="updateWAC()" />
+            </div>
+          </div>
+
+          <div class="form-grid-2">
+            <div class="form-group">
+              <label class="form-label" style="color:#7c3aed;"><i class="bi bi-upc me-1"></i>Batch No.</label>
+              <input type="text" name="batch_no" class="form-input"
+                     placeholder="e.g. B2025-01"
+                     style="border-color:#c4b5fd;" />
+              <span class="field-hint">Optional — for batch tracking</span>
+            </div>
+            <div class="form-group">
+              <label class="form-label" style="color:#dc2626;"><i class="bi bi-calendar-x me-1"></i>Expiry Date</label>
+              <input type="date" name="expiry_date" class="form-input"
+                     style="border-color:#fca5a5;" />
+              <span class="field-hint">Get 30-day expiry alerts</span>
             </div>
           </div>
 

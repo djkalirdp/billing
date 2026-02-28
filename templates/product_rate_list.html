@@ -1,0 +1,209 @@
+{% extends 'base.html' %}
+{% block title %}Product Rate List{% endblock %}
+{% block page_title %}Product Rate List{% endblock %}
+
+{% block head %}
+<style>
+  .search-bar-wrap {
+    background:white;border:1.5px solid var(--border);border-radius:14px;
+    padding:16px 20px;margin-bottom:16px;display:flex;align-items:center;gap:12px;
+  }
+  .search-input {
+    flex:1;border:2px solid var(--border);border-radius:10px;
+    padding:10px 14px 10px 40px;font-size:14px;font-family:var(--font-body);outline:none;
+    background:#f8fafc url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='%2394a3b8' viewBox='0 0 16 16'%3E%3Cpath d='M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001c.03.04.062.078.098.115l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85a1.007 1.007 0 0 0-.115-.099zm-5.44 1.408a5.5 5.5 0 1 1 0-11 5.5 5.5 0 0 1 0 11z'/%3E%3C/svg%3E") no-repeat 13px center;
+    transition:border-color .15s;
+  }
+  .search-input:focus{border-color:var(--accent);background:white;box-shadow:0 0 0 3px rgba(37,99,235,.08);}
+  .search-btn{background:var(--accent);color:white;border:none;border-radius:10px;padding:10px 20px;
+    font-size:13px;font-weight:800;cursor:pointer;display:flex;align-items:center;gap:6px;white-space:nowrap;}
+  .clear-btn{background:#f1f5f9;color:#64748b;border:1.5px solid var(--border);border-radius:10px;
+    padding:9px 14px;font-size:13px;font-weight:700;cursor:pointer;text-decoration:none;
+    display:flex;align-items:center;gap:6px;white-space:nowrap;}
+  .clear-btn:hover{background:#e2e8f0;}
+  .rate-table-wrap{background:white;border:1.5px solid var(--border);border-radius:14px;overflow:hidden;box-shadow:var(--shadow);}
+  .table-top-bar{padding:13px 20px;display:flex;align-items:center;justify-content:space-between;
+    border-bottom:1px solid var(--border);background:#f8fafc;}
+  .table-top-title{font-weight:800;font-size:14px;color:var(--text-main);display:flex;align-items:center;gap:8px;}
+  .count-chip{background:#eff6ff;color:#2563eb;border-radius:20px;padding:2px 10px;font-size:12px;font-weight:800;}
+  .rate-table{width:100%;border-collapse:collapse;font-size:13px;}
+  .rate-table thead th{padding:10px 14px;background:#f1f5f9;font-size:10.5px;font-weight:800;
+    text-transform:uppercase;letter-spacing:.05em;color:#64748b;border-bottom:1.5px solid var(--border);white-space:nowrap;}
+  .rate-table thead th.num{text-align:right;}
+  .tr-product{border-bottom:2px solid #e2e8f0;background:white;transition:background .1s;}
+  .tr-product:hover{background:#fafbff;}
+  .tr-product td{padding:12px 14px;vertical-align:middle;}
+  .tr-product td.num{text-align:right;font-variant-numeric:tabular-nums;}
+  .tr-variation{border-bottom:1px solid #f1f5f9;background:#f9fafb;}
+  .tr-variation:hover{background:#f0f4ff;}
+  .tr-variation td{padding:8px 14px 8px 30px;vertical-align:middle;font-size:12.5px;}
+  .tr-variation td.num{text-align:right;font-variant-numeric:tabular-nums;}
+  .prod-name{font-weight:800;font-size:13.5px;color:#1e293b;}
+  .prod-unit{font-size:11px;color:#94a3b8;margin-top:1px;}
+  .var-name{font-weight:700;color:#475569;}
+  .var-label{background:#ede9fe;color:#6d28d9;border-radius:5px;padding:2px 7px;font-size:10.5px;font-weight:800;margin-right:4px;}
+  .hsn-chip{background:#f1f5f9;color:#475569;border-radius:6px;padding:3px 8px;font-size:11.5px;font-weight:700;font-family:monospace;}
+  .gst-badge{border-radius:6px;padding:3px 8px;font-size:12px;font-weight:800;}
+  .gst-0{background:#f8fafc;color:#94a3b8;} .gst-3{background:#f0fdf4;color:#15803d;}
+  .gst-5{background:#ecfdf5;color:#059669;} .gst-12{background:#eff6ff;color:#2563eb;}
+  .gst-18{background:#fff7ed;color:#c2410c;} .gst-28{background:#fef2f2;color:#dc2626;}
+  .gst-other{background:#f5f3ff;color:#7c3aed;}
+  .stock-ok{color:#059669;font-weight:800;} .stock-low{color:#d97706;font-weight:800;}
+  .stock-zero{color:#94a3b8;font-weight:700;}
+  .stock-tag{font-size:10px;font-weight:700;display:block;}
+  .price-incl{font-weight:800;color:#1e293b;font-size:14px;}
+  .price-cost{font-size:12px;color:#94a3b8;}
+  .var-toggle-btn{background:#ede9fe;border:none;cursor:pointer;color:#7c3aed;font-size:12px;
+    font-weight:700;padding:3px 9px;border-radius:6px;white-space:nowrap;}
+  .var-toggle-btn:hover{background:#ddd6fe;}
+  .info-bar{background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;padding:10px 16px;
+    font-size:12.5px;color:#1e40af;margin-bottom:14px;display:flex;align-items:center;gap:8px;}
+  .no-results{text-align:center;padding:80px 20px;color:#94a3b8;}
+  .no-results i{font-size:52px;display:block;margin-bottom:14px;}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="info-bar">
+  <i class="bi bi-info-circle-fill"></i>
+  Customer ko rate batane ke liye yahan search karein. Products with variations ka arrow click karke expand karein.
+</div>
+
+<form method="GET" action="{{ url_for('product_rate_list') }}" id="searchForm">
+  <div class="search-bar-wrap">
+    <input type="text" name="q" id="searchInput" class="search-input"
+           value="{{ q }}" placeholder="Product name ya HSN code se search karein…" autofocus />
+    <button type="submit" class="search-btn"><i class="bi bi-search"></i> Search</button>
+    {% if q %}
+    <a href="{{ url_for('product_rate_list') }}" class="clear-btn"><i class="bi bi-x-circle"></i> Clear</a>
+    {% endif %}
+  </div>
+</form>
+
+<div class="rate-table-wrap">
+  <div class="table-top-bar">
+    <div class="table-top-title">
+      <i class="bi bi-tags-fill" style="color:#7c3aed;"></i>
+      {% if q %}"{{ q }}" ke results{% else %}Sabhi Products ki Rate List{% endif %}
+      <span class="count-chip">{{ products|length }} products</span>
+    </div>
+    <div style="font-size:11.5px;color:#94a3b8;">Rate w/o GST &nbsp;|&nbsp; Inclusive = Rate + GST</div>
+  </div>
+
+  {% if products %}
+  <div style="overflow-x:auto;">
+    <table class="rate-table">
+      <thead>
+        <tr>
+          <th style="width:34px;">#</th>
+          <th>Product / Variation</th>
+          <th>HSN Code</th>
+          <th class="num">Cost Price</th>
+          <th class="num">Rate (w/o GST)</th>
+          <th>GST %</th>
+          <th class="num">Price (incl. GST)</th>
+          <th class="num">Stock</th>
+          <th style="width:80px;"></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for p in products %}
+        {% set sp = p.selling_price if p.selling_price and p.selling_price > 0 else p.rate %}
+        {% set price_incl = sp * (1 + (p.gst_rate or 0) / 100) %}
+        {% set gr = p.gst_rate | int %}
+        {% set gst_cls = 'gst-0' if gr==0 else ('gst-3' if gr<=3 else ('gst-5' if gr<=5 else ('gst-12' if gr<=12 else ('gst-18' if gr<=18 else 'gst-28')))) %}
+        {% set stock_cls = 'stock-zero' if p.stock_qty==0 else ('stock-low' if p.stock_qty<5 else 'stock-ok') %}
+        {% set has_vars = p.variations and p.variations|length > 0 %}
+
+        <tr class="tr-product" id="prod_{{ p.id }}">
+          <td style="color:#94a3b8;font-size:12px;text-align:center;">{{ loop.index }}</td>
+          <td>
+            <div class="prod-name">{{ p.name }}</div>
+            {% if p.unit %}<div class="prod-unit">per {{ p.unit }}</div>{% endif %}
+          </td>
+          <td>{% if p.hsn %}<span class="hsn-chip">{{ p.hsn }}</span>{% else %}<span style="color:#cbd5e1;font-size:12px;">—</span>{% endif %}</td>
+          <td class="num price-cost">₹ {{ "%.2f"|format(p.rate) }}</td>
+          <td class="num"><span style="font-weight:700;color:#1e293b;">₹ {{ "%.2f"|format(sp) }}</span></td>
+          <td><span class="gst-badge {{ gst_cls }}">{{ p.gst_rate|int }}%</span></td>
+          <td class="num"><span class="price-incl">₹ {{ "%.2f"|format(price_incl) }}</span></td>
+          <td class="num">
+            <span class="{{ stock_cls }}">{{ "%.0f"|format(p.stock_qty) }}{% if p.unit %}<span style="font-size:11px;font-weight:400;"> {{ p.unit }}</span>{% endif %}</span>
+            {% if p.stock_qty==0 %}<span class="stock-tag" style="color:#dc2626;">OUT</span>{% elif p.stock_qty<5 %}<span class="stock-tag" style="color:#d97706;">LOW</span>{% endif %}
+          </td>
+          <td style="text-align:center;">
+            {% if has_vars %}
+            <button class="var-toggle-btn" onclick="toggleVars({{ p.id }},this)">
+              <i class="bi bi-chevron-down"></i> {{ p.variations|length }}
+            </button>
+            {% endif %}
+          </td>
+        </tr>
+
+        {% if has_vars %}
+        {% for v in p.variations %}
+        {% set vsp = v.selling_price if v.selling_price and v.selling_price > 0 else v.rate %}
+        {% set vsp_f = vsp if vsp and vsp > 0 else sp %}
+        {% set vpi = vsp_f * (1 + (p.gst_rate or 0) / 100) %}
+        {% set vstk = 'stock-zero' if v.stock_qty==0 else ('stock-low' if v.stock_qty<5 else 'stock-ok') %}
+        <tr class="tr-variation" data-parent="{{ p.id }}" style="display:{% if q %}table-row{% else %}none{% endif %};">
+          <td></td>
+          <td><span class="var-label">↳</span><span class="var-name">{{ v.variation_name }}</span></td>
+          <td>{% if p.hsn %}<span class="hsn-chip" style="opacity:.6;">{{ p.hsn }}</span>{% else %}<span style="color:#cbd5e1;font-size:12px;">—</span>{% endif %}</td>
+          <td class="num price-cost">{% if v.rate and v.rate>0 %}₹ {{ "%.2f"|format(v.rate) }}{% else %}<span style="color:#cbd5e1;">—</span>{% endif %}</td>
+          <td class="num"><span style="font-weight:700;color:#475569;">₹ {{ "%.2f"|format(vsp_f) }}</span></td>
+          <td><span class="gst-badge {{ gst_cls }}" style="opacity:.8;">{{ p.gst_rate|int }}%</span></td>
+          <td class="num"><span class="price-incl" style="font-size:13px;">₹ {{ "%.2f"|format(vpi) }}</span></td>
+          <td class="num">
+            <span class="{{ vstk }}">{{ "%.0f"|format(v.stock_qty) }}{% if p.unit %}<span style="font-size:11px;font-weight:400;"> {{ p.unit }}</span>{% endif %}</span>
+            {% if v.stock_qty==0 %}<span class="stock-tag" style="color:#dc2626;">OUT</span>{% elif v.stock_qty<5 %}<span class="stock-tag" style="color:#d97706;">LOW</span>{% endif %}
+          </td>
+          <td></td>
+        </tr>
+        {% endfor %}
+        {% endif %}
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="no-results">
+    <i class="bi bi-search"></i>
+    {% if q %}
+    <h3 style="font-weight:800;color:#64748b;">"{{ q }}" ke liye koi product nahi mila</h3>
+    <p>Alag keyword se search karein ya spelling check karein.</p>
+    <a href="{{ url_for('product_rate_list') }}" class="clear-btn" style="display:inline-flex;margin-top:10px;"><i class="bi bi-arrow-counterclockwise"></i> Sabhi Products</a>
+    {% else %}
+    <h3 style="font-weight:800;color:#64748b;">Koi product registered nahi hai</h3>
+    <p>Pehle Products section mein products add karein.</p>
+    {% endif %}
+  </div>
+  {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let searchTimer;
+document.getElementById('searchInput').addEventListener('input', function() {
+  clearTimeout(searchTimer);
+  const q = this.value.trim();
+  searchTimer = setTimeout(() => { if(q.length===0||q.length>=2) document.getElementById('searchForm').submit(); }, 400);
+});
+
+function toggleVars(productId, btn) {
+  const rows = document.querySelectorAll(`tr[data-parent="${productId}"]`);
+  const isHidden = rows.length && rows[0].style.display==='none';
+  rows.forEach(r => r.style.display = isHidden ? '' : 'none');
+  btn.innerHTML = isHidden ? `<i class="bi bi-chevron-up"></i> ${rows.length}` : `<i class="bi bi-chevron-down"></i> ${rows.length}`;
+}
+
+{% if q %}
+// Auto-expand all when searching
+document.querySelectorAll('.var-toggle-btn').forEach(btn => {
+  const pid = btn.closest('tr').id.replace('prod_','');
+  const cnt = document.querySelectorAll(`tr[data-parent="${pid}"]`).length;
+  btn.innerHTML = `<i class="bi bi-chevron-up"></i> ${cnt}`;
+});
+{% endif %}
+</script>
+{% endblock %}

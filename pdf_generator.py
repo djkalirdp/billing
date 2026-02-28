@@ -15,7 +15,7 @@
 ================================================================================
 """
 
-from reportlab.lib.pagesizes import A4, landscape
+from reportlab.lib.pagesizes import A4, A5, landscape, portrait
 from reportlab.lib import colors
 from reportlab.platypus import (
     SimpleDocTemplate, Table, TableStyle, Paragraph,
@@ -154,25 +154,48 @@ def _build_doc(buffer, pagesize=A4, margins=None):
     return SimpleDocTemplate(buffer, pagesize=pagesize, **margins)
 
 
+def resolve_pagesize(size_str):
+    """
+    Converts a string like 'A4', 'A4L', 'A5', 'A5L' to a ReportLab page size tuple.
+    A4  = A4 portrait  (210 x 297 mm)
+    A4L = A4 landscape (297 x 210 mm)
+    A5  = A5 portrait  (148 x 210 mm)
+    A5L = A5 landscape (210 x 148 mm)
+    """
+    mapping = {
+        'A4' : A4,
+        'A4L': landscape(A4),
+        'A5' : A5,
+        'A5L': landscape(A5),
+    }
+    return mapping.get((size_str or 'A4').upper(), A4)
+
+
 # ─────────────────────────────────────────────
 #  SHARED STYLE BUILDER
 # ─────────────────────────────────────────────
-def _get_invoice_styles():
-    """Returns a dict of all ParagraphStyles used in invoice generation."""
+def _get_invoice_styles(fs=1.0):
+    """Returns a dict of all ParagraphStyles. fs=font_scale (0.75 for A5, 1.0 for A4)."""
     base = getSampleStyleSheet()
+    def _s(name, fname, size, align=None, leading=None, after=None):
+        kw = {'fontName': fname, 'fontSize': round(size * fs)}
+        if leading:  kw['leading']    = round(leading * fs)
+        if after:    kw['spaceAfter'] = after
+        if align is not None: kw['alignment'] = align
+        return ParagraphStyle(name, parent=base['Normal'], **kw)
     return {
-        'title'        : ParagraphStyle('Title',    parent=base['Normal'], fontName=FONT_BOLD, fontSize=14, alignment=TA_CENTER),
-        'copy_label'   : ParagraphStyle('CopyLbl',  parent=base['Normal'], fontName=FONT_REG,  fontSize=9,  alignment=TA_RIGHT, spaceAfter=2),
-        'header_lbl'   : ParagraphStyle('H_Lbl',    parent=base['Normal'], fontName=FONT_BOLD, fontSize=8,  leading=10),
-        'header_txt'   : ParagraphStyle('H_Txt',    parent=base['Normal'], fontName=FONT_REG,  fontSize=9,  leading=11),
-        'item_head'    : ParagraphStyle('I_Head',   parent=base['Normal'], fontName=FONT_BOLD, fontSize=8,  alignment=TA_CENTER),
-        'item_txt'     : ParagraphStyle('I_Txt',    parent=base['Normal'], fontName=FONT_REG,  fontSize=9,  alignment=TA_LEFT),
-        'item_num'     : ParagraphStyle('I_Num',    parent=base['Normal'], fontName=FONT_REG,  fontSize=9,  alignment=TA_RIGHT),
-        'item_center'  : ParagraphStyle('I_Ctr',    parent=base['Normal'], fontName=FONT_REG,  fontSize=9,  alignment=TA_CENTER),
-        'footer_lbl'   : ParagraphStyle('F_Lbl',    parent=base['Normal'], fontName=FONT_BOLD, fontSize=9,  leading=11, alignment=TA_RIGHT),
-        'footer_val'   : ParagraphStyle('F_Val',    parent=base['Normal'], fontName=FONT_REG,  fontSize=9,  leading=11, alignment=TA_RIGHT),
-        'footer_txt'   : ParagraphStyle('F_Txt',    parent=base['Normal'], fontName=FONT_REG,  fontSize=9,  leading=11),
-        'footer_small' : ParagraphStyle('F_Sm',     parent=base['Normal'], fontName=FONT_REG,  fontSize=7,  leading=9),
+        'title'        : _s('Title',   FONT_BOLD, 14, TA_CENTER),
+        'copy_label'   : _s('CopyLbl', FONT_REG,   9, TA_RIGHT, after=2),
+        'header_lbl'   : _s('H_Lbl',  FONT_BOLD,  8, leading=10),
+        'header_txt'   : _s('H_Txt',  FONT_REG,   9, leading=11),
+        'item_head'    : _s('I_Head', FONT_BOLD,   8, TA_CENTER),
+        'item_txt'     : _s('I_Txt',  FONT_REG,    9, TA_LEFT),
+        'item_num'     : _s('I_Num',  FONT_REG,    9, TA_RIGHT),
+        'item_center'  : _s('I_Ctr',  FONT_REG,    9, TA_CENTER),
+        'footer_lbl'   : _s('F_Lbl',  FONT_BOLD,   9, TA_RIGHT, leading=11),
+        'footer_val'   : _s('F_Val',  FONT_REG,    9, TA_RIGHT, leading=11),
+        'footer_txt'   : _s('F_Txt',  FONT_REG,    9, leading=11),
+        'footer_small' : _s('F_Sm',   FONT_REG,    7, leading=9),
     }
 
 
@@ -209,9 +232,12 @@ def _build_address_block(info, is_seller=False, styles=None):
 # ─────────────────────────────────────────────
 def create_invoice_pdf(invoice_data, items, settings,
                        previous_balance=0.0, paid_amount=0.0,
-                       save_to_disk=True):
+                       save_to_disk=True, page_size='A4',
+                       is_proforma=False):
     """
     Generates a GST-compliant Tax Invoice PDF with 3 copies.
+    For proforma/quotation: set is_proforma=True.
+    page_size: 'A4' (default), 'A4L' (landscape), 'A5', 'A5L'
 
     Parameters:
       invoice_data     : dict — invoice header (from get_full_invoice_details)
@@ -220,30 +246,58 @@ def create_invoice_pdf(invoice_data, items, settings,
       previous_balance : float — buyer's pending balance before this invoice
       paid_amount      : float — amount paid at time of billing
       save_to_disk     : bool — if True, also saves to /invoices/ folder
+      page_size        : str  — 'A4', 'A4L', 'A5', 'A5L'
+      is_proforma      : bool — if True, generates Sales Quotation instead of Tax Invoice
 
     Returns:
       BytesIO — PDF bytes ready for Flask send_file()
     """
-    S = _get_invoice_styles()
+    # ── Page geometry ─────────────────────────────────────────────
+    # Usable widths: A4=190mm, A4L=277mm, A5=128mm, A5L=190mm
+    # We normalise everything relative to A4 (190mm baseline).
+    # A5L and A4 have the same usable width (190mm) so scale=1.0.
+    # For A4L we keep scale=1.0 — tables stay 190mm, centred on wider page.
+    _ps = (page_size or 'A4').upper()
+    is_a5_portrait   = (_ps == 'A5')
+    is_a5_landscape  = (_ps == 'A5L')
+    is_a4_landscape  = (_ps == 'A4L')
+    is_a5            = is_a5_portrait or is_a5_landscape
+    W_SCALE = 0.67 if is_a5_portrait else 1.0
+    # Font scale: smaller for A5 portrait so text fits narrow cells
+    FS      = 0.80 if is_a5_portrait else 1.0
+    # Margin: tighter for A5 to maximise space
+    margins = dict(leftMargin=6*mm, rightMargin=6*mm, topMargin=7*mm, bottomMargin=7*mm) if is_a5_portrait else               dict(leftMargin=8*mm, rightMargin=8*mm, topMargin=8*mm, bottomMargin=8*mm)
+
+    S = _get_invoice_styles(fs=FS)
     buffer = io.BytesIO()
-    doc = _build_doc(buffer)
+    psize  = resolve_pagesize(_ps)
+    doc    = _build_doc(buffer, pagesize=psize, margins=margins)
     elements = []
 
     c_info = settings.get('company_info', {})
     bank   = settings.get('bank_details', {})
     terms  = settings.get('invoice_settings', {}).get('terms_and_conditions', '')
 
-    copies = [
-        "ORIGINAL FOR RECIPIENT",
-        "DUPLICATE FOR TRANSPORTER",
-        "TRIPLICATE FOR SUPPLIER"
-    ]
+    if is_proforma:
+        copies     = ["SALES QUOTATION"]
+        doc_title  = "SALES QUOTATION"
+    else:
+        copies     = [
+            "ORIGINAL FOR RECIPIENT",
+            "DUPLICATE FOR TRANSPORTER",
+            "TRIPLICATE FOR SUPPLIER",
+        ]
+        doc_title  = "TAX INVOICE"
 
     for copy_idx, copy_name in enumerate(copies):
+        _copy_start = len(elements)  # track where this copy's elements start
 
         # ── Copy Header ──────────────────────────────────────────
-        elements.append(Paragraph("TAX INVOICE", S['title']))
-        elements.append(Paragraph(f"({copy_name})", S['copy_label']))
+        elements.append(Paragraph(doc_title, S['title']))
+        if not is_proforma:
+            elements.append(Paragraph(f"({copy_name})", S['copy_label']))
+        else:
+            elements.append(Spacer(1, 2))
 
         # ── Seller Block (with optional logo) ────────────────────
         seller_lines = [Paragraph("<b>Seller:</b>", S['header_lbl'])] + \
@@ -251,22 +305,27 @@ def create_invoice_pdf(invoice_data, items, settings,
 
         logo_path = c_info.get('logo_path', '')
         logo_img  = None
+        # Logo size scales with W_SCALE
+        _logo_w, _logo_h = 3 * W_SCALE * cm, 2.5 * W_SCALE * cm
         if logo_path and os.path.exists(logo_path):
             try:
-                logo_img = Image(logo_path, width=2.5*cm, height=2.0*cm)
+                logo_img = Image(logo_path, width=_logo_w, height=_logo_h)
                 logo_img.hAlign = 'RIGHT'
             except Exception:
                 pass
 
+        _cell_w  = 9.5 * W_SCALE       # cm — one side of the header table
+        _logo_cw = 2.2 * W_SCALE       # cm — logo column when present
+        _text_cw = _cell_w - _logo_cw  # cm — text column when logo present
+
         if logo_img:
-            # Wrap text in its own table, then place logo beside it
-            t_text = Table([[line] for line in seller_lines], colWidths=[7*cm])
+            t_text = Table([[line] for line in seller_lines], colWidths=[_text_cw*cm])
             t_text.setStyle(TableStyle([
                 ('LEFTPADDING',  (0,0), (-1,-1), 0),
                 ('TOPPADDING',   (0,0), (-1,-1), 0),
                 ('VALIGN',       (0,0), (-1,-1), 'TOP'),
             ]))
-            t_seller = Table([[t_text, logo_img]], colWidths=[7*cm, 2.2*cm])
+            t_seller = Table([[t_text, logo_img]], colWidths=[_text_cw*cm, _logo_cw*cm])
             t_seller.setStyle(TableStyle([
                 ('VALIGN',       (0,0), (-1,-1), 'TOP'),
                 ('LEFTPADDING',  (0,0), (-1,-1), 2),
@@ -274,7 +333,7 @@ def create_invoice_pdf(invoice_data, items, settings,
                 ('ALIGN',        (1,0), (1,0),   'RIGHT'),
             ]))
         else:
-            t_seller = Table([[line] for line in seller_lines], colWidths=[9.5*cm])
+            t_seller = Table([[line] for line in seller_lines], colWidths=[_cell_w*cm])
             t_seller.setStyle(TableStyle([('LEFTPADDING', (0,0), (-1,-1), 4)]))
 
         # ── Buyer Block ───────────────────────────────────────────
@@ -286,31 +345,43 @@ def create_invoice_pdf(invoice_data, items, settings,
         }
         buyer_lines = [Paragraph("<b>Buyer:</b>", S['header_lbl'])] + \
                       _build_address_block(b_info, is_seller=False, styles=S)
-        t_buyer = Table([[line] for line in buyer_lines], colWidths=[9.5*cm])
+        t_buyer = Table([[line] for line in buyer_lines], colWidths=[_cell_w*cm])
         t_buyer.setStyle(TableStyle([
             ('LEFTPADDING', (0,0), (-1,-1), 4),
             ('TOPPADDING',  (0,0), (-1,-1), 6),
         ]))
 
         # ── Invoice Details Block ─────────────────────────────────
-        inv_rows = [
-            ["Invoice No:", f"<b>{invoice_data['invoice_no']}</b>"],
-            ["Date:",        invoice_data['invoice_date']],
-            ["Mode:",        invoice_data.get('payment_mode', '')],
-            ["Ref:",         invoice_data.get('order_ref', '')],
-            ["Dispatch:",    invoice_data.get('dispatch_info', '')],
-        ]
+        if is_proforma:
+            inv_rows = [
+                ["Quotation No:", f"<b>{invoice_data.get('invoice_no', invoice_data.get('quotation_no', ''))}</b>"],
+                ["Date:",          invoice_data.get('invoice_date', invoice_data.get('quotation_date', ''))],
+                ["Mode:",          "Advance"],
+                ["Ref:",           invoice_data.get('order_ref', '')],
+                ["Valid Until:",   invoice_data.get('valid_until', '')],
+            ]
+        else:
+            inv_rows = [
+                ["Invoice No:", f"<b>{invoice_data['invoice_no']}</b>"],
+                ["Date:",        invoice_data['invoice_date']],
+                ["Mode:",        invoice_data.get('payment_mode', '')],
+                ["Ref:",         invoice_data.get('order_ref', '')],
+                ["Dispatch:",    invoice_data.get('dispatch_info', '')],
+            ]
+        _inv_lbl_w = 2.5 * W_SCALE
+        _inv_val_w = (_cell_w - _inv_lbl_w)  # fills the remaining cell width
         t_inv = Table(
             [[Paragraph(r[0], S['header_lbl']), Paragraph(r[1], S['header_txt'])]
              for r in inv_rows],
-            colWidths=[2.5*cm, 7*cm]
+            colWidths=[_inv_lbl_w*cm, _inv_val_w*cm]
         )
 
         # ── Main Header Layout (Seller | Invoice Details) / (Buyer | empty) ──
+        # Use _cell_w (already defined above based on W_SCALE)
         t_head = Table(
             [[t_seller, t_inv],
              [t_buyer,  ""]],
-            colWidths=[9.5*cm, 9.5*cm]
+            colWidths=[_cell_w*cm, _cell_w*cm]
         )
         t_head.setStyle(TableStyle([
             ('GRID',   (0,0), (-1,-1), 0.5, colors.black),
@@ -320,8 +391,9 @@ def create_invoice_pdf(invoice_data, items, settings,
         elements.append(t_head)
 
         # ── Items Table ───────────────────────────────────────────
-        col_headers  = ['S.No.', 'Description', 'HSN', 'GST%', 'Qty', 'Rate', 'Unit', 'Disc%', 'Amount']
-        col_widths   = [1.2*cm, 6*cm, 2.2*cm, 1.4*cm, 1.5*cm, 2*cm, 1.2*cm, 1.2*cm, 2.3*cm]
+        col_headers = ['S.No.', 'Description', 'HSN', 'GST%', 'Qty', 'Rate', 'Unit', 'Disc%', 'Amount']
+        _cw = [1.2, 5.5, 2.2, 1.4, 1.5, 2.1, 1.4, 1.4, 2.3]
+        col_widths = [w * W_SCALE * cm for w in _cw]
         table_data   = [[Paragraph(h, S['item_head']) for h in col_headers]]
 
         gst_analysis = {}
@@ -445,27 +517,30 @@ def create_invoice_pdf(invoice_data, items, settings,
         if upi_id:
             bank_lines.append([Paragraph(f"UPI:  {upi_id}", S['footer_txt'])])
 
+        _qr_cw   = 3.0 * W_SCALE   # cm — QR column in bank section
+        _bank_cw = (9 * W_SCALE) - _qr_cw  # remaining for bank text
         if qr_drawing:
             qr_col = [
                 [Paragraph("<b>Scan to Pay</b>",
                            ParagraphStyle('qrl', parent=S['footer_txt'],
-                                          alignment=TA_CENTER, fontSize=7))],
+                                          alignment=TA_CENTER, fontSize=round(7*FS)))],
                 [qr_drawing],
                 [Paragraph(f"\u20b9{qr_amount:,.2f}",
                            ParagraphStyle('qra', parent=S['footer_txt'],
-                                          alignment=TA_CENTER, fontName=FONT_BOLD, fontSize=8))],
+                                          alignment=TA_CENTER, fontName=FONT_BOLD, fontSize=round(8*FS)))],
             ]
-            bank_tbl   = Table(bank_lines, colWidths=[7.5*cm])
+            bank_tbl   = Table(bank_lines, colWidths=[_bank_cw*cm])
             bank_tbl.setStyle(TableStyle([('LEFTPADDING', (0,0), (-1,-1), 0)]))
-            qr_tbl     = Table(qr_col, colWidths=[3*cm])
+            qr_tbl     = Table(qr_col, colWidths=[_qr_cw*cm])
             qr_tbl.setStyle(TableStyle([('ALIGN', (0,0), (-1,-1), 'CENTER')]))
-            left_inner = Table([[bank_tbl, qr_tbl]], colWidths=[7.5*cm, 3.5*cm])
+            left_inner = Table([[bank_tbl, qr_tbl]], colWidths=[_bank_cw*cm, _qr_cw*cm])
             left_inner.setStyle(TableStyle([('VALIGN', (0,0), (-1,-1), 'TOP')]))
             left_content = [[left_inner]]
         else:
             left_content = bank_lines
 
-        t_left = Table(left_content, colWidths=[11*cm])
+        _lw = 11 * W_SCALE
+        t_left = Table(left_content, colWidths=[_lw*cm])
         t_left.setStyle(TableStyle([('LEFTPADDING', (0,0), (-1,-1), 4)]))
 
         # Show paid only if actually paid (partial or full)
@@ -479,14 +554,16 @@ def create_invoice_pdf(invoice_data, items, settings,
         else:
             add_right_row("Total Outstanding:", bal_due, bold=True)
 
-        t_right = Table(right_content, colWidths=[4.5*cm, 2.5*cm])
+        _r1, _r2 = 4.5 * W_SCALE, 2.5 * W_SCALE
+        t_right = Table(right_content, colWidths=[_r1*cm, _r2*cm])
         t_right.setStyle(TableStyle([
             ('ALIGN',   (0,0), (-1,-1), 'RIGHT'),
             ('VALIGN',  (0,0), (-1,-1), 'TOP'),
             ('RIGHTPADDING', (0,0), (-1,-1), 4),
         ]))
 
-        t_foot = Table([[t_left, t_right]], colWidths=[11*cm, 8*cm])
+        _fw = 8 * W_SCALE
+        t_foot = Table([[t_left, t_right]], colWidths=[_lw*cm, _fw*cm])
         t_foot.setStyle(TableStyle([
             ('BOX',       (0,0), (-1,-1), 0.5, colors.black),
             ('LINEAFTER', (0,0), (0,-1),  0.5, colors.black),
@@ -501,9 +578,9 @@ def create_invoice_pdf(invoice_data, items, settings,
         h_hsn = (['HSN/SAC', 'Taxable', 'Integrated Tax', 'Total Tax']
                  if is_igst else
                  ['HSN/SAC', 'Taxable', 'Central Tax', 'State Tax', 'Total Tax'])
-        w_hsn = ([4*cm, 4*cm, 5*cm, 6*cm]
-                 if is_igst else
-                 [2.5*cm, 3.5*cm, 4*cm, 4*cm, 5*cm])
+        _wh_igst   = [w * W_SCALE * cm for w in [4, 4, 5, 6]]
+        _wh_cgst   = [w * W_SCALE * cm for w in [2.5, 3.5, 4, 4, 5]]
+        w_hsn = _wh_igst if is_igst else _wh_cgst
 
         d_hsn = [[Paragraph(f"<b>{x}</b>", S['item_center']) for x in h_hsn]]
         tot_taxable = 0
@@ -558,10 +635,11 @@ def create_invoice_pdf(invoice_data, items, settings,
         footer_group.append(t_hsn)
 
         # ── Terms & Signature ─────────────────────────────────────
+        _s1, _s2 = 10 * W_SCALE, 9 * W_SCALE
         t_sig = Table([[
             Paragraph(f"<b>Terms & Conditions:</b><br/>{terms}", S['footer_small']),
             Paragraph(f"For <b>{c_info.get('name', 'Company')}</b><br/><br/>Authorized Signatory", S['item_num'])
-        ]], colWidths=[10*cm, 9*cm])
+        ]], colWidths=[_s1*cm, _s2*cm])
         t_sig.setStyle(TableStyle([
             ('BOX',          (0,0), (-1,-1), 0.5, colors.black),
             ('LINEAFTER',    (0,0), (0,-1),  0.5, colors.black),
@@ -572,7 +650,19 @@ def create_invoice_pdf(invoice_data, items, settings,
         ]))
         footer_group.append(t_sig)
 
-        elements.append(KeepTogether(footer_group))
+        # For A5/single-copy: wrap the ENTIRE invoice in KeepTogether
+        # so header+items+footer never split across pages
+        if is_a5 or is_proforma:
+            # Replace last elements (since the last append was t_head and t_items)
+            # We need to collect all elements for this copy into KeepTogether
+            # Find elements added in this copy iteration
+            copy_start_idx = _copy_start
+            copy_elements  = elements[copy_start_idx:]
+            copy_elements.extend(footer_group)
+            del elements[copy_start_idx:]
+            elements.append(KeepTogether(copy_elements))
+        else:
+            elements.append(KeepTogether(footer_group))
 
         # Page break between copies (not after last one)
         if copy_idx < len(copies) - 1:
@@ -601,9 +691,10 @@ def create_invoice_pdf(invoice_data, items, settings,
 #  2. LEDGER PDF
 # ─────────────────────────────────────────────
 def create_ledger_pdf(buyer_details, ledger_data, start_date, end_date,
-                      settings, save_to_disk=True):
+                      settings, save_to_disk=True, page_size='A4'):
     """
     Generates a buyer ledger statement PDF.
+    page_size: 'A4', 'A4L', 'A5', 'A5L'
 
     Parameters:
       buyer_details : dict — buyer name, address, gstin
@@ -627,7 +718,8 @@ def create_ledger_pdf(buyer_details, ledger_data, start_date, end_date,
     style_td_rb = ParagraphStyle('TDB', parent=base['Normal'], fontName=FONT_BOLD, fontSize=9,  alignment=TA_RIGHT)
     style_addr  = ParagraphStyle('A',   parent=base['Normal'], fontName=FONT_REG,  fontSize=9,  alignment=TA_CENTER)
 
-    doc = _build_doc(buffer, margins=dict(
+    psize = resolve_pagesize(page_size)
+    doc = _build_doc(buffer, pagesize=psize, margins=dict(
         leftMargin=12*mm, rightMargin=12*mm,
         topMargin=12*mm,  bottomMargin=12*mm
     ))

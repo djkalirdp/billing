@@ -168,6 +168,12 @@
     color: #78350f;
   }
   .amount-words strong { color: #92400e; }
+
+  .size-picker{display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-bottom:8px;}
+  .size-opt{border:2px solid var(--border);border-radius:8px;padding:7px 4px;text-align:center;
+    cursor:pointer;font-size:11.5px;font-weight:800;color:#475569;transition:all .15s;line-height:1.3;}
+  .size-opt:hover,.size-opt.sel{border-color:var(--accent);background:#eff6ff;color:var(--accent);}
+  .size-opt small{display:block;font-size:9px;font-weight:400;color:#94a3b8;margin-top:1px;}
 </style>
 {% endblock %}
 
@@ -408,7 +414,15 @@
         <div class="action-group">
 
           {% if not is_cancelled %}
-          <a href="{{ url_for('download_invoice_pdf', invoice_id=invoice.id) }}"
+          <div style="font-size:10.5px;font-weight:800;color:#64748b;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px;">PDF Page Size</div>
+          <div class="size-picker">
+            <div class="size-opt sel" onclick="setInvSize('A4',this)">A4<small>Vertical</small></div>
+            <div class="size-opt" onclick="setInvSize('A4L',this)">A4 Land.<small>Horizontal</small></div>
+            <div class="size-opt" onclick="setInvSize('A5',this)">A5<small>Vertical</small></div>
+            <div class="size-opt" onclick="setInvSize('A5L',this)">A5 Land.<small>Horizontal</small></div>
+          </div>
+          <a id="invPdfBtn"
+             href="{{ url_for('download_invoice_pdf', invoice_id=invoice.id) }}?size=A4"
              class="btn-primary-custom" style="justify-content:center;" target="_blank">
             <i class="bi bi-download"></i> Download PDF
           </a>
@@ -549,5 +563,12 @@ function confirmCancel(id, invNo) {
 document.getElementById('cancelModal').addEventListener('click', function(e){
   if(e.target===this) this.classList.remove('open');
 });
+
+function setInvSize(size, el) {
+  document.querySelectorAll('.size-opt').forEach(o => o.classList.remove('sel'));
+  el.classList.add('sel');
+  const btn = document.getElementById('invPdfBtn');
+  if (btn) btn.href = btn.href.split('?')[0] + '?size=' + size;
+}
 </script>
 {% endblock %}

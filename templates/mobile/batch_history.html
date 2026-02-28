@@ -1,0 +1,114 @@
+{% extends 'mobile/base_mobile.html' %}
+{% block title %}Batch History{% endblock %}
+{% block page_title %}Batch History{% endblock %}
+
+{% block topbar_actions %}
+<a href="{{ url_for('batch_list') }}" class="m-icon-btn"><i class="bi bi-arrow-left"></i></a>
+{% endblock %}
+
+{% block head %}
+<style>
+.hist-info{background:white;border-radius:14px;box-shadow:var(--shadow);margin:12px 14px;padding:14px;}
+.hist-badge{background:#eff6ff;color:var(--accent);border-radius:8px;padding:4px 14px;font-size:14px;font-weight:800;display:inline-block;}
+.mv-card{background:white;border-radius:12px;box-shadow:var(--shadow);margin:0 14px 10px;overflow:hidden;border-left:4px solid transparent;}
+.mv-card.in{border-left-color:#059669;}
+.mv-card.out{border-left-color:#dc2626;}
+.mv-head{display:flex;justify-content:space-between;align-items:center;padding:10px 14px 6px;}
+.mv-dir{font-size:12px;font-weight:700;border-radius:6px;padding:2px 10px;}
+.mv-in-badge{background:#ecfdf5;color:#059669;}
+.mv-out-badge{background:#fef2f2;color:#dc2626;}
+.mv-qty{font-size:18px;font-weight:900;}
+.mv-body{padding:0 14px 12px;}
+.mv-row{display:flex;justify-content:space-between;padding:3px 0;font-size:12px;color:var(--text-muted);}
+.mv-row strong{color:#1e293b;font-size:13px;}
+</style>
+{% endblock %}
+
+{% block content %}
+
+<!-- Batch Info -->
+<div class="hist-info">
+  <div style="font-size:11px;color:var(--text-muted);margin-bottom:4px;">Batch Number</div>
+  <div class="hist-badge"><i class="bi bi-upc me-1"></i>{{ batch_no or 'All Batches' }}</div>
+  {% if history %}
+  <div style="font-size:14px;font-weight:800;margin-top:8px;">{{ history[0].product_name }}</div>
+  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:12px;">
+    <div style="text-align:center;background:#ecfdf5;border-radius:10px;padding:8px;">
+      <div style="font-size:10px;font-weight:700;color:#059669;text-transform:uppercase;">Received</div>
+      <div style="font-size:16px;font-weight:800;color:#059669;">
+        +{{ history|selectattr('qty_in')|sum(attribute='qty_in')|round(2) }}
+      </div>
+    </div>
+    <div style="text-align:center;background:#fef2f2;border-radius:10px;padding:8px;">
+      <div style="font-size:10px;font-weight:700;color:#dc2626;text-transform:uppercase;">Sold</div>
+      <div style="font-size:16px;font-weight:800;color:#dc2626;">
+        -{{ history|selectattr('qty_out')|sum(attribute='qty_out')|round(2) }}
+      </div>
+    </div>
+    <div style="text-align:center;background:#eff6ff;border-radius:10px;padding:8px;">
+      <div style="font-size:10px;font-weight:700;color:var(--accent);text-transform:uppercase;">Balance</div>
+      <div style="font-size:16px;font-weight:800;color:var(--accent);">
+        {{ (history|selectattr('qty_in')|sum(attribute='qty_in') - history|selectattr('qty_out')|sum(attribute='qty_out'))|round(2) }}
+      </div>
+    </div>
+  </div>
+  {% endif %}
+</div>
+
+<div class="m-section-lbl">Movement History</div>
+
+{% if history %}
+{% for h in history %}
+{% set is_in = h.qty_in and h.qty_in > 0 %}
+<div class="mv-card {{ 'in' if is_in else 'out' }}">
+  <div class="mv-head">
+    <div>
+      {% if is_in %}
+        <span class="mv-dir mv-in-badge"><i class="bi bi-arrow-down-circle me-1"></i>Purchase IN</span>
+      {% else %}
+        <span class="mv-dir mv-out-badge"><i class="bi bi-arrow-up-circle me-1"></i>Sale OUT</span>
+      {% endif %}
+      <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">{{ h.tracking_date or '—' }}</div>
+    </div>
+    <div class="mv-qty" style="color:{{ '#059669' if is_in else '#dc2626' }};">
+      {{ '+' if is_in else '-' }}{{ (h.qty_in if is_in else h.qty_out)|round(2) }}
+    </div>
+  </div>
+  <div class="mv-body">
+    {% if h.buyer_name %}
+    <div class="mv-row">
+      <span>Customer</span>
+      <strong>{{ h.buyer_name }}</strong>
+    </div>
+    {% endif %}
+    {% if h.invoice_id %}
+    <div class="mv-row">
+      <span>Invoice</span>
+      <a href="{{ url_for('view_invoice', invoice_id=h.invoice_id) }}"
+         style="color:var(--accent);font-weight:700;font-size:12px;">View →</a>
+    </div>
+    {% endif %}
+    {% if h.purchase_id %}
+    <div class="mv-row">
+      <span>Purchase Bill</span>
+      <strong>#{{ h.purchase_id }}</strong>
+    </div>
+    {% endif %}
+    {% if h.notes %}
+    <div class="mv-row">
+      <span>Notes</span>
+      <strong>{{ h.notes }}</strong>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endfor %}
+{% else %}
+<div class="m-empty">
+  <i class="bi bi-clock-history"></i>
+  <p>No movement history for this batch</p>
+</div>
+{% endif %}
+
+<div style="height:80px;"></div>
+{% endblock %}

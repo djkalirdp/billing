@@ -628,11 +628,82 @@ def create_gstr3b_pdf(data):
     tl_t.setStyle(ts)
     elems.append(tl_t)
 
+    # ── Section 4: Eligible ITC ──────────────────────────────
+    itc = data.get('itc', {})
+    if itc:
+        elems.append(sh('4 — Eligible Input Tax Credit (ITC) from Purchases', col=C_SUCCESS))
+        ei  = itc.get('eligible_itc', {})
+        rcm = itc.get('rcm_itc', {})
+
+        itc_rows = [
+            ['ITC Type', 'Taxable Value', 'CGST', 'SGST', 'IGST', 'Total ITC'],
+            [
+                'Eligible ITC (Regular Purchases)',
+                _rupee(ei.get('taxable', 0)),
+                _rupee(ei.get('cgst', 0)),
+                _rupee(ei.get('sgst', 0)),
+                _rupee(ei.get('igst', 0)),
+                _rupee(ei.get('total_tax', 0)),
+            ],
+            [
+                'RCM ITC (Reverse Charge)',
+                '—',
+                _rupee(rcm.get('cgst', 0)),
+                _rupee(rcm.get('sgst', 0)),
+                _rupee(rcm.get('igst', 0)),
+                _rupee(rcm.get('total_tax', 0)),
+            ],
+        ]
+        total_itc = _num(ei.get('total_tax', 0)) + _num(rcm.get('total_tax', 0))
+        itc_rows.append([
+            'Total ITC Available', '—', '—', '—', '—', _rupee(total_itc)
+        ])
+        itc_t = Table(itc_rows, colWidths=[5.5*cm,3*cm,2.5*cm,2.5*cm,2.5*cm,3*cm])
+        ts = _tbl_style(header_col=C_SUCCESS)
+        for col in [1,2,3,4,5]:
+            ts.add('ALIGN', (col,1), (col,-1), 'RIGHT')
+        ts.add('FONTNAME', (0,-1), (-1,-1), 'Helvetica-Bold')
+        ts.add('BACKGROUND', (0,-1), (-1,-1), colors.HexColor('#ECFDF5'))
+        itc_t.setStyle(ts)
+        elems.append(itc_t)
+        elems.append(Spacer(1, 10))
+
+        # Net Tax Payable
+        elems.append(sh('Net Tax Payable (Output − ITC)', col=C_DANGER))
+        out_cgst  = _num(t.get('total_cgst', 0))
+        out_sgst  = _num(t.get('total_sgst', 0))
+        out_igst  = _num(t.get('total_igst', 0))
+        out_total = _num(t.get('total_gst',  0))
+        itc_cgst  = _num(ei.get('cgst', 0)) + _num(rcm.get('cgst', 0))
+        itc_sgst  = _num(ei.get('sgst', 0)) + _num(rcm.get('sgst', 0))
+        itc_igst  = _num(ei.get('igst', 0)) + _num(rcm.get('igst', 0))
+        itc_total = total_itc
+
+        net_cgst  = max(0, out_cgst  - itc_cgst)
+        net_sgst  = max(0, out_sgst  - itc_sgst)
+        net_igst  = max(0, out_igst  - itc_igst)
+        net_total = net_cgst + net_sgst + net_igst
+
+        net_rows = [
+            ['', 'CGST', 'SGST', 'IGST', 'Total'],
+            ['Output Tax (Sales)',   _rupee(out_cgst),  _rupee(out_sgst),  _rupee(out_igst),  _rupee(out_total)],
+            ['Less: ITC Available',  _rupee(itc_cgst),  _rupee(itc_sgst),  _rupee(itc_igst),  _rupee(itc_total)],
+            ['Net Tax Payable (Cash)',_rupee(net_cgst),  _rupee(net_sgst),  _rupee(net_igst),  _rupee(net_total)],
+        ]
+        net_t = Table(net_rows, colWidths=[6*cm,3*cm,3*cm,3*cm,3*cm])
+        ts2 = _tbl_style(header_col=C_DANGER)
+        for col in [1,2,3,4]:
+            ts2.add('ALIGN', (col,1), (col,-1), 'RIGHT')
+        ts2.add('FONTNAME', (0,-1), (-1,-1), 'Helvetica-Bold')
+        ts2.add('BACKGROUND', (0,-1), (-1,-1), colors.HexColor('#FEF2F2'))
+        net_t.setStyle(ts2)
+        elems.append(net_t)
+
     # Note
     elems.append(Spacer(1, 12))
     elems.append(Paragraph(
         '* IGST breakup shown is approximate. Cross-check with actual interstate invoices. '
-        'CGST/SGST shown assumes intra-state transactions. '
+        'ITC eligible only on purchases with valid tax invoices from GST-registered suppliers. '
         'File GSTR-3B on the GST portal using these figures.',
         ParagraphStyle('note', fontName='Helvetica-Oblique', fontSize=8,
                        textColor=C_MUTED)
@@ -755,6 +826,206 @@ def create_gstr3b_excel(data):
     # Column widths
     for col, w in enumerate([25,14,16,12,12,14,12], 1):
         ws.column_dimensions[get_column_letter(col)].width = w
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    return buf.getvalue()
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  GSTR-2B / PURCHASE REGISTER REPORT
+# ─────────────────────────────────────────────────────────────────────────────
+
+def create_gstr2b_pdf(data):
+    """
+    GSTR-2B style Purchase Register PDF.
+    Shows all purchase bills with Supplier, GSTIN, Bill No, Date,
+    Place of Supply, RCM flag, Taxable, CGST, SGST, IGST, Total Tax.
+    """
+    from reportlab.lib import colors as rl_colors
+    buf    = io.BytesIO()
+    styles = getSampleStyleSheet()
+    doc    = SimpleDocTemplate(
+        buf, pagesize=landscape(A4),
+        leftMargin=1.5*cm, rightMargin=1.5*cm,
+        topMargin=1.5*cm,  bottomMargin=1.5*cm
+    )
+
+    elems = _report_header(
+        'Purchase Register — ITC Statement',
+        f"Period: {data['start_date']}  to  {data['end_date']}",
+        styles
+    )
+
+    purchases = data.get('purchases', [])
+    totals    = data.get('totals', {})
+
+    # ── Summary box ──────────────────────────────────────────────
+    co    = _co
+    s_hdr = ParagraphStyle('sh', fontName='Helvetica-Bold', fontSize=9,
+                           textColor=C_ACCENT, spaceAfter=4)
+    elems.append(Paragraph('Summary', s_hdr))
+
+    sum_rows = [
+        ['Total Bills', 'Total Taxable', 'Total CGST', 'Total SGST', 'Total IGST', 'Total Tax', 'Grand Total'],
+        [
+            str(totals.get('bill_count', 0)),
+            _rupee(totals.get('taxable',   0)),
+            _rupee(totals.get('cgst',      0)),
+            _rupee(totals.get('sgst',      0)),
+            _rupee(totals.get('igst',      0)),
+            _rupee(totals.get('total_tax', 0)),
+            _rupee(totals.get('grand',     0)),
+        ]
+    ]
+    s_tbl = Table(sum_rows, colWidths=[2.5*cm,3.5*cm,2.5*cm,2.5*cm,2.5*cm,2.5*cm,3*cm])
+    ts = _tbl_style()
+    for col in range(1, 7):
+        ts.add('ALIGN', (col, 1), (col, -1), 'RIGHT')
+    ts.add('FONTNAME', (0,1), (-1,1), 'Helvetica-Bold')
+    s_tbl.setStyle(ts)
+    elems.append(s_tbl)
+    elems.append(Spacer(1, 10))
+
+    # ── Purchase Detail Table ─────────────────────────────────────
+    elems.append(Paragraph('Purchase Detail', s_hdr))
+
+    hdr = ['#', 'Supplier', 'GSTIN', 'Bill No.', 'Date',
+           'Place of Supply', 'RCM', 'Taxable', 'CGST', 'SGST', 'IGST', 'Total Tax']
+    rows = [hdr]
+
+    small = ParagraphStyle('sm', fontName='Helvetica', fontSize=7, leading=9)
+    bold7 = ParagraphStyle('b7', fontName='Helvetica-Bold', fontSize=7, leading=9)
+
+    for i, p in enumerate(purchases, 1):
+        rcm = 'Yes' if p.get('reverse_charge') else 'No'
+        is_igst = float(p.get('igst_amount', 0) or 0) > 0
+        rows.append([
+            str(i),
+            Paragraph(str(p.get('supplier_name','') or ''), small),
+            Paragraph(str(p.get('supplier_gstin','') or '—'), small),
+            str(p.get('bill_no','') or '—'),
+            str(p.get('purchase_date','') or ''),
+            Paragraph(str(p.get('place_of_supply','') or 'Same State'), small),
+            rcm,
+            _rupee(p.get('taxable_amount', p.get('total_amount', 0))),
+            _rupee(p.get('cgst_amount', 0)),
+            _rupee(p.get('sgst_amount', 0)),
+            _rupee(p.get('igst_amount', 0)),
+            _rupee(p.get('total_tax',   0)),
+        ])
+
+    # Totals row
+    rows.append([
+        '', 'TOTAL', '', '', '', '', '',
+        _rupee(totals.get('taxable',   0)),
+        _rupee(totals.get('cgst',      0)),
+        _rupee(totals.get('sgst',      0)),
+        _rupee(totals.get('igst',      0)),
+        _rupee(totals.get('total_tax', 0)),
+    ])
+
+    col_w = [0.6*cm, 3.5*cm, 3.2*cm, 2.5*cm, 2.2*cm, 3*cm, 1.2*cm,
+             2.8*cm, 2.3*cm, 2.3*cm, 2.3*cm, 2.5*cm]
+    tbl = Table(rows, colWidths=col_w, repeatRows=1)
+    ts2 = _tbl_style()
+    last = len(rows) - 1
+    for col in range(7, 12):
+        ts2.add('ALIGN', (col, 0), (col, -1), 'RIGHT')
+    ts2.add('FONTNAME', (0, last), (-1, last), 'Helvetica-Bold')
+    ts2.add('BACKGROUND', (0, last), (-1, last), rl_colors.HexColor('#EFF6FF'))
+    tbl.setStyle(ts2)
+    elems.append(tbl)
+
+    elems.append(Spacer(1, 8))
+    elems.append(Paragraph(
+        '* RCM = Reverse Charge Mechanism. ITC from RCM purchases is separately claimable. '
+        'Ensure all suppliers are GST-registered for ITC eligibility.',
+        ParagraphStyle('note', fontName='Helvetica-Oblique', fontSize=7, textColor=C_MUTED)
+    ))
+
+    doc.build(elems)
+    buf.seek(0)
+    return buf.read()
+
+
+def create_gstr2b_excel(data):
+    """GSTR-2B style Purchase Register in Excel."""
+    from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+    from openpyxl.utils  import get_column_letter
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = 'Purchase Register'
+
+    purchases = data.get('purchases', [])
+    totals    = data.get('totals', {})
+    co        = _load_settings().get('company_info', {})
+
+    # ── Header ─────────────────────────────────────────────────
+    ws.merge_cells('A1:L1')
+    ws['A1'] = f"{co.get('name','Company')} — Purchase Register (ITC Statement)"
+    ws['A1'].font = Font(bold=True, size=13)
+    ws.merge_cells('A2:L2')
+    ws['A2'] = f"Period: {data['start_date']}  to  {data['end_date']}   |   GSTIN: {co.get('gstin','')}"
+    ws['A2'].font = Font(size=9, italic=True)
+
+    # ── Column Headers ──────────────────────────────────────────
+    hdrs = ['#', 'Supplier Name', 'Supplier GSTIN', 'Bill No.', 'Bill Date',
+            'Place of Supply', 'RCM', 'Taxable Value',
+            'CGST', 'SGST', 'IGST', 'Total Tax']
+    widths = [5, 22, 18, 14, 12, 18, 6, 15, 12, 12, 12, 14]
+
+    def _w(row, col, val, bold=False, fill=None, align='left', fmt=None, wrap=False):
+        c = ws.cell(row=row, column=col, value=val)
+        c.font = Font(bold=bold, size=9)
+        if fill:
+            c.fill = PatternFill('solid', fgColor=fill)
+        c.alignment = Alignment(horizontal=align, vertical='center', wrap_text=wrap)
+        if fmt:
+            c.number_format = fmt
+
+    ROW_HDR = 4
+    for ci, (h, w) in enumerate(zip(hdrs, widths), 1):
+        _w(ROW_HDR, ci, h, bold=True, fill='1E40AF', align='center')
+        ws.cell(row=ROW_HDR, column=ci).font = Font(bold=True, size=9, color='FFFFFF')
+        ws.column_dimensions[get_column_letter(ci)].width = w
+    ws.row_dimensions[ROW_HDR].height = 18
+    ws.freeze_panes = f'A{ROW_HDR+1}'
+
+    # ── Data rows ───────────────────────────────────────────────
+    FILL_IGST = 'FFF7ED'
+    FILL_ALT  = 'F8FAFC'
+    r = ROW_HDR + 1
+    for i, p in enumerate(purchases, 1):
+        is_igst = float(p.get('igst_amount', 0) or 0) > 0
+        bg = FILL_IGST if is_igst else (FILL_ALT if i % 2 == 0 else 'FFFFFF')
+        _w(r, 1,  i,                                              align='center', fill=bg)
+        _w(r, 2,  p.get('supplier_name',''),                      fill=bg, wrap=True)
+        _w(r, 3,  p.get('supplier_gstin','') or '—',              fill=bg)
+        _w(r, 4,  p.get('bill_no','') or '—',                     fill=bg)
+        _w(r, 5,  p.get('purchase_date',''),                      fill=bg)
+        _w(r, 6,  p.get('place_of_supply','') or 'Same State',    fill=bg)
+        _w(r, 7,  'Yes' if p.get('reverse_charge') else 'No',    fill=bg, align='center')
+        _w(r, 8,  float(p.get('taxable_amount', p.get('total_amount',0)) or 0), fill=bg, align='right', fmt='#,##0.00')
+        _w(r, 9,  float(p.get('cgst_amount',0) or 0),             fill=bg, align='right', fmt='#,##0.00')
+        _w(r, 10, float(p.get('sgst_amount',0) or 0),             fill=bg, align='right', fmt='#,##0.00')
+        _w(r, 11, float(p.get('igst_amount',0) or 0),             fill=bg, align='right', fmt='#,##0.00')
+        _w(r, 12, float(p.get('total_tax',  0) or 0),             fill=bg, align='right', fmt='#,##0.00')
+        ws.row_dimensions[r].height = 16
+        r += 1
+
+    # ── Totals row ──────────────────────────────────────────────
+    _w(r, 1, '',           bold=True, fill='DBEAFE')
+    _w(r, 2, f'TOTAL ({totals.get("bill_count",0)} bills)', bold=True, fill='DBEAFE')
+    for ci in range(3, 8):
+        _w(r, ci, '', fill='DBEAFE')
+    _w(r, 8,  totals.get('taxable',   0), bold=True, fill='DBEAFE', align='right', fmt='#,##0.00')
+    _w(r, 9,  totals.get('cgst',      0), bold=True, fill='DBEAFE', align='right', fmt='#,##0.00')
+    _w(r, 10, totals.get('sgst',      0), bold=True, fill='DBEAFE', align='right', fmt='#,##0.00')
+    _w(r, 11, totals.get('igst',      0), bold=True, fill='DBEAFE', align='right', fmt='#,##0.00')
+    _w(r, 12, totals.get('total_tax', 0), bold=True, fill='DBEAFE', align='right', fmt='#,##0.00')
+    ws.row_dimensions[r].height = 18
 
     buf = io.BytesIO()
     wb.save(buf)

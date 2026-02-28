@@ -1,0 +1,215 @@
+{% extends 'base.html' %}
+{% block title %}Batch Tracker{% endblock %}
+{% block page_title %}Batch Tracker{% endblock %}
+
+{% block head %}
+<style>
+.batch-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:16px;margin-bottom:24px;}
+.batch-card{background:white;border-radius:14px;box-shadow:var(--shadow);overflow:hidden;}
+.batch-card-head{padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;background:#f8fafc;}
+.batch-prod{font-weight:800;font-size:14px;}
+.batch-no{font-size:12px;background:#eff6ff;color:var(--accent);border-radius:6px;padding:2px 10px;font-weight:700;}
+.batch-body{padding:14px 16px;}
+.batch-row{display:flex;justify-content:space-between;padding:4px 0;font-size:13px;border-bottom:1px solid #f1f5f9;}
+.batch-row:last-child{border:none;}
+.batch-lbl{color:var(--text-muted);}
+.batch-val{font-weight:700;}
+.exp-badge{display:inline-block;border-radius:6px;padding:2px 10px;font-size:11px;font-weight:700;}
+.exp-ok{background:#ecfdf5;color:#059669;}
+.exp-warn{background:#fff7ed;color:#f59e0b;}
+.exp-red{background:#fef2f2;color:#dc2626;}
+.table-wrap{background:white;border-radius:14px;box-shadow:var(--shadow);overflow:hidden;margin-bottom:20px;}
+.table-head-bar{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;background:#f8fafc;}
+.table-custom{width:100%;border-collapse:collapse;}
+.table-custom th{padding:10px 12px;font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;border-bottom:1.5px solid var(--border);background:#f8fafc;white-space:nowrap;}
+.table-custom td{padding:10px 12px;border-bottom:1px solid var(--border);font-size:13px;vertical-align:middle;}
+.table-custom tr:hover td{background:#fafafa;}
+.filter-bar{display:flex;gap:10px;align-items:center;margin-bottom:16px;flex-wrap:wrap;}
+.filter-bar input,.filter-bar select{padding:8px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;outline:none;}
+.filter-bar input:focus,.filter-bar select:focus{border-color:var(--accent);}
+.movement-tbl{font-size:12px;}
+.movement-tbl th{background:#1e293b;color:white;padding:8px 10px;}
+.movement-tbl td{padding:8px 10px;border-bottom:1px solid #e2e8f0;}
+.direction-in{color:#059669;font-weight:700;}
+.direction-out{color:#dc2626;font-weight:700;}
+</style>
+{% endblock %}
+
+{% block content %}
+
+<!-- ── Expiry Alerts ─────────────────────────────────────────── -->
+{% if expiring %}
+<div style="background:#fff7ed;border:1px solid #fde68a;border-radius:14px;padding:16px 20px;margin-bottom:20px;">
+  <div style="font-weight:800;font-size:14px;color:#d97706;margin-bottom:10px;">
+    <i class="bi bi-exclamation-triangle-fill me-2"></i>{{ expiring|length }} Batch(es) Expiring Within 30 Days
+  </div>
+  <div style="display:flex;flex-wrap:wrap;gap:8px;">
+    {% for b in expiring %}
+    <div style="background:white;border-radius:10px;padding:8px 14px;font-size:12px;border:1.5px solid {% if b.expired %}#fca5a5{% else %}#fde68a{% endif %};">
+      <div style="font-weight:700;">{{ b.product_name }}</div>
+      <div>Batch: <strong>{{ b.batch_no }}</strong></div>
+      <div>
+        {% if b.expired %}
+          <span class="exp-badge exp-red"><i class="bi bi-x-circle me-1"></i>EXPIRED</span>
+        {% else %}
+          <span class="exp-badge exp-warn"><i class="bi bi-clock me-1"></i>Exp: {{ b.expiry_date }}</span>
+        {% endif %}
+        &nbsp; Qty: {{ b.balance }} {{ b.unit or '' }}
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+<!-- ── Filter Bar ─────────────────────────────────────────────── -->
+<div class="filter-bar">
+  <i class="bi bi-funnel" style="color:var(--accent);font-size:16px;"></i>
+  <input type="text" id="filterSearch" placeholder="Search product or batch…" oninput="filterBatches()" style="flex:1;min-width:200px;max-width:300px;">
+  <select id="filterStatus" onchange="filterBatches()">
+    <option value="">All Status</option>
+    <option value="active">Active</option>
+    <option value="expiring">Expiring Soon</option>
+    <option value="expired">Expired</option>
+    <option value="empty">Empty (Zero Stock)</option>
+  </select>
+  <span style="font-size:13px;color:var(--text-muted);" id="countBadge"></span>
+</div>
+
+<!-- ── Active Batches Table ───────────────────────────────────── -->
+<div class="table-wrap">
+  <div class="table-head-bar">
+    <span style="font-weight:800;font-size:15px;"><i class="bi bi-boxes me-2" style="color:#7c3aed;"></i>All Batches</span>
+    <a href="{{ url_for('purchases') }}" class="btn" style="background:#eff6ff;color:var(--accent);border:none;border-radius:8px;padding:7px 16px;font-size:12px;font-weight:700;">
+      <i class="bi bi-cart3 me-1"></i>Purchases
+    </a>
+  </div>
+  {% if all_batches %}
+  <div style="overflow-x:auto;">
+    <table class="table-custom" id="batchTable">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Product</th>
+          <th>Batch No.</th>
+          <th>Expiry Date</th>
+          <th>Status</th>
+          <th style="text-align:right;">Qty In</th>
+          <th style="text-align:right;">Qty Out</th>
+          <th style="text-align:right;">Balance</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody id="batchBody">
+        {% set today_str = '' %}
+        {% for b in all_batches %}
+        {% set bal = b.balance|float %}
+        {% set expired = b.expiry_date and b.expiry_date < '9999' %}
+        <tr class="batch-row-tr"
+            data-name="{{ b.product_name|lower }}"
+            data-batch="{{ b.batch_no|lower }}"
+            data-balance="{{ bal }}"
+            data-expiry="{{ b.expiry_date or '' }}">
+          <td>{{ loop.index }}</td>
+          <td>
+            <div style="font-weight:700;font-size:13px;">{{ b.product_name }}</div>
+            {% if b.unit %}<div style="font-size:11px;color:var(--text-muted);">{{ b.unit }}</div>{% endif %}
+          </td>
+          <td><span style="background:#eff6ff;color:var(--accent);border-radius:6px;padding:3px 10px;font-size:12px;font-weight:700;">{{ b.batch_no }}</span></td>
+          <td>
+            {% if b.expiry_date %}
+              <span class="exp-badge {{ 'exp-red' if b.expiry_date < today_str else ('exp-warn' if b.expiry_date|string < (today_str|string) else 'exp-ok') }}">
+                {{ b.expiry_date }}
+              </span>
+            {% else %}
+              <span style="color:var(--text-muted);">—</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if bal <= 0 %}
+              <span class="exp-badge" style="background:#f1f5f9;color:#64748b;">Empty</span>
+            {% elif b.expiry_date and b.expiry_date != '' %}
+              <span class="exp-badge exp-ok">Active</span>
+            {% else %}
+              <span class="exp-badge exp-ok">Active</span>
+            {% endif %}
+          </td>
+          <td style="text-align:right;font-weight:600;color:#059669;">{{ b.total_in or 0 }}</td>
+          <td style="text-align:right;font-weight:600;color:#dc2626;">{{ b.total_out or 0 }}</td>
+          <td style="text-align:right;font-weight:800;font-size:14px;">{{ bal|round(3) }}</td>
+          <td>
+            <a href="{{ url_for('batch_history', product_id=b.product_id, batch_no=b.batch_no) }}"
+               class="btn" style="background:#f8fafc;border:1px solid var(--border);border-radius:8px;padding:5px 12px;font-size:11px;font-weight:700;color:#7c3aed;text-decoration:none;">
+              <i class="bi bi-clock-history me-1"></i>History
+            </a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div style="text-align:center;padding:60px 20px;color:#94a3b8;">
+    <i class="bi bi-boxes" style="font-size:48px;display:block;margin-bottom:12px;"></i>
+    No batches recorded yet. Add purchase bills with batch numbers.
+  </div>
+  {% endif %}
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+const today = new Date().toISOString().slice(0,10);
+const warnDate = new Date(Date.now() + 30*24*60*60*1000).toISOString().slice(0,10);
+
+// Fix expiry colors on load
+document.querySelectorAll('.batch-row-tr').forEach(tr => {
+  const exp = tr.dataset.expiry;
+  if (!exp) return;
+  const badge = tr.querySelector('.exp-badge:not(.empty)');
+  if (!badge) return;
+  if (exp < today) {
+    badge.className = 'exp-badge exp-red';
+    badge.textContent = exp + ' (EXPIRED)';
+    tr.dataset.status = 'expired';
+  } else if (exp <= warnDate) {
+    badge.className = 'exp-badge exp-warn';
+    tr.dataset.status = 'expiring';
+  } else {
+    badge.className = 'exp-badge exp-ok';
+    tr.dataset.status = 'active';
+  }
+  if (parseFloat(tr.dataset.balance) <= 0) tr.dataset.status = 'empty';
+});
+
+function filterBatches() {
+  const q      = document.getElementById('filterSearch').value.toLowerCase().trim();
+  const status = document.getElementById('filterStatus').value;
+  const rows   = document.querySelectorAll('.batch-row-tr');
+  let visible  = 0;
+
+  rows.forEach(tr => {
+    const name  = tr.dataset.name  || '';
+    const batch = tr.dataset.batch || '';
+    const st    = tr.dataset.status || '';
+    const bal   = parseFloat(tr.dataset.balance || 0);
+
+    let matchQ = !q || name.includes(q) || batch.includes(q);
+    let matchS = !status;
+    if (status === 'active')   matchS = bal > 0 && st === 'active';
+    if (status === 'expiring') matchS = st === 'expiring';
+    if (status === 'expired')  matchS = st === 'expired';
+    if (status === 'empty')    matchS = bal <= 0;
+
+    const show = matchQ && matchS;
+    tr.style.display = show ? '' : 'none';
+    if (show) visible++;
+  });
+
+  document.getElementById('countBadge').textContent = `${visible} batches shown`;
+}
+
+filterBatches();
+</script>
+{% endblock %}

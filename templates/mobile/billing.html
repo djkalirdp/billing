@@ -557,7 +557,57 @@ function onProdPick(idx, p) {
     }
   }
 
+  // Load active batches for this product
+  if (p.id && parseInt(p.id) > 0) loadBatches(idx, parseInt(p.id));
+
   recalcRow(idx);
+}
+
+// ── Batch Functions ─────────────────────────────────────────────
+async function loadBatches(idx, pid) {
+  const sel = document.getElementById('pBatch_'+idx);
+  if (!sel) return;
+  sel.innerHTML = '<option value="">Loading batches…</option>';
+  try {
+    const res  = await fetch('/products/'+pid+'/batches');
+    const list = await res.json();
+    if (!list.length) {
+      sel.innerHTML = '<option value="">— No batches in stock —</option>';
+      return;
+    }
+    const today = new Date().toISOString().slice(0,10);
+    sel.innerHTML = '<option value="">— Select Batch —</option>' +
+      list.map(b => {
+        const exp   = b.expiry_date ? ` | Exp: ${b.expiry_date}` : '';
+        const warn  = b.expiry_date && b.expiry_date < today ? ' ⚠️' : '';
+        return `<option value="${b.batch_no}" data-exp="${b.expiry_date||''}" data-bal="${b.balance}">
+          ${b.batch_no}  (Qty: ${b.balance}${exp}${warn})</option>`;
+      }).join('');
+    // Auto-select if only one batch
+    if (list.length === 1) { sel.value = list[0].batch_no; onBatchChange(idx); }
+  } catch(e) {
+    sel.innerHTML = '<option value="">— Batch error —</option>';
+  }
+}
+
+function onBatchChange(idx) {
+  const sel  = document.getElementById('pBatch_'+idx);
+  const info = document.getElementById('pBatchInfo_'+idx);
+  if (!sel || !info) return;
+  const opt  = sel.options[sel.selectedIndex];
+  const exp  = opt ? opt.dataset.exp  : '';
+  const bal  = opt ? opt.dataset.bal  : '';
+  if (sel.value && exp) {
+    const today = new Date().toISOString().slice(0,10);
+    info.style.display = 'block';
+    if (exp < today) {
+      info.innerHTML = `<span style="color:#dc2626;font-weight:700;">⚠️ EXPIRED: ${exp}</span>`;
+    } else {
+      info.innerHTML = `<span style="color:#059669;font-weight:600;">✓ Exp: ${exp} &nbsp;|&nbsp; Stock: ${bal}</span>`;
+    }
+  } else {
+    info.style.display = 'none';
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -625,6 +675,15 @@ function addItem() {
       </div>
       <div class="iamount" id="pAmt_${idx}">₹ 0.00</div>
       <div class="igst-lbl" id="pGstLbl_${idx}">Select product — rate & GST auto-fill</div>
+      <div class="m-fg" style="margin-top:8px;">
+        <label class="m-label" style="color:#7c3aed;"><i class="bi bi-upc me-1"></i>Batch No. <span style="font-size:11px;font-weight:400;">(auto-loads on product select)</span></label>
+        <select id="pBatch_${idx}" name="batch_no[]" class="m-select"
+                style="color:#7c3aed;font-weight:600;"
+                onchange="onBatchChange(${idx})">
+          <option value="">— Select Batch (optional) —</option>
+        </select>
+        <div id="pBatchInfo_${idx}" style="font-size:11px;margin-top:4px;display:none;"></div>
+      </div>
     </div>`;
   document.getElementById('itemsWrap').appendChild(card);
 }
@@ -825,6 +884,7 @@ function saveInvoice() {
     add('discount_percent[]',  disc);
     add('amount[]',            amt.toFixed(4));
     add('unit[]',              document.getElementById('pUnit_'+idx)?.value  || '');
+    add('batch_no[]',          document.getElementById('pBatch_'+idx)?.value || '');
   });
 
   // ── SUBMIT — explicit call, no onclick interference ───────

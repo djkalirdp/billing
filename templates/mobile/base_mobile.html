@@ -461,11 +461,20 @@
         <a href="{{ url_for('products') }}" class="more-tile">
           <i class="bi bi-box-seam" style="color:#7c3aed;"></i><span>Products</span>
         </a>
+        <a href="{{ url_for('product_rate_list') }}" class="more-tile">
+          <i class="bi bi-tags-fill" style="color:#2563eb;"></i><span>Rate List</span>
+        </a>
         <a href="{{ url_for('vendors') }}" class="more-tile">
           <i class="bi bi-truck" style="color:#0891b2;"></i><span>Vendors</span>
         </a>
         <a href="{{ url_for('purchases') }}" class="more-tile">
           <i class="bi bi-cart3" style="color:#059669;"></i><span>Purchases</span>
+        </a>
+        <a href="{{ url_for('proforma_list') }}" class="more-tile {% if 'proforma' in request.endpoint %}active{% endif %}">
+          <i class="bi bi-file-earmark-text" style="color:#7c3aed;"></i><span>Quotations</span>
+        </a>
+        <a href="{{ url_for('batch_list') }}" class="more-tile">
+          <i class="bi bi-boxes" style="color:#f59e0b;"></i><span>Batches</span>
         </a>
       </div>
 

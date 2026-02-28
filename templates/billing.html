@@ -90,7 +90,7 @@
   /* Item inputs */
   .item-input {
     width: 100%;
-    padding: 10px 10px;
+    padding: 30px 10px;
     border: 1.5px solid transparent;
     border-radius: 7px;
     font-family: var(--font-body);
@@ -248,8 +248,8 @@
               <label class="form-label-custom">Payment Mode</label>
               <select name="payment_mode" class="form-select-custom" id="paymentMode"
                       onchange="handlePaymentMode()">
-                <option value="Cash">Cash</option>
                 <option value="Credit">Credit</option>
+                <option value="Cash">Cash</option>
                 <option value="UPI">UPI</option>
                 <option value="Bank Transfer">Bank Transfer</option>
                 <option value="Cheque">Cheque</option>
@@ -351,6 +351,7 @@
                   <th style="width:60px;">Unit</th>
                   <th style="width:100px;">Rate (₹)</th>
                   <th style="width:70px;">Disc%</th>
+                  <th style="width:130px;">Batch No.</th>
                   <th style="width:110px;">Amount (₹)</th>
                   <th style="width:36px;"></th>
                 </tr>
@@ -567,25 +568,35 @@ function addItemRow() {
                autocomplete="off"
                oninput="handleProductInput(this, ${idx})"
                data-row="${idx}" />
+        <input type="hidden" name="product_id[]" id="pid_${idx}" value="0" />
+        <input type="hidden" name="variation_id[]" id="vid_${idx}" value="" />
         <div class="autocomplete-list product-dropdown" id="pd_${idx}" style="display:none;"></div>
       </div>
     </td>
-    <td><input class="item-input" id="hsn_${idx}" readonly placeholder="—" /></td>
-    <td><input class="item-input num-input" id="gst_${idx}" readonly placeholder="0" /></td>
-    <td><input class="item-input num-input" id="qty_${idx}" type="number" min="0.001" step="0.001"
+    <td><input class="item-input" id="hsn_${idx}" name="hsn[]" readonly placeholder="—" /></td>
+    <td><input class="item-input num-input" id="gst_${idx}" name="gst_rate[]" readonly placeholder="0" /></td>
+    <td><input class="item-input num-input" id="qty_${idx}" name="quantity[]" type="number" min="0.001" step="0.001"
                value="1" oninput="recalculate()" /></td>
-    <td><input class="item-input" id="unit_${idx}" readonly placeholder="—" /></td>
-    <td><input class="item-input num-input" id="rate_${idx}" type="number" min="0" step="0.01"
+    <td><input class="item-input" id="unit_${idx}" name="unit[]" readonly placeholder="—" /></td>
+    <td><input class="item-input num-input" id="rate_${idx}" name="rate[]" type="number" min="0" step="0.01"
                value="0" oninput="recalculate()" /></td>
-    <td><input class="item-input num-input" id="disc_${idx}" type="number" min="0" max="100" step="0.01"
+    <td><input class="item-input num-input" id="disc_${idx}" name="discount_percent[]" type="number" min="0" max="100" step="0.01"
                value="0" oninput="recalculate()" /></td>
-    <td><input class="item-input num-input" id="amt_${idx}" readonly placeholder="0.00" /></td>
+    <td>
+      <select class="item-input" id="batch_${idx}" name="batch_no[]"
+              style="font-size:12px;padding:4px 6px;color:#7c3aed;font-weight:600;min-width:110px;"
+              onchange="onBatchChange(${idx})">
+        <option value="">— No Batch —</option>
+      </select>
+      <div id="batchExp_${idx}" style="font-size:10px;color:#dc2626;margin-top:2px;display:none;"></div>
+    </td>
+    <td><input class="item-input num-input" id="amt_${idx}" name="amount[]" readonly placeholder="0.00" /></td>
     <td>
       <button type="button" class="remove-row-btn" onclick="removeRow(this)">
         <i class="bi bi-x"></i>
       </button>
     </td>
-  `;
+  `
   tbody.appendChild(tr);
 }
 
@@ -639,8 +650,15 @@ async function selectProduct(pid, name, idx, vid) {
   input.value = name;
   row.dataset.productId  = pid;
   row.dataset.variationId = vid || 0;
+  // Set hidden fields
+  const pidEl = document.getElementById(`pid_${idx}`);
+  const vidEl = document.getElementById(`vid_${idx}`);
+  if (pidEl) pidEl.value = pid || 0;
+  if (vidEl) vidEl.value = vid || '';
   document.getElementById(`pd_${idx}`).style.display = 'none';
   await fetchProductAndFill(pid, row, true);
+  // Load active batches for this product
+  if (pid && parseInt(pid) > 0) loadBatches(idx, parseInt(pid));
 }
 
 // Store last search results for direct lookup (avoids second API call)
@@ -665,14 +683,68 @@ async function fetchProductAndFill(pid, row, setQty) {
   } catch(e) { console.error('fetchProductAndFill error', e); }
 }
 
+// ── Batch Loader ────────────────────────────────────────────────
+async function loadBatches(idx, pid) {
+  const sel = document.getElementById(`batch_${idx}`);
+  if (!sel) return;
+  sel.innerHTML = '<option value="">Loading…</option>';
+  try {
+    const res  = await fetch(`/products/${pid}/batches`);
+    const list = await res.json();
+    if (!list.length) {
+      sel.innerHTML = '<option value="">— No Batches —</option>';
+      return;
+    }
+    const today = new Date().toISOString().slice(0,10);
+    sel.innerHTML = '<option value="">— Select Batch —</option>' +
+      list.map(b => {
+        const exp    = b.expiry_date ? ` | Exp: ${b.expiry_date}` : '';
+        const warn   = b.expiry_date && b.expiry_date <= today ? ' ⚠️EXPIRED' : '';
+        const label  = `${b.batch_no}  (Qty: ${b.balance}${exp}${warn})`;
+        return `<option value="${b.batch_no}" data-exp="${b.expiry_date}" data-bal="${b.balance}">${label}</option>`;
+      }).join('');
+    // Auto-select if only one batch
+    if (list.length === 1) {
+      sel.value = list[0].batch_no;
+      onBatchChange(idx);
+    }
+  } catch(e) {
+    sel.innerHTML = '<option value="">— Batch load error —</option>';
+  }
+}
+
+function onBatchChange(idx) {
+  const sel  = document.getElementById(`batch_${idx}`);
+  const expEl = document.getElementById(`batchExp_${idx}`);
+  if (!sel || !expEl) return;
+  const opt  = sel.options[sel.selectedIndex];
+  const exp  = opt ? opt.dataset.exp : '';
+  const bal  = opt ? opt.dataset.bal : '';
+  if (exp) {
+    const today = new Date().toISOString().slice(0,10);
+    expEl.style.display = 'block';
+    if (exp < today) {
+      expEl.textContent = `⚠️ EXPIRED: ${exp}`;
+      expEl.style.color = '#dc2626';
+    } else {
+      expEl.textContent = `Exp: ${exp}  |  Stock: ${bal}`;
+      expEl.style.color = '#059669';
+    }
+  } else {
+    expEl.style.display = 'none';
+  }
+}
+
 function _fillRowFromProduct(p, idx, setQty) {
   const price = billingMode === 'Wholesale'
     ? (parseFloat(p.wholesale_price || p.selling_price || p.rate || 0))
     : (parseFloat(p.selling_price   || p.rate || 0));
-  document.getElementById(`hsn_${idx}`) && (document.getElementById(`hsn_${idx}`).value  = p.hsn      || '');
-  document.getElementById(`gst_${idx}`) && (document.getElementById(`gst_${idx}`).value  = p.gst_rate || 0);
-  document.getElementById(`rate_${idx}`)&& (document.getElementById(`rate_${idx}`).value = price.toFixed(2));
-  document.getElementById(`unit_${idx}`)&& (document.getElementById(`unit_${idx}`).value = p.unit     || '');
+  document.getElementById(`hsn_${idx}`)  && (document.getElementById(`hsn_${idx}`).value  = p.hsn      || '');
+  document.getElementById(`gst_${idx}`)  && (document.getElementById(`gst_${idx}`).value  = p.gst_rate || 0);
+  document.getElementById(`rate_${idx}`) && (document.getElementById(`rate_${idx}`).value = price.toFixed(2));
+  document.getElementById(`unit_${idx}`) && (document.getElementById(`unit_${idx}`).value = p.unit     || '');
+  document.getElementById(`pid_${idx}`)  && (document.getElementById(`pid_${idx}`).value  = p.id       || 0);
+  document.getElementById(`vid_${idx}`)  && (document.getElementById(`vid_${idx}`).value  = p.variation_id || '');
   if (setQty && document.getElementById(`qty_${idx}`)) document.getElementById(`qty_${idx}`).value = 1;
   recalculate();
   document.getElementById(`qty_${idx}`)?.focus();
@@ -724,7 +796,7 @@ function recalculate() {
   const hidden = document.getElementById('hiddenInputs');
   hidden.innerHTML = '';
 
-  let pids=[], descs=[], hsns=[], gsts=[], qtys=[], rates=[], discs=[], amts=[];
+  let pids=[], descs=[], hsns=[], gsts=[], qtys=[], rates=[], discs=[], amts=[], batchNos=[], vidArr=[];
 
   rows.forEach(row => {
     const idx   = row.dataset.rowIndex;
@@ -736,6 +808,8 @@ function recalculate() {
     const gstR  = parseFloat(document.getElementById(`gst_${idx}`)?.value)  || 0;
     const hsn   = document.getElementById(`hsn_${idx}`)?.value || '';
     const unit  = document.getElementById(`unit_${idx}`)?.value || '';
+    const batch = document.getElementById(`batch_${idx}`)?.value || '';
+    const vid   = document.getElementById(`vid_${idx}`)?.value  || '';
 
     if (!name || qty <= 0) {
       if (document.getElementById(`amt_${idx}`)) document.getElementById(`amt_${idx}`).value = '';
@@ -757,6 +831,7 @@ function recalculate() {
     pids.push(pid); descs.push(name); hsns.push(hsn);
     gsts.push(gstR); qtys.push(qty);  rates.push(rate);
     discs.push(disc); amts.push(taxable);
+    batchNos.push(batch); vidArr.push(vid);
   });
 
   const taxableVal  = subtotal - totalDisc;
@@ -815,6 +890,8 @@ function recalculate() {
   addArr('rate[]',           rates);
   addArr('discount_percent[]', discs);
   addArr('amount[]',         amts);
+  addArr('batch_no[]',       batchNos);
+  addArr('variation_id[]',   vidArr);
 }
 
 // ── Payment mode handler ────────────────────────────────────────────────

@@ -1,0 +1,673 @@
+{% extends 'base.html' %}
+{% block title %}{{ action }} Purchase Bill{% endblock %}
+{% block page_title %}{{ action }} Purchase Bill{% endblock %}
+
+{% block head %}
+<style>
+  :root { --accent:#2563eb; --success:#059669; --warning:#d97706; --danger:#dc2626; }
+
+  .form-layout {
+    display: grid;
+    grid-template-columns: 1fr 340px;
+    gap: 20px;
+    align-items: start;
+    max-width: 1200px;
+  }
+  @media(max-width:1000px){ .form-layout{ grid-template-columns:1fr; } }
+
+  .section-card {
+    background: white;
+    border: 1.5px solid var(--border);
+    border-radius: 14px;
+    overflow: hidden;
+    margin-bottom: 16px;
+  }
+  .section-head {
+    padding: 13px 20px;
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: 10px;
+    background: #f8fafc;
+  }
+  .section-title-text {
+    font-family: var(--font-head);
+    font-size: 13px; font-weight: 800;
+    color: var(--text-main);
+  }
+  .section-body { padding: 20px; }
+
+  .form-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .form-grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
+  @media(max-width:640px){
+    .form-grid-2,.form-grid-3{ grid-template-columns:1fr; }
+  }
+
+  .fg { display: flex; flex-direction: column; gap: 5px; }
+  label.fg-label {
+    font-size: 11px; font-weight: 800;
+    color: var(--text-muted);
+    text-transform: uppercase; letter-spacing: .05em;
+  }
+  .fg input, .fg select, .fg textarea {
+    padding: 9px 12px;
+    border: 1.5px solid var(--border);
+    border-radius: 9px;
+    font-family: var(--font-body);
+    font-size: 13.5px;
+    color: var(--text-main);
+    background: #f8fafc;
+    outline: none;
+    transition: border-color .15s, background .15s;
+    width: 100%;
+  }
+  .fg input:focus, .fg select:focus {
+    border-color: var(--accent);
+    background: white;
+    box-shadow: 0 0 0 3px rgba(37,99,235,.08);
+  }
+  .fg input::placeholder { color: #cbd5e1; }
+  .mb-3{ margin-bottom: 12px; }
+  .mt-3{ margin-top: 12px; }
+
+  /* Purchase Type Selector */
+  .ptype-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+  .ptype-card {
+    border: 2px solid var(--border);
+    border-radius: 12px;
+    padding: 14px 16px;
+    cursor: pointer;
+    transition: all .15s;
+    position: relative;
+  }
+  .ptype-card:hover { border-color: var(--accent); background: #f0f9ff; }
+  .ptype-card.selected { border-color: var(--accent); background: #eff6ff; }
+  .ptype-card.selected.raw { border-color: #d97706; background: #fffbeb; }
+  .ptype-card input[type=radio] { position: absolute; opacity: 0; }
+  .ptype-title { font-weight: 800; font-size: 13px; margin-top: 6px; }
+  .ptype-sub { font-size: 11.5px; color: var(--text-muted); margin-top: 3px; line-height: 1.4; }
+
+  /* GST type banner */
+  .gst-banner {
+    padding: 10px 14px;
+    border-radius: 10px;
+    font-size: 12.5px;
+    font-weight: 700;
+    margin-bottom: 14px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .gst-intra { background: #eff6ff; color: #1e40af; }
+  .gst-inter { background: #fff7ed; color: #c2410c; }
+
+  /* Item rows */
+  .item-row-grid {
+    display: grid;
+    grid-template-columns: 2.5fr 0.8fr 1fr 0.9fr 1.2fr 1.2fr 34px;
+    gap: 8px;
+    align-items: end;
+    margin-bottom: 8px;
+    background: white;
+    border: 1.5px solid var(--border);
+    border-radius: 10px;
+    padding: 10px 12px;
+  }
+  .item-row-grid:hover { border-color: #c7d2fe; }
+  .col-hdr {
+    font-size: 10px; font-weight: 800;
+    color: #94a3b8; text-transform: uppercase; letter-spacing: .05em;
+  }
+  .item-input {
+    width: 100%;
+    padding: 7px 9px;
+    border: 1.5px solid var(--border);
+    border-radius: 7px;
+    font-size: 13px;
+    background: #f8fafc;
+    outline: none;
+    font-family: var(--font-body);
+  }
+  .item-input:focus { border-color: var(--accent); background: white; }
+  .item-input.batch { border-color: #c4b5fd; }
+  .item-input.expiry { border-color: #fca5a5; }
+  .del-row-btn {
+    background: #fef2f2; border: none;
+    border-radius: 8px; width: 32px; height: 32px;
+    cursor: pointer; color: #dc2626;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .del-row-btn:hover { background: #fee2e2; }
+
+  /* Autocomplete */
+  .ac-wrap { position: relative; }
+  .ac-drop {
+    position: absolute; top: calc(100% + 4px); left: 0; right: 0;
+    background: white; border: 2px solid var(--accent);
+    border-radius: 10px; max-height: 220px; overflow-y: auto;
+    z-index: 3000; box-shadow: 0 8px 24px rgba(0,0,0,.15); display: none;
+  }
+  .ac-item {
+    padding: 9px 12px; cursor: pointer;
+    border-bottom: 1px solid #f1f5f9;
+    font-size: 13px;
+  }
+  .ac-item:last-child { border-bottom: none; }
+  .ac-item:hover { background: #eff6ff; }
+  .ac-item strong { display: block; font-size: 13px; }
+  .ac-item small { color: #64748b; font-size: 11.5px; }
+
+  /* GST summary panel */
+  .gst-panel {
+    background: white;
+    border: 1.5px solid var(--border);
+    border-radius: 14px;
+    overflow: hidden;
+    position: sticky;
+    top: 16px;
+  }
+  .gst-panel-head {
+    padding: 13px 18px;
+    background: linear-gradient(135deg, #1e40af, #3b82f6);
+    color: white;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .gst-row {
+    display: flex; justify-content: space-between;
+    padding: 9px 18px;
+    border-bottom: 1px solid #f1f5f9;
+    font-size: 13px;
+  }
+  .gst-row.total {
+    background: #f8fafc;
+    font-weight: 800;
+    font-size: 14px;
+    border-bottom: none;
+  }
+  .gst-row .lbl { color: var(--text-muted); }
+  .gst-row .val { font-weight: 700; color: var(--text-main); }
+  .gst-row.cgst .val { color: #2563eb; }
+  .gst-row.sgst .val { color: #2563eb; }
+  .gst-row.igst .val { color: #d97706; }
+  .gst-row.tax .val  { color: #7c3aed; }
+
+  .item-tax-hint {
+    font-size: 11px; color: #7c3aed;
+    margin-top: 3px; display: none;
+  }
+
+  .form-actions {
+    padding: 16px 20px;
+    border-top: 1px solid var(--border);
+    background: #f8fafc;
+    display: flex; gap: 10px; align-items: center;
+  }
+</style>
+{% endblock %}
+
+{% block topbar_actions %}
+<a href="{{ url_for('purchases') }}" class="btn-outline-custom">
+  <i class="bi bi-arrow-left"></i> Back to Purchases
+</a>
+{% endblock %}
+
+{% block content %}
+
+<div class="section-sub" style="margin-bottom:16px;">
+  {% if action == 'Edit' %}
+    Edit Purchase Bill #{{ purchase.bill_no or purchase.id }} — {{ purchase.supplier_name }}
+  {% else %}
+    Fill in supplier details, add items with GST, mark raw material or resale.
+  {% endif %}
+</div>
+
+<form method="POST"
+      action="{{ url_for('edit_purchase', purchase_id=purchase.id) if purchase else url_for('add_purchase') }}"
+      id="purchaseForm">
+
+  <div class="form-layout">
+
+    <!-- ═══ LEFT COLUMN ══════════════════════════════════════════ -->
+    <div>
+
+      <!-- 1. Purchase Type (New: Resale vs Raw Material) -->
+      <div class="section-card">
+        <div class="section-head">
+          <i class="bi bi-tag-fill" style="color:#7c3aed;"></i>
+          <span class="section-title-text">Purchase Type</span>
+        </div>
+        <div class="section-body">
+          <div class="ptype-row" id="ptypeRow">
+            <label class="ptype-card selected" id="pt_resale" onclick="selectPtype('Resale')">
+              <input type="radio" name="purchase_type" value="Resale"
+                {{ 'checked' if not purchase or (purchase.purchase_type or 'Resale') == 'Resale' else '' }} />
+              <div style="font-size:24px;">🛒</div>
+              <div class="ptype-title" style="color:#2563eb;">Resale / Trading</div>
+              <div class="ptype-sub">Product will be added to inventory. Stock level updates. Suitable for goods you sell to customers.</div>
+            </label>
+            <label class="ptype-card {% if purchase and purchase.purchase_type == 'Raw Material' %}selected raw{% endif %}"
+                   id="pt_raw" onclick="selectPtype('Raw Material')">
+              <input type="radio" name="purchase_type" value="Raw Material"
+                {{ 'checked' if purchase and purchase.purchase_type == 'Raw Material' else '' }} />
+              <div style="font-size:24px;">🏭</div>
+              <div class="ptype-title" style="color:#d97706;">Raw Material / Expense</div>
+              <div class="ptype-sub">Stock will NOT be added to product inventory. Only purchase record saved. For materials, services, overhead.</div>
+            </label>
+          </div>
+          <div id="rawMaterialNote" style="display:{{ 'flex' if purchase and purchase.purchase_type == 'Raw Material' else 'none' }};
+               background:#fffbeb;border:1px solid #fde68a;border-radius:10px;
+               padding:10px 14px;font-size:12.5px;color:#92400e;gap:8px;align-items:start;">
+            <i class="bi bi-exclamation-triangle-fill" style="margin-top:1px;flex-shrink:0;"></i>
+            <span>Raw Material mode: Items entered below are for bill recording only. Product inventory will NOT be updated.</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 2. Supplier & Bill Details -->
+      <div class="section-card">
+        <div class="section-head">
+          <i class="bi bi-building" style="color:#7c3aed;"></i>
+          <span class="section-title-text">Supplier & Bill Details</span>
+        </div>
+        <div class="section-body">
+          <div class="fg mb-3">
+            <label class="fg-label">Vendor / Supplier <span style="color:red">*</span></label>
+            <select name="vendor_id" required>
+              <option value="">— Select Vendor —</option>
+              {% for v in vendors %}
+              <option value="{{ v.id }}"
+                {{ 'selected' if purchase and purchase.vendor_id == v.id else '' }}>
+                {{ v.name }}{% if v.gstin %} ({{ v.gstin }}){% endif %}
+              </option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div class="form-grid-2 mb-3">
+            <div class="fg">
+              <label class="fg-label">Bill / Invoice No.</label>
+              <input type="text" name="bill_no"
+                     value="{{ purchase.bill_no if purchase else '' }}"
+                     placeholder="BILL-001" />
+            </div>
+            <div class="fg">
+              <label class="fg-label">Bill Date <span style="color:red">*</span></label>
+              <input type="date" name="purchase_date"
+                     value="{{ purchase.purchase_date if purchase else today }}"
+                     required />
+            </div>
+          </div>
+
+          <div class="form-grid-2 mb-3">
+            <div class="fg">
+              <label class="fg-label">Place of Supply <span style="font-size:10px;font-weight:400;">(Supplier's State — for IGST)</span></label>
+              <select name="place_of_supply" onchange="updateGstType(this.value)" id="placeSelect">
+                <option value="">— Same State (CGST + SGST) —</option>
+                {% set states=['Andaman & Nicobar','Andhra Pradesh','Arunachal Pradesh','Assam','Bihar','Chandigarh','Chhattisgarh','Dadra & Nagar Haveli','Daman & Diu','Delhi','Goa','Gujarat','Haryana','Himachal Pradesh','Jammu & Kashmir','Jharkhand','Karnataka','Kerala','Ladakh','Lakshadweep','Madhya Pradesh','Maharashtra','Manipur','Meghalaya','Mizoram','Nagaland','Odisha','Puducherry','Punjab','Rajasthan','Sikkim','Tamil Nadu','Telangana','Tripura','Uttar Pradesh','Uttarakhand','West Bengal'] %}
+                {% for s in states %}
+                <option value="{{ s }}"
+                  {{ 'selected' if purchase and purchase.place_of_supply == s else '' }}>
+                  {{ s }}
+                </option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="fg">
+              <label class="fg-label">Reverse Charge (RCM)?</label>
+              <div style="display:flex;gap:20px;margin-top:10px;">
+                <label style="font-size:13px;font-weight:700;display:flex;align-items:center;gap:6px;cursor:pointer;">
+                  <input type="radio" name="reverse_charge" value="0"
+                         {{ 'checked' if not purchase or not purchase.reverse_charge else '' }} />
+                  No
+                </label>
+                <label style="font-size:13px;font-weight:700;display:flex;align-items:center;gap:6px;cursor:pointer;">
+                  <input type="radio" name="reverse_charge" value="1"
+                         {{ 'checked' if purchase and purchase.reverse_charge else '' }} />
+                  Yes (RCM)
+                </label>
+              </div>
+              <div style="font-size:11px;color:#94a3b8;margin-top:3px;">Aapko khud GST bharna hai?</div>
+            </div>
+          </div>
+
+          <!-- GST Type Indicator -->
+          <div class="gst-banner gst-intra" id="gstBanner">
+            <i class="bi bi-info-circle-fill"></i>
+            <span id="gstBannerText">Intra-State: CGST + SGST apply hoga</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 3. Items -->
+      <div class="section-card">
+        <div class="section-head">
+          <i class="bi bi-list-ul" style="color:#059669;"></i>
+          <span class="section-title-text">Purchase Items</span>
+          <button type="button" onclick="addItemRow()"
+            style="margin-left:auto;background:#ecfdf5;border:none;border-radius:8px;
+                   padding:6px 14px;color:#059669;font-size:12px;font-weight:800;cursor:pointer;">
+            <i class="bi bi-plus"></i> Add Row
+          </button>
+        </div>
+        <div class="section-body" style="padding:14px 16px;">
+
+          <!-- Header -->
+          <div class="item-row-grid" style="background:#f8fafc;border:none;padding:6px 12px;margin-bottom:4px;">
+            <div class="col-hdr">Product / Item</div>
+            <div class="col-hdr">Qty</div>
+            <div class="col-hdr">Rate ₹</div>
+            <div class="col-hdr">GST %</div>
+            <div class="col-hdr" style="color:#7c3aed;">Batch No.</div>
+            <div class="col-hdr" style="color:#dc2626;">Expiry</div>
+            <div></div>
+          </div>
+
+          <!-- Rows container -->
+          <div id="itemsContainer"></div>
+
+        </div>
+      </div>
+
+      <!-- 4. Notes -->
+      <div class="section-card">
+        <div class="section-body">
+          <div class="fg">
+            <label class="fg-label">Notes / Remarks (optional)</label>
+            <input type="text" name="notes"
+                   value="{{ purchase.notes if purchase else '' }}"
+                   placeholder="e.g. Medical supplies for Feb batch" />
+          </div>
+        </div>
+      </div>
+
+    </div><!-- /left -->
+
+    <!-- ═══ RIGHT COLUMN: GST Summary + Payment ═════════════════ -->
+    <div>
+
+      <!-- GST Summary Panel -->
+      <div class="gst-panel">
+        <div class="gst-panel-head">
+          <i class="bi bi-calculator-fill"></i>
+          <span style="font-weight:800;font-size:14px;">GST Summary</span>
+        </div>
+        <div class="gst-row">
+          <span class="lbl">Taxable Amount</span>
+          <span class="val" id="pTaxable">₹ 0.00</span>
+        </div>
+        <div class="gst-row cgst" id="rowCgst">
+          <span class="lbl">CGST</span>
+          <span class="val" id="pCgst">₹ 0.00</span>
+        </div>
+        <div class="gst-row sgst" id="rowSgst">
+          <span class="lbl">SGST</span>
+          <span class="val" id="pSgst">₹ 0.00</span>
+        </div>
+        <div class="gst-row igst" id="rowIgst" style="display:none;">
+          <span class="lbl">IGST</span>
+          <span class="val" id="pIgst">₹ 0.00</span>
+        </div>
+        <div class="gst-row tax">
+          <span class="lbl">Total Tax (ITC)</span>
+          <span class="val" id="pTax">₹ 0.00</span>
+        </div>
+        <div class="gst-row total">
+          <span>Grand Total</span>
+          <span id="pGrand" style="color:#1e40af;">₹ 0.00</span>
+        </div>
+      </div>
+
+      <!-- Payment Info -->
+      <div class="section-card" style="margin-top:16px;">
+        <div class="section-head">
+          <i class="bi bi-cash-stack" style="color:#059669;"></i>
+          <span class="section-title-text">Payment</span>
+        </div>
+        <div class="section-body">
+          <div class="fg mb-3">
+            <label class="fg-label">Amount Paid (₹)</label>
+            <input type="number" name="amount_paid" step="0.01" min="0"
+                   value="{{ '%.2f'|format(purchase.amount_paid or 0) if purchase else '0' }}"
+                   placeholder="0.00" />
+          </div>
+          <div class="fg">
+            <label class="fg-label">Payment Mode</label>
+            <select name="payment_mode">
+              <option>Cash</option><option>UPI</option>
+              <option>Bank Transfer</option><option>Cheque</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <!-- Submit -->
+      <div class="section-card" style="margin-top:0;">
+        <div class="form-actions">
+          <button type="submit" class="btn-primary-custom" id="saveBtn" style="flex:1;justify-content:center;">
+            <i class="bi bi-save2"></i>
+            {{ 'Update Bill' if action == 'Edit' else 'Save Purchase Bill' }}
+          </button>
+        </div>
+        <div style="padding:0 20px 14px;font-size:11.5px;color:#94a3b8;text-align:center;">
+          {% if action == 'Edit' %}
+            Items will be replaced with new entries above.
+          {% else %}
+            Resale items will update product stock automatically.
+          {% endif %}
+        </div>
+      </div>
+
+    </div><!-- /right -->
+  </div><!-- /form-layout -->
+
+</form>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+const COMP_STATE = '{{ settings.get("company_info", {}).get("state", "") | lower }}';
+const PROD_API   = '{{ url_for("product_search_api") }}';
+const IS_EDIT    = {{ 'true' if action == 'Edit' else 'false' }};
+
+let rowIdx   = 0;
+let isIGST   = false;
+let acTimers = {};
+
+/* ── Purchase Type ─────────────────────────────────────── */
+function selectPtype(val) {
+  document.querySelector('input[name=purchase_type][value="Resale"]').checked     = (val === 'Resale');
+  document.querySelector('input[name=purchase_type][value="Raw Material"]').checked = (val === 'Raw Material');
+  document.getElementById('pt_resale').className = 'ptype-card' + (val === 'Resale' ? ' selected' : '');
+  document.getElementById('pt_raw').className    = 'ptype-card' + (val === 'Raw Material' ? ' selected raw' : '');
+  document.getElementById('rawMaterialNote').style.display = (val === 'Raw Material') ? 'flex' : 'none';
+}
+
+/* ── GST Type ──────────────────────────────────────────── */
+function updateGstType(place) {
+  isIGST = place !== '' && place.toLowerCase() !== COMP_STATE;
+  const banner = document.getElementById('gstBanner');
+  const txt    = document.getElementById('gstBannerText');
+  if (isIGST) {
+    banner.className = 'gst-banner gst-inter';
+    txt.textContent  = `Inter-State (${place}): IGST lagega`;
+  } else {
+    banner.className = 'gst-banner gst-intra';
+    txt.textContent  = 'Intra-State: CGST + SGST lagega';
+  }
+  document.getElementById('rowCgst').style.display = isIGST ? 'none' : 'flex';
+  document.getElementById('rowSgst').style.display = isIGST ? 'none' : 'flex';
+  document.getElementById('rowIgst').style.display = isIGST ? 'flex' : 'none';
+  recalcAll();
+}
+
+/* ── Add Item Row ──────────────────────────────────────── */
+function addItemRow(prefill) {
+  const idx = rowIdx++;
+  const d   = document.createElement('div');
+  d.className = 'item-row-grid';
+  d.id        = `ir_${idx}`;
+  d.innerHTML = `
+    <div class="ac-wrap">
+      <input type="text" name="description[]" id="desc_${idx}" class="item-input"
+             placeholder="Search product or type item…" autocomplete="off"
+             oninput="acSearch(${idx},this.value)" />
+      <input type="hidden" name="product_id[]" id="pid_${idx}" value="" />
+      <div class="ac-drop" id="ac_${idx}"></div>
+    </div>
+    <input type="number" name="quantity[]" id="qty_${idx}" class="item-input"
+           step="0.001" min="0" placeholder="0" value="${prefill?.qty||''}"
+           oninput="recalcAll()" />
+    <input type="number" name="rate[]" id="rate_${idx}" class="item-input"
+           step="0.01" min="0" placeholder="0.00" value="${prefill?.rate||''}"
+           oninput="recalcAll()" />
+    <select name="gst_rate[]" id="gst_${idx}" class="item-input" onchange="recalcAll()">
+      <option value="0">0%</option>
+      <option value="0.1">0.1%</option><option value="0.25">0.25%</option>
+      <option value="1">1%</option><option value="1.5">1.5%</option>
+      <option value="3">3%</option><option value="5">5%</option>
+      <option value="6">6%</option><option value="7.5">7.5%</option>
+      <option value="9">9%</option><option value="12">12%</option>
+      <option value="14">14%</option><option value="18">18%</option>
+      <option value="28">28%</option>
+    </select>
+    <input type="text" name="batch_no[]" id="batch_${idx}" class="item-input batch"
+           placeholder="B2025-01" value="${prefill?.batch||''}" />
+    <input type="date" name="expiry_date[]" id="expiry_${idx}" class="item-input expiry"
+           value="${prefill?.expiry||''}" />
+    <button type="button" class="del-row-btn" onclick="delRow('ir_${idx}')">
+      <i class="bi bi-trash3"></i>
+    </button>
+  `;
+  document.getElementById('itemsContainer').appendChild(d);
+
+  // Set GST rate if prefill
+  if (prefill?.gst) {
+    const sel = document.getElementById(`gst_${idx}`);
+    if (sel) sel.value = String(prefill.gst);
+  }
+  // Set product_id
+  if (prefill?.pid) {
+    document.getElementById(`pid_${idx}`).value = prefill.pid;
+  }
+
+  recalcAll();
+  return idx;
+}
+
+function delRow(id) {
+  const el = document.getElementById(id);
+  if (el && document.querySelectorAll('.item-row-grid[id^="ir_"]').length > 1) {
+    el.remove();
+    recalcAll();
+  }
+}
+
+/* ── Autocomplete ──────────────────────────────────────── */
+function acSearch(idx, q) {
+  clearTimeout(acTimers[idx]);
+  const ac = document.getElementById(`ac_${idx}`);
+  if (!ac || !q.trim()) { if (ac) ac.style.display='none'; return; }
+  acTimers[idx] = setTimeout(async () => {
+    try {
+      const r    = await fetch(`${PROD_API}?q=${encodeURIComponent(q)}`);
+      const list = await r.json();
+      if (!list.length) { ac.style.display='none'; return; }
+      ac.innerHTML = list.slice(0,8).map(p => `
+        <div class="ac-item" onclick='acPick(${idx},${JSON.stringify(p)})'>
+          <strong>${p.name}</strong>
+          <small>Cost: ₹${parseFloat(p.rate||0).toFixed(2)} | GST: ${p.gst_rate||0}% | Stock: ${p.stock_qty||0} ${p.unit||''}</small>
+        </div>`).join('');
+      ac.style.display = 'block';
+    } catch(e) { if (ac) ac.style.display='none'; }
+  }, 220);
+}
+
+function acPick(idx, p) {
+  document.getElementById(`desc_${idx}`).value = p.name;
+  document.getElementById(`pid_${idx}`).value  = p.id || '';
+  // Set GST rate - exact match first
+  const gSel  = document.getElementById(`gst_${idx}`);
+  if (gSel && p.gst_rate != null) {
+    const allR = ['0','0.1','0.25','1','1.5','3','5','6','7.5','9','12','14','18','28'];
+    const exact = allR.find(r => parseFloat(r) === parseFloat(p.gst_rate));
+    gSel.value = exact !== undefined ? exact
+      : allR.reduce((a,b) => Math.abs(+b-p.gst_rate) < Math.abs(+a-p.gst_rate) ? b : a);
+  }
+  // Set cost rate (purchase rate = p.rate)
+  const rEl = document.getElementById(`rate_${idx}`);
+  if (rEl && p.rate) rEl.value = parseFloat(p.rate).toFixed(2);
+  document.getElementById(`ac_${idx}`).style.display = 'none';
+  recalcAll();
+}
+
+document.addEventListener('click', e => {
+  if (!e.target.closest('.ac-wrap'))
+    document.querySelectorAll('.ac-drop').forEach(d => d.style.display='none');
+});
+
+/* ── Calculations ──────────────────────────────────────── */
+const fmt = n => '₹ ' + parseFloat(n).toLocaleString('en-IN', {minimumFractionDigits:2, maximumFractionDigits:2});
+
+function recalcAll() {
+  let totTaxable=0, totCgst=0, totSgst=0, totIgst=0;
+
+  document.querySelectorAll('.item-row-grid[id^="ir_"]').forEach(row => {
+    const idx  = row.id.replace('ir_','');
+    const qty  = parseFloat(document.getElementById(`qty_${idx}`)?.value)  || 0;
+    const rate = parseFloat(document.getElementById(`rate_${idx}`)?.value) || 0;
+    const gst  = parseFloat(document.getElementById(`gst_${idx}`)?.value)  || 0;
+    if (!qty || !rate) return;
+    const taxable = qty * rate;
+    const cgst    = isIGST ? 0 : taxable * gst / 200;
+    const sgst    = isIGST ? 0 : taxable * gst / 200;
+    const igst    = isIGST ? taxable * gst / 100 : 0;
+    totTaxable += taxable; totCgst += cgst; totSgst += sgst; totIgst += igst;
+  });
+
+  const totTax   = totCgst + totSgst + totIgst;
+  const totGrand = totTaxable + totTax;
+
+  document.getElementById('pTaxable').textContent = fmt(totTaxable);
+  document.getElementById('pCgst').textContent    = fmt(totCgst);
+  document.getElementById('pSgst').textContent    = fmt(totSgst);
+  document.getElementById('pIgst').textContent    = fmt(totIgst);
+  document.getElementById('pTax').textContent     = fmt(totTax);
+  document.getElementById('pGrand').textContent   = fmt(totGrand);
+}
+
+/* ── Submit guard ──────────────────────────────────────── */
+document.getElementById('purchaseForm').addEventListener('submit', () => {
+  const btn = document.getElementById('saveBtn');
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Saving…';
+  btn.disabled  = true;
+});
+
+/* ── Prefill existing items (Edit mode) ────────────────── */
+{% if items %}
+const existingItems = {{ items | tojson }};
+existingItems.forEach(it => {
+  addItemRow({
+    qty    : it.quantity,
+    rate   : it.rate,
+    gst    : it.gst_rate,
+    batch  : it.batch_no  || '',
+    expiry : it.expiry_date || '',
+    pid    : it.product_id || '',
+  });
+  // Set description after row created
+  const lastIdx = rowIdx - 1;
+  const descEl = document.getElementById(`desc_${lastIdx}`);
+  if (descEl) descEl.value = it.description || it.product_name || '';
+});
+{% else %}
+// Add one blank row for new bill
+addItemRow();
+{% endif %}
+
+// Init GST type from current place_of_supply selection
+const placeEl = document.getElementById('placeSelect');
+if (placeEl && placeEl.value) updateGstType(placeEl.value);
+</script>
+{% endblock %}
