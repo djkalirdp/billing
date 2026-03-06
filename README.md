@@ -60,6 +60,9 @@ GST-compliant billing and inventory management system built with **Python Flask 
 ```bash
 # 1. Enter project folder
 cd billing-app
+    or
+#simply type this command in terminal
+bash <(curl -fsSL https://raw.githubusercontent.com/djkalirdp/billing/main/install.sh)
 
 # 2. Virtual environment (recommended)
 python -m venv venv
