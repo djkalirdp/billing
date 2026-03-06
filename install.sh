@@ -1,10 +1,112 @@
 #!/usr/bin/env bash
 # =============================================================================
 #  BILLING & INVENTORY SOFTWARE — ONE-COMMAND INSTALLER
-#  Usage:  bash install.sh
+#  Usage:  bash <(curl -fsSL https://raw.githubusercontent.com/djkalirdp/billing/main/install.sh)
 # =============================================================================
 
 set -e   # Stop on any error
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  STEP 0 — CLONE REPO (download all source files)
+# ─────────────────────────────────────────────────────────────────────────────
+REPO_URL="https://github.com/djkalirdp/billing.git"
+REPO_RAW="https://raw.githubusercontent.com/djkalirdp/billing/main"
+INSTALL_TARGET="billing-app"
+
+# Check git available
+if command -v git &>/dev/null; then
+    if [[ -d "$INSTALL_TARGET/.git" ]]; then
+        echo "  → Repo already cloned — pulling latest..."
+        cd "$INSTALL_TARGET"
+        git pull --quiet
+        cd ..
+    elif [[ -d "$INSTALL_TARGET" ]]; then
+        echo "  → billing-app folder exists (no git) — skipping clone"
+    else
+        echo "  → Cloning repo from GitHub..."
+        git clone "$REPO_URL" "$INSTALL_TARGET"
+        echo "  ✔  Repo cloned"
+    fi
+    cd "$INSTALL_TARGET"
+else
+    # git not available — download each file via curl
+    echo "  → git not found — downloading files via curl..."
+    mkdir -p "$INSTALL_TARGET"
+    cd "$INSTALL_TARGET"
+
+    FILES=(
+        "app.py"
+        "database_manager.py"
+        "pdf_generator.py"
+        "reports_generator.py"
+    )
+
+    for f in "${FILES[@]}"; do
+        echo "    downloading $f..."
+        curl -fsSL "$REPO_RAW/$f" -o "$f" || echo "    WARNING: $f not downloaded"
+    done
+
+    # Download all templates
+    TEMPLATES=(
+        "templates/base.html"
+        "templates/dashboard.html"
+        "templates/billing.html"
+        "templates/invoices.html"
+        "templates/invoice_detail.html"
+        "templates/products.html"
+        "templates/product_form.html"
+        "templates/product_rate_list.html"
+        "templates/product_variations.html"
+        "templates/buyers.html"
+        "templates/buyer_form.html"
+        "templates/buyer_ledger.html"
+        "templates/vendors.html"
+        "templates/vendor_form.html"
+        "templates/purchases.html"
+        "templates/purchase_form.html"
+        "templates/proforma_list.html"
+        "templates/proforma_form.html"
+        "templates/proforma_detail.html"
+        "templates/batches.html"
+        "templates/batch_history.html"
+        "templates/reports.html"
+        "templates/settings.html"
+        "templates/users.html"
+        "templates/login.html"
+        "templates/404.html"
+        "templates/500.html"
+        "templates/mobile/base_mobile.html"
+        "templates/mobile/dashboard.html"
+        "templates/mobile/billing.html"
+        "templates/mobile/invoices.html"
+        "templates/mobile/invoice_detail.html"
+        "templates/mobile/products.html"
+        "templates/mobile/product_form.html"
+        "templates/mobile/product_variations.html"
+        "templates/mobile/buyers.html"
+        "templates/mobile/buyer_form.html"
+        "templates/mobile/buyer_ledger.html"
+        "templates/mobile/vendors.html"
+        "templates/mobile/vendor_form.html"
+        "templates/mobile/purchases.html"
+        "templates/mobile/reports.html"
+        "templates/mobile/settings.html"
+        "templates/mobile/users.html"
+        "templates/mobile/batches.html"
+        "templates/mobile/login.html"
+        "templates/mobile/404.html"
+        "templates/mobile/500.html"
+    )
+
+    mkdir -p templates/mobile
+
+    for tpl in "${TEMPLATES[@]}"; do
+        echo "    downloading $tpl..."
+        curl -fsSL "$REPO_RAW/$tpl" -o "$tpl" 2>/dev/null || echo "    WARNING: $tpl not downloaded"
+    done
+
+    echo "  ✔  Files downloaded"
+fi
 
 # ── Colours ──────────────────────────────────────────────────────────────────
 RED='\033[0;31m'
@@ -141,41 +243,13 @@ else
 fi
 
 # ─────────────────────────────────────────────────────────────────────────────
-#  STEP 4 — CREATE PROJECT FOLDER
+#  STEP 4 — ENSURE ALL SUBDIRECTORIES EXIST
 # ─────────────────────────────────────────────────────────────────────────────
-step "Setting up project directory..."
+step "Setting up project directories..."
 
-INSTALL_DIR="billing-app"
-
-# If already inside billing-app folder, install in current dir
-if [[ "$(basename "$PWD")" == "billing-app" ]]; then
-    INSTALL_DIR="."
-    info "Already inside billing-app folder — installing here"
-else
-    if [[ -d "$INSTALL_DIR" ]]; then
-        warn "Folder '$INSTALL_DIR' already exists"
-        read -p "  Overwrite existing installation? (y/N): " CONFIRM
-        if [[ "$CONFIRM" != "y" && "$CONFIRM" != "Y" ]]; then
-            info "Keeping existing folder. Running pip install and setup only..."
-            cd "$INSTALL_DIR"
-            INSTALL_DIR="."
-        else
-            info "Removing old folder..."
-            rm -rf "$INSTALL_DIR"
-            mkdir -p "$INSTALL_DIR"
-            cd "$INSTALL_DIR"
-            INSTALL_DIR="."
-        fi
-    else
-        mkdir -p "$INSTALL_DIR"
-        cd "$INSTALL_DIR"
-        INSTALL_DIR="."
-    fi
-fi
-
-# Create all required sub-directories
+# We are already inside billing-app/ from Step 0
 mkdir -p data backups invoices reports static/uploads templates/mobile
-ok "Project directories created"
+ok "Project directories ready"
 
 # ─────────────────────────────────────────────────────────────────────────────
 #  STEP 5 — SET UP PYTHON VIRTUAL ENVIRONMENT
