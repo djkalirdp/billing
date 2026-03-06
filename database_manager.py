@@ -1368,11 +1368,14 @@ def get_dashboard_kpi():
     total_due = (total_invoiced + total_opening) - total_received
 
     # 3. Estimated Profit
+    # COALESCE(pv.rate, p.rate): variation ka cost use karo agar variation hai,
+    # warna parent product ka cost use karo
     c.execute("""
-        SELECT SUM((ii.rate - p.rate) * ii.quantity)
+        SELECT SUM((ii.rate - COALESCE(pv.rate, p.rate)) * ii.quantity)
         FROM invoice_items ii
-        JOIN products p  ON ii.product_id = p.id
-        JOIN invoices i  ON ii.invoice_id = i.id
+        JOIN products p              ON ii.product_id = p.id
+        LEFT JOIN product_variations pv ON ii.variation_id = pv.id
+        JOIN invoices i              ON ii.invoice_id = i.id
         WHERE i.invoice_no NOT LIKE '[CANCELLED]%'
     """)
     row = c.fetchone()
@@ -2405,4 +2408,3 @@ def delete_proforma(proforma_id):
         return False
     finally:
         conn.close()
-
