@@ -306,7 +306,7 @@ def create_invoice_pdf(invoice_data, items, settings,
         logo_path = c_info.get('logo_path', '')
         logo_img  = None
         # Logo size scales with W_SCALE
-        _logo_w, _logo_h = 3 * W_SCALE * cm, 2.5 * W_SCALE * cm
+        _logo_w, _logo_h = 2.5 * W_SCALE * cm, 2.0 * W_SCALE * cm
         if logo_path and os.path.exists(logo_path):
             try:
                 logo_img = Image(logo_path, width=_logo_w, height=_logo_h)
@@ -354,19 +354,19 @@ def create_invoice_pdf(invoice_data, items, settings,
         # ── Invoice Details Block ─────────────────────────────────
         if is_proforma:
             inv_rows = [
-                ["Quotation No:", f"<b>{invoice_data.get('invoice_no', invoice_data.get('quotation_no', ''))}</b>"],
-                ["Date:",          invoice_data.get('invoice_date', invoice_data.get('quotation_date', ''))],
+                ["Quotation No:", f"<b>{invoice_data.get('invoice_no') or invoice_data.get('quotation_no') or ''}</b>"],
+                ["Date:",          str(invoice_data.get('invoice_date') or invoice_data.get('quotation_date') or '')],
                 ["Mode:",          "Advance"],
-                ["Ref:",           invoice_data.get('order_ref', '')],
-                ["Valid Until:",   invoice_data.get('valid_until', '')],
+                ["Ref:",           str(invoice_data.get('order_ref')  or '')],
+                ["Valid Until:",   str(invoice_data.get('valid_until')or '')],
             ]
         else:
             inv_rows = [
                 ["Invoice No:", f"<b>{invoice_data['invoice_no']}</b>"],
-                ["Date:",        invoice_data['invoice_date']],
-                ["Mode:",        invoice_data.get('payment_mode', '')],
-                ["Ref:",         invoice_data.get('order_ref', '')],
-                ["Dispatch:",    invoice_data.get('dispatch_info', '')],
+                ["Date:",        str(invoice_data.get('invoice_date') or '')],
+                ["Mode:",        str(invoice_data.get('payment_mode') or '')],
+                ["Ref:",         str(invoice_data.get('order_ref')    or '')],
+                ["Dispatch:",    str(invoice_data.get('dispatch_info')or '')],
             ]
         _inv_lbl_w = 2.5 * W_SCALE
         _inv_val_w = (_cell_w - _inv_lbl_w)  # fills the remaining cell width
@@ -392,7 +392,7 @@ def create_invoice_pdf(invoice_data, items, settings,
 
         # ── Items Table ───────────────────────────────────────────
         col_headers = ['S.No.', 'Description', 'HSN', 'GST%', 'Qty', 'Rate', 'Unit', 'Disc%', 'Amount']
-        _cw = [1.2, 5.5, 2.2, 1.4, 1.5, 2.1, 1.4, 1.4, 2.3]
+        _cw = [1.2, 6, 2.2, 1.4, 1.5, 2, 1.2, 1.2, 2.3]
         col_widths = [w * W_SCALE * cm for w in _cw]
         table_data   = [[Paragraph(h, S['item_head']) for h in col_headers]]
 
@@ -402,14 +402,14 @@ def create_invoice_pdf(invoice_data, items, settings,
         for idx, item in enumerate(items):
             row = [
                 Paragraph(str(idx + 1),                                  S['item_center']),
-                Paragraph(f"<b>{item['description']}</b>",               S['item_txt']),
-                Paragraph(item.get('hsn', ''),                           S['item_center']),
-                Paragraph(f"{item['gst_rate']}%",                        S['item_center']),
-                Paragraph(str(item['quantity']),                          S['item_num']),
-                Paragraph(f"{CURRENCY_SYM} {item['rate']:.2f}",          S['item_num']),
-                Paragraph(item.get('unit', ''),                           S['item_center']),
-                Paragraph(str(item.get('discount_percent', 0)),           S['item_center']),
-                Paragraph(f"{CURRENCY_SYM} {item['amount']:.2f}",        S['item_num']),
+                Paragraph(f"<b>{item.get('description') or ''}</b>",     S['item_txt']),
+                Paragraph(str(item.get('hsn') or ''),                    S['item_center']),
+                Paragraph(f"{item.get('gst_rate') or 0}%",              S['item_center']),
+                Paragraph(str(item.get('quantity') or 0),                S['item_num']),
+                Paragraph(f"{CURRENCY_SYM} {float(item.get('rate') or 0):.2f}",   S['item_num']),
+                Paragraph(str(item.get('unit') or ''),                   S['item_center']),
+                Paragraph(str(item.get('discount_percent') or 0),        S['item_center']),
+                Paragraph(f"{CURRENCY_SYM} {float(item.get('amount') or 0):.2f}", S['item_num']),
             ]
             table_data.append(row)
             total_qty += item['quantity']
@@ -518,7 +518,7 @@ def create_invoice_pdf(invoice_data, items, settings,
             bank_lines.append([Paragraph(f"UPI:  {upi_id}", S['footer_txt'])])
 
         _qr_cw   = 3.0 * W_SCALE   # cm — QR column in bank section
-        _bank_cw = (9 * W_SCALE) - _qr_cw  # remaining for bank text
+        _bank_cw = (11 * W_SCALE) - _qr_cw  # remaining for bank text
         if qr_drawing:
             qr_col = [
                 [Paragraph("<b>Scan to Pay</b>",
@@ -554,7 +554,7 @@ def create_invoice_pdf(invoice_data, items, settings,
         else:
             add_right_row("Total Outstanding:", bal_due, bold=True)
 
-        _r1, _r2 = 4.5 * W_SCALE, 2.5 * W_SCALE
+        _r1, _r2 = 4.5 * W_SCALE, 3.5 * W_SCALE
         t_right = Table(right_content, colWidths=[_r1*cm, _r2*cm])
         t_right.setStyle(TableStyle([
             ('ALIGN',   (0,0), (-1,-1), 'RIGHT'),
