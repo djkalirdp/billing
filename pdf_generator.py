@@ -554,7 +554,7 @@ def create_invoice_pdf(invoice_data, items, settings,
         else:
             add_right_row("Total Outstanding:", bal_due, bold=True)
 
-        _r1, _r2 = 4.5 * W_SCALE, 3.5 * W_SCALE
+        _r1, _r2 = 4.5 * W_SCALE, 2.5 * W_SCALE
         t_right = Table(right_content, colWidths=[_r1*cm, _r2*cm])
         t_right.setStyle(TableStyle([
             ('ALIGN',   (0,0), (-1,-1), 'RIGHT'),
