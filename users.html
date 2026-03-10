@@ -1,0 +1,360 @@
+{% extends 'base.html' %}
+
+{% block title %}User Management{% endblock %}
+{% block page_title %}User Management{% endblock %}
+
+{% block head %}
+<style>
+  .users-layout { display:grid;grid-template-columns:1fr 340px;gap:16px;align-items:start; }
+  @media(max-width:900px){ .users-layout{grid-template-columns:1fr;} }
+
+  .table-wrap { background:white;border:1px solid var(--border);border-radius:var(--radius);overflow:hidden; }
+  .table-head-bar { padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between; }
+  .table-head-title { font-family:var(--font-head);font-size:14px;font-weight:700; }
+
+  /* Role badge */
+  .role-admin    { background:#fef3c7;color:#78350f; }
+  .role-cashier  { background:#eff6ff;color:#1e3a8a; }
+
+  /* User avatar */
+  .user-avatar {
+    width:34px;height:34px;border-radius:50%;
+    display:flex;align-items:center;justify-content:center;
+    font-family:var(--font-head);font-size:14px;font-weight:800;
+    color:white;flex-shrink:0;
+  }
+
+  /* Add form */
+  .add-card { background:white;border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;position:sticky;top:0; }
+  .add-card-head { padding:14px 20px;border-bottom:1px solid var(--border);background:#f8fafc;display:flex;align-items:center;gap:10px; }
+  .add-card-title { font-family:var(--font-head);font-size:14px;font-weight:700; }
+  .add-card-body  { padding:20px; }
+  .fg { display:flex;flex-direction:column;gap:5px;margin-bottom:14px; }
+  .fg label { font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em; }
+  .fg input,.fg select {
+    padding:10px 12px;border:1.5px solid var(--border);border-radius:8px;
+    font-family:var(--font-body);font-size:13.5px;background:#f8fafc;
+    outline:none;transition:border-color .18s;width:100%;
+  }
+  .fg input:focus,.fg select:focus {
+    border-color:var(--accent);background:white;box-shadow:0 0 0 3px rgba(37,99,235,.1);
+  }
+
+  /* Password strength */
+  .pass-wrap { position:relative; }
+  .pass-wrap input { padding-right:40px; }
+  .pass-toggle-btn {
+    position:absolute;right:12px;top:50%;transform:translateY(-50%);
+    background:none;border:none;cursor:pointer;color:var(--text-muted);font-size:15px;
+  }
+  .pass-strength { height:3px;border-radius:99px;margin-top:6px;background:#f1f5f9;overflow:hidden; }
+  .pass-strength-fill { height:100%;border-radius:99px;transition:width .3s,background .3s; }
+
+  /* Delete modal */
+  .modal-overlay { position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:5000;display:flex;align-items:center;justify-content:center;opacity:0;pointer-events:none;transition:opacity .2s; }
+  .modal-overlay.open { opacity:1;pointer-events:all; }
+  .modal-box { background:white;border-radius:var(--radius);padding:28px;max-width:380px;width:90%;box-shadow:var(--shadow-lg);transform:translateY(20px);transition:transform .2s; }
+  .modal-overlay.open .modal-box { transform:translateY(0); }
+
+  /* Info box */
+  .info-box { background:#eff6ff;border:1px solid #bfdbfe;border-radius:var(--radius-sm);padding:12px 14px;font-size:13px;color:#1e40af;margin-bottom:16px; }
+  .empty-state { padding:40px;text-align:center;color:var(--text-muted); }
+  .empty-state i { font-size:36px;display:block;margin-bottom:10px;opacity:.3; }
+
+  .tbl-btn { padding:4px 10px;border-radius:6px;font-size:12px;font-weight:600;border:none;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;gap:4px;transition:all .18s; }
+  .tbl-btn-del  { background:#fef2f2;color:#dc2626; } .tbl-btn-del:hover  { background:#dc2626;color:white; }
+  .tbl-btn-pass { background:#eff6ff;color:#2563eb; } .tbl-btn-pass:hover { background:#2563eb;color:white; }
+</style>
+{% endblock %}
+
+{% block topbar_actions %}
+<a href="{{ url_for('settings') }}" class="btn-outline-custom">
+  <i class="bi bi-arrow-left"></i> Settings
+</a>
+{% endblock %}
+
+{% block content %}
+
+<div class="section-title">User Management</div>
+<div class="section-sub">Control who can access the billing system and their permissions</div>
+
+<div style="margin-top:16px;">
+<div class="users-layout">
+
+  <!-- ═══ LEFT: User List ═══════════════════════════════════════ -->
+  <div>
+    <div class="table-wrap">
+      <div class="table-head-bar">
+        <span class="table-head-title">
+          <i class="bi bi-shield-check me-2"></i>System Users
+          <span style="font-size:12px;color:var(--text-muted);font-family:var(--font-body);font-weight:400;margin-left:6px;">({{ users|length }})</span>
+        </span>
+      </div>
+
+      {% if users %}
+      <table class="table-custom">
+        <thead>
+          <tr>
+            <th>User</th>
+            <th>Role</th>
+            <th>Permissions</th>
+            <th style="text-align:center;">Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for u in users %}
+          {% set colors = ['#2563eb','#059669','#7c3aed','#d97706','#dc2626'] %}
+          {% set clr = colors[loop.index0 % 5] %}
+          <tr>
+            <td>
+              <div style="display:flex;align-items:center;gap:10px;">
+                <div class="user-avatar" style="background:{{ clr }};">
+                  {{ u.username[0] | upper }}
+                </div>
+                <div>
+                  <div style="font-weight:700;font-size:13.5px;">{{ u.username }}</div>
+                  {% if u.username == 'admin' %}
+                  <div style="font-size:11px;color:var(--text-muted);">Default admin account</div>
+                  {% endif %}
+                </div>
+              </div>
+            </td>
+            <td>
+              <span class="badge-custom {{ 'role-admin' if u.role == 'Admin' else 'role-cashier' }}">
+                {% if u.role == 'Admin' %}<i class="bi bi-shield-fill me-1"></i>{% else %}<i class="bi bi-person me-1"></i>{% endif %}
+                {{ u.role }}
+              </span>
+            </td>
+            <td style="font-size:12.5px;color:var(--text-muted);">
+              {% if u.role == 'Admin' %}
+                All features + Settings + Reports
+              {% else %}
+                Billing + Buyers + Invoices view
+              {% endif %}
+            </td>
+            <td style="text-align:center;">
+              <div style="display:flex;gap:6px;justify-content:center;flex-wrap:wrap;">
+                <button class="tbl-btn tbl-btn-pass"
+                        onclick="openChangePass({{ u.id }}, '{{ u.username }}')">
+                  <i class="bi bi-key-fill"></i> Change Password
+                </button>
+                {% if u.username != 'admin' %}
+                <button class="tbl-btn tbl-btn-del"
+                        onclick="confirmDelete({{ u.id }}, '{{ u.username }}')">
+                  <i class="bi bi-trash"></i> Delete
+                </button>
+                {% endif %}
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <div class="empty-state">
+        <i class="bi bi-people"></i>
+        <p>No users found.</p>
+      </div>
+      {% endif %}
+    </div>
+
+    <!-- Role explanation -->
+    <div class="section-card mt-3" style="background:white;border:1px solid var(--border);border-radius:var(--radius);padding:16px 20px;">
+      <div style="font-family:var(--font-head);font-size:13px;font-weight:700;margin-bottom:12px;">Role Permissions</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+        <div style="background:#fef3c7;border-radius:var(--radius-sm);padding:12px;">
+          <div style="font-weight:700;font-size:13px;color:#78350f;margin-bottom:6px;"><i class="bi bi-shield-fill me-1"></i>Admin</div>
+          <ul style="font-size:12.5px;color:#92400e;padding-left:16px;line-height:1.8;">
+            <li>Full access to all features</li>
+            <li>Products, Vendors, Purchases</li>
+            <li>Reports & PDF Export</li>
+            <li>Settings & User Management</li>
+            <li>Cancel/Delete invoices</li>
+          </ul>
+        </div>
+        <div style="background:#eff6ff;border-radius:var(--radius-sm);padding:12px;">
+          <div style="font-weight:700;font-size:13px;color:#1e3a8a;margin-bottom:6px;"><i class="bi bi-person me-1"></i>Cashier</div>
+          <ul style="font-size:12.5px;color:#1e40af;padding-left:16px;line-height:1.8;">
+            <li>Create new invoices</li>
+            <li>View buyer list & khata</li>
+            <li>Add buyer payments</li>
+            <li>View invoice list</li>
+            <li>No settings access</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ RIGHT: Add User Form ══════════════════════════════════ -->
+  <div>
+    <div class="add-card">
+      <div class="add-card-head">
+        <i class="bi bi-person-plus" style="color:var(--accent);font-size:18px;"></i>
+        <span class="add-card-title">Add New User</span>
+      </div>
+      <div class="add-card-body">
+
+        <div class="info-box">
+          <i class="bi bi-info-circle me-1"></i>
+          New users can log in immediately after creation.
+        </div>
+
+        <form method="POST" action="{{ url_for('add_user') }}" id="addUserForm">
+
+          <div class="fg">
+            <label>Username <span style="color:red">*</span></label>
+            <input type="text" name="username" required autocomplete="off"
+                   placeholder="e.g. cashier1" />
+          </div>
+
+          <div class="fg">
+            <label>Password <span style="color:red">*</span></label>
+            <div class="pass-wrap">
+              <input type="password" name="password" id="passInput" required
+                     autocomplete="new-password"
+                     placeholder="Min. 6 characters"
+                     oninput="checkStrength(this.value)" />
+              <button type="button" class="pass-toggle-btn" onclick="togglePass()">
+                <i class="bi bi-eye" id="passIcon"></i>
+              </button>
+            </div>
+            <div class="pass-strength">
+              <div class="pass-strength-fill" id="strengthBar" style="width:0%;background:#dc2626;"></div>
+            </div>
+            <span style="font-size:11px;color:var(--text-muted);" id="strengthLabel"></span>
+          </div>
+
+          <div class="fg">
+            <label>Role</label>
+            <select name="role">
+              <option value="Cashier">Cashier — Limited access</option>
+              <option value="Admin">Admin — Full access</option>
+            </select>
+          </div>
+
+          <button type="submit" class="btn-primary-custom w-100"
+                  style="justify-content:center;padding:11px;" id="addBtn">
+            <i class="bi bi-person-plus"></i> Add User
+          </button>
+
+        </form>
+      </div>
+    </div>
+
+    <!-- Security tips -->
+    <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:var(--radius-sm);padding:14px 16px;margin-top:12px;font-size:13px;color:#166534;">
+      <div style="font-weight:700;margin-bottom:6px;"><i class="bi bi-shield-check me-1"></i>Security Tips</div>
+      <ul style="padding-left:16px;line-height:1.9;font-size:12.5px;">
+        <li>Use strong passwords (8+ chars)</li>
+        <li>Don't share login credentials</li>
+        <li>Give Cashier role to daily users</li>
+        <li>Limit Admin accounts to owners only</li>
+      </ul>
+    </div>
+  </div>
+
+</div>
+</div>
+
+<!-- Change Password Modal -->
+<div class="modal-overlay" id="passModal">
+  <div class="modal-box">
+    <div style="font-family:var(--font-head);font-size:17px;font-weight:700;margin-bottom:6px;">
+      <i class="bi bi-key-fill text-primary me-2"></i>Change Password
+    </div>
+    <div style="font-size:13px;color:var(--text-muted);margin-bottom:18px;" id="passBody"></div>
+    <form id="passForm" method="POST">
+      <div style="margin-bottom:12px;">
+        <label style="font-size:13px;font-weight:600;display:block;margin-bottom:4px;">New Password</label>
+        <input type="password" name="new_password" id="newPassInput"
+               placeholder="Enter new password (min 4 chars)"
+               style="width:100%;padding:8px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:14px;"
+               required minlength="4" />
+      </div>
+      <div style="margin-bottom:18px;">
+        <label style="font-size:13px;font-weight:600;display:block;margin-bottom:4px;">Confirm Password</label>
+        <input type="password" name="confirm_password" id="confirmPassInput"
+               placeholder="Re-enter new password"
+               style="width:100%;padding:8px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:14px;"
+               required minlength="4" />
+      </div>
+      <div style="display:flex;gap:10px;justify-content:flex-end;">
+        <button type="button" class="btn-outline-custom"
+                onclick="document.getElementById('passModal').classList.remove('open')">Cancel</button>
+        <button type="submit" class="btn-primary-custom">
+          <i class="bi bi-check-lg"></i> Save Password
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Delete Modal -->
+<div class="modal-overlay" id="delModal">
+  <div class="modal-box">
+    <div style="font-family:var(--font-head);font-size:17px;font-weight:700;margin-bottom:10px;">
+      <i class="bi bi-person-x-fill text-danger me-2"></i>Delete User?
+    </div>
+    <div style="font-size:14px;color:var(--text-muted);margin-bottom:20px;" id="delBody"></div>
+    <div style="display:flex;gap:10px;justify-content:flex-end;">
+      <button class="btn-outline-custom" onclick="document.getElementById('delModal').classList.remove('open')">Cancel</button>
+      <form id="delForm" method="POST">
+        <button type="submit" class="btn-danger-custom"><i class="bi bi-trash"></i> Delete</button>
+      </form>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+function openChangePass(id, uname) {
+  document.getElementById('passBody').innerHTML = `Change password for user <strong>"${uname}"</strong>`;
+  document.getElementById('passForm').action = `/settings/users/${id}/change-password`;
+  document.getElementById('newPassInput').value = '';
+  document.getElementById('confirmPassInput').value = '';
+  document.getElementById('passModal').classList.add('open');
+}
+document.getElementById('passModal').addEventListener('click', function(e){ if(e.target===this)this.classList.remove('open'); });
+
+function confirmDelete(id, uname) {
+  document.getElementById('delBody').innerHTML = `Delete user <strong>"${uname}"</strong>? They will immediately lose access.`;
+  document.getElementById('delForm').action = `/settings/users/${id}/delete`;
+  document.getElementById('delModal').classList.add('open');
+}
+document.getElementById('delModal').addEventListener('click', function(e){ if(e.target===this)this.classList.remove('open'); });
+
+function togglePass() {
+  const inp  = document.getElementById('passInput');
+  const icon = document.getElementById('passIcon');
+  inp.type   = inp.type === 'password' ? 'text' : 'password';
+  icon.className = inp.type === 'password' ? 'bi bi-eye' : 'bi bi-eye-slash';
+}
+
+function checkStrength(val) {
+  const bar   = document.getElementById('strengthBar');
+  const label = document.getElementById('strengthLabel');
+  let strength = 0;
+  if (val.length >= 6)  strength++;
+  if (val.length >= 10) strength++;
+  if (/[A-Z]/.test(val)) strength++;
+  if (/[0-9]/.test(val)) strength++;
+  if (/[^A-Za-z0-9]/.test(val)) strength++;
+  const pct   = [0,20,40,60,80,100][strength];
+  const clrs  = ['#dc2626','#dc2626','#d97706','#d97706','#059669','#059669'];
+  const lbls  = ['','Weak','Fair','Moderate','Strong','Very Strong'];
+  bar.style.width      = pct + '%';
+  bar.style.background = clrs[strength];
+  label.textContent    = strength > 0 ? lbls[strength] : '';
+  label.style.color    = clrs[strength];
+}
+
+document.getElementById('addUserForm').addEventListener('submit', function() {
+  const btn = document.getElementById('addBtn');
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Creating...';
+  btn.disabled = true;
+});
+</script>
+{% endblock %}
