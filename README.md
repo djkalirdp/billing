@@ -63,6 +63,8 @@ cd billing-app
     or
 #simply type this command in terminal
 bash <(curl -fsSL https://raw.githubusercontent.com/djkalirdp/billing/main/install.sh)
+    or
+Run the install.bat file  #for windows(after installation of python)
 
 # 2. Virtual environment (recommended)
 python -m venv venv
