@@ -13,7 +13,7 @@ GST-compliant billing and inventory management system built with **Python Flask 
 5. [Billing / Create Invoice](#-billing--create-invoice)
 6. [Invoice Management](#-invoice-management)
 7. [Products & Inventory](#-products--inventory)
-8. [Product Variations (Size/Color)](#-product-variations-sizecolor)
+8. [Product Variations](#-product-variations-sizecolor)
 9. [Product Rate List](#-product-rate-list)
 10. [Buyers (Customers)](#-buyers-customers)
 11. [Buyer Ledger / Khata](#-buyer-ledger--khata)
@@ -25,10 +25,11 @@ GST-compliant billing and inventory management system built with **Python Flask 
 17. [PDF Page Sizes](#-pdf-page-sizes)
 18. [Settings](#-settings)
 19. [Mobile Interface](#-mobile-interface)
-20. [Database & File Structure](#-database--file-structure)
-21. [Tech Stack](#-tech-stack)
-22. [Important Notes](#-important-notes)
-23. [Changelog](#-changelog)
+20. [Sample Database](#-sample-database)
+21. [Database & File Structure](#-database--file-structure)
+22. [Tech Stack](#-tech-stack)
+23. [Important Notes](#-important-notes)
+24. [Changelog](#-changelog)
 
 ---
 
@@ -40,70 +41,104 @@ GST-compliant billing and inventory management system built with **Python Flask 
 | 📋 **Quotations** | Sales Quotation (Proforma Invoice), 1-click convert to Tax Invoice |
 | 📦 **Inventory** | Auto stock deduction on sale, low-stock alerts, product variations |
 | 🏷️ **Rate List** | Full price list — HSN, GST%, cost, selling, MRP, stock — with live search |
-| 👥 **Buyers** | Customer profiles, outstanding balance, payment collection |
+| 👥 **Buyers** | Customer profiles, outstanding balance, opening balance support |
 | 📒 **Ledger** | Running balance ledger with edit/delete payment entries |
 | 🏭 **Vendors** | Supplier profiles, purchase bills, payment tracking |
 | 🛒 **Purchases** | Full-page purchase form, Resale vs Raw Material, edit bills |
 | 📦 **Batches** | Batch no. + expiry tracking from purchase to sale |
-| 📊 **Reports** | GSTR-1, GSTR-2B, GSTR-3B with ITC — PDF + Excel |
+| 📊 **Reports** | GSTR-1, GSTR-2B, GSTR-3B with ITC cross-utilization — PDF + Excel |
 | 📄 **PDF Sizes** | A4 / A4 Landscape / A5 / A5 Landscape for all PDFs |
+| 🖼️ **Logo** | Company logo on PDF invoices — 2.5cm × 2cm |
+| 👤 **Users** | Admin + Cashier roles, change password for all accounts |
 | 📱 **Mobile** | Dedicated mobile UI, bottom navigation, touch autocomplete |
-| 🔐 **Auth** | Login required, Admin vs Cashier roles |
-| ⚙️ **Settings** | Company info, logo, bank details, UPI QR code |
+| 🗃️ **Sample Data** | Ready-made sample database for testing all features |
 
 ---
 
 ## 🚀 Installation
 
-**Requirements:** Python 3.8+, pip
+### Windows (One-Command — Recommended)
+
+1. Download `install.bat` from the repository
+2. **Double-click** `install.bat`
+3. Script automatically:
+   - Checks Python (shows install guide if missing)
+   - Downloads entire repo as ZIP from GitHub
+   - Extracts to `billing-app/` folder
+   - Creates Python virtual environment
+   - Installs all packages (Flask, ReportLab, openpyxl, num2words, qrcode, Pillow)
+   - Downloads DejaVu fonts for ₹ symbol in PDFs
+   - Creates `start.bat` launcher
+   - Verifies everything — every step shows status
+   - Optionally starts the app immediately
+
+**After install — every time:**
+```
+Double-click  start.bat
+```
+Then open browser: `http://localhost:5000`
+
+---
+
+### Linux / macOS (One-Command)
 
 ```bash
-# 1. Enter project folder
-cd billing-app
-    or
-#simply type this command in terminal
 bash <(curl -fsSL https://raw.githubusercontent.com/djkalirdp/billing/main/install.sh)
-    or
-Run the install.bat file  #for windows(after installation of python)
-
-# 2. Virtual environment (recommended)
-python -m venv venv
-source venv/bin/activate        # Linux/Mac
-venv\Scripts\activate           # Windows
-
-# 3. Install packages
-pip install flask reportlab openpyxl werkzeug
-
-# 4. Run
-python app.py
-
-# 5. Open browser
-http://localhost:5000
 ```
 
-**Mobile access:** Both devices on same Wi-Fi → open `http://YOUR-PC-IP:5000`
+**After install:**
+```bash
+bash start.sh
+```
 
-### Default Login
-| Field | Value |
+---
+
+### Manual Install (any OS)
+
+```bash
+git clone https://github.com/djkalirdp/billing.git billing-app
+cd billing-app
+python3 -m venv venv
+source venv/bin/activate          # Windows: venv\Scripts\activate
+pip install flask werkzeug reportlab openpyxl num2words "qrcode[pil]" Pillow
+python app.py
+```
+
+---
+
+### Requirements
+
+| Requirement | Version |
 |---|---|
-| Username | `admin` |
-| Password | `admin123` |
-
-> ⚠️ Change the password immediately after first login — Settings → Manage Users
+| Python | 3.8 or newer |
+| Internet | Only needed during install |
+| Browser | Any modern browser |
+| OS | Windows 10/11, Linux, macOS |
 
 ---
 
 ## 🔐 Login & User Roles
 
-| Feature | Admin | Cashier |
-|---|---|---|
-| Create invoices / quotations | ✅ | ✅ |
-| View products, buyers, rate list | ✅ | ✅ |
-| Cancel invoices | ✅ | ❌ |
-| Edit/delete payments in ledger | ✅ | ❌ |
-| Purchases, purchases edit | ✅ | ❌ |
-| GST reports | ✅ | ❌ |
-| Settings, manage users | ✅ | ❌ |
+**Default login:**
+
+| Field | Value |
+|---|---|
+| Username | `admin` |
+| Password | `admin123` |
+
+> ⚠️ **Change password immediately** → Settings → Users → Change Password
+
+### Roles
+
+| Role | Access |
+|---|---|
+| **Admin** | Everything — billing, inventory, reports, settings, users |
+| **Cashier** | Billing + Buyers + Invoice view only |
+
+### User Management
+- **Add User** — Settings → Users → Add User form
+- **Change Password** — blue key button next to every user (including admin)
+- **Delete User** — only non-admin accounts
 
 ---
 
@@ -111,273 +146,206 @@ http://localhost:5000
 
 | Card | Description |
 |---|---|
-| Today's Sales | All invoices created today |
-| Receivables | Total outstanding across all buyers |
-| Est. Profit | (Selling − Cost) × Qty sold |
-| Low Stock | Products below threshold (default: 5) |
+| **Today's Sales** | Total invoices today |
+| **Total Receivable** | All outstanding dues from buyers |
+| **Estimated Profit** | (Invoice Rate − Variation Cost) × Qty |
+| **Low Stock Items** | Products/variations below threshold |
 
-Sales chart — switch Week / Month / Year tabs.
+Weekly / Monthly / Yearly sales chart (Chart.js).
+
+> **Profit:** Uses each variation's own cost price — not parent product cost. Accurate margin per size/variant.
 
 ---
 
 ## 🧾 Billing / Create Invoice
 
-Click `+` button (mobile) or **New Invoice** button.
+### Steps
+1. Select Buyer — previous balance auto-loaded
+2. Add Items — autocomplete fills HSN, GST%, rate, unit
+3. Variations — dropdown shows size/color options per product
+4. GST auto-detected:
+   - Same state → **CGST + SGST**
+   - Different state → **IGST**
+5. Per-item discount percentage
+6. Payment mode — Cash / UPI / Credit / Cheque / Bank Transfer
+7. Freight charge (optional)
+8. Paid Amount — partial payment supported
 
-### 4-Step Wizard
-
-**Step 1 — Buyer:**
-- Toggle **Retail / Wholesale** (prices auto-switch)
-- Autocomplete search — fills GSTIN, State, pending balance
-- Walk-in: type name manually → saved as new buyer on submit
-
-**Step 2 — Invoice Details:**
-Invoice No. (auto), Date, Payment Mode, Order Ref., Dispatch Info
-
-**Step 3 — Items:**
-- Product search autocomplete — fills Rate, GST%, HSN, Unit, Batch
-- Discount % per item, unlimited rows
-
-**Step 4 — Review & Save:**
-- CGST+SGST or IGST auto-detected from buyer state
-- Freight, paid at billing, balance due, previous balance
-- UPI QR on PDF if UPI ID set in Settings
-
-### GST Rules
-| Buyer State | Tax |
-|---|---|
-| Same as company | CGST + SGST (50/50) |
-| Different state | IGST (full rate) |
+### After Saving
+- Stock deducted automatically per item/variation
+- Invoice number auto-incremented
+- PDF auto-saved to `invoices/` (A4)
 
 ---
 
-## 📄 Invoice Management
+## 📋 Invoice Management
 
-Filter by date range, search by invoice no/buyer/mode. Quick filter chips: All / Cash / UPI / Credit.
-
-| Action | Who |
+| Feature | Details |
 |---|---|
-| Download PDF (A4/A4L/A5/A5L) | All users |
-| View Buyer Ledger | All users |
-| Cancel Invoice | Admin only |
-
-Cancelled invoices: stock restored, prefixed `[CANCELLED]`, cannot be reprinted.
+| Search | By invoice number, buyer name |
+| Date Filter | Custom date range |
+| PDF Download | A4 / A4L / A5 / A5L — size picker on detail page |
+| Cancel Invoice | Marks `[CANCELLED]`, restores stock (Admin only) |
+| 3 Copies | Original / Duplicate / Triplicate on single PDF |
 
 ---
 
 ## 📦 Products & Inventory
 
-**Fields:** Name, HSN, GST%, Cost Price, Selling Price, Wholesale Price, Stock Qty, Unit, Batch No., Expiry Date
-
-**Stock movement:**
-| Event | Stock |
+| Field | Description |
 |---|---|
-| Invoice saved | Deducted |
-| Purchase (Resale) | Added |
-| Invoice cancelled | Restored |
-| Purchase (Raw Material) | No change |
+| Name | Unique product name |
+| HSN Code | For GST filing |
+| GST Rate | 0 / 5 / 12 / 18 / 28 % |
+| Purchase Rate | Cost price — used for profit calculation |
+| Selling Price | Default retail price |
+| Wholesale Price | For wholesale buyers |
+| Stock Qty | Current inventory |
+| Unit | Pcs / Kg / Litre / Box / etc. |
 
 ---
 
 ## 🎨 Product Variations (Size/Color)
 
-Each product can have multiple variations (e.g. S/M/L, Red/Blue).
+Each product can have unlimited variations.
 
-- Variation fields: Name, Selling Price, Wholesale Price, Cost Price, Stock Qty
-- In billing: selecting a product with variations shows a second dropdown
-- Stock deducted from the specific variation selected
-- Rate List: variations expandable under each product row with a ▾ button
+| Field | Description |
+|---|---|
+| Variation Name | 100ml / 200ml / Large / Red etc. |
+| Cost Rate | **Own purchase cost** — correct profit per size |
+| Selling Price | Variation-specific retail |
+| Wholesale Price | Variation-specific wholesale |
+| Stock | Variation-specific stock |
 
-`Products → [Product Name] → Manage Variations`
+In Billing autocomplete: `Product Name → Variation` dropdown.
 
 ---
 
 ## 🏷️ Product Rate List
 
-`Inventory → Rate List`
+`Products → Rate List`
 
-| Column | Info |
-|---|---|
-| Product / Variation | Name + unit |
-| HSN Code | Tax classification |
-| Cost Price | Purchase cost |
-| Rate (w/o GST) | Selling rate before tax |
-| GST % | Color-coded badge |
-| Price (incl. GST) | Customer-facing final price |
-| Stock | Current qty with LOW/OUT badge |
-
-- 🔍 Live search — by product name or HSN (auto-submits after 400ms)
-- Expand variations — click `▾ N` button on any product row
-- All variations auto-expand when search query is active
+- All products + variations in one table
+- Columns: HSN, GST%, Cost, Selling, Wholesale, Stock, Unit
+- Variations collapsible per product (▼ toggle)
+- Live search filter
 
 ---
 
 ## 👥 Buyers (Customers)
 
-Fields: Name, GSTIN, State, Address, Phone, Opening Balance
-
-Dashboard Receivables = sum of all outstanding balances.
+| Field | Description |
+|---|---|
+| Name | Unique customer name |
+| GSTIN | GST number (optional) |
+| Address, Phone, Email | Contact info |
+| State | Controls IGST vs CGST/SGST |
+| Opening Balance | Previous outstanding before software start |
 
 ---
 
 ## 📒 Buyer Ledger / Khata
 
-`Buyers → [Buyer Name] → Ledger`
+`Buyers → View Ledger`
 
-| Row Type | Effect on Balance |
+| Feature | Details |
 |---|---|
-| Opening Balance | Initial amount |
-| Invoice (Dr) | Increases balance (amount owed) |
-| Payment (Cr) | Reduces balance |
-
-Running balance updated per row. Filter by date range — opening balance adjusts automatically.
-
-**Action column:**
-- Payment rows → ✏️ Edit (date, amount, mode, notes) or 🗑️ Delete (confirmation required)
-- Invoice rows → 👁️ View full invoice
-
-**Download PDF** — page size selector (A4/A4L/A5/A5L) appears above the button.
+| Running Balance | Date-wise debit/credit with closing balance |
+| Invoice Entries | Auto-posted as debit |
+| Payment Entry | Cash / UPI / Cheque / Bank Transfer |
+| Edit Payment | Change amount, date, mode, notes |
+| Delete Payment | Remove incorrect entries |
+| PDF Ledger | A4 / A4L / A5 / A5L |
 
 ---
 
 ## 🏭 Vendors (Suppliers)
 
-Name, GSTIN, Address, Phone, Email. Add / Edit / Delete / Search. View all purchases per vendor.
+Supplier profiles with GSTIN, address, phone, email.
 
 ---
 
 ## 🛒 Purchases
 
-`More → Purchases`
+### Creating Purchase Bill
+1. Select Vendor
+2. Bill No., Date, Type (Resale / Raw Material)
+3. Add items — product, qty, rate, GST, batch, expiry
+4. Payment status — Paid / Partial / Unpaid
 
-### New Purchase Form (Full-Page)
+### Purchase Types
 
-**Purchase Type:**
 | Type | Stock Effect |
 |---|---|
-| 🛒 Resale / Trading | Stock increases |
-| 🏭 Raw Material / Expense | No stock change |
+| **Resale** | Stock increases by qty purchased |
+| **Raw Material** | Expense only — stock unchanged |
 
-**Form fields:** Vendor, Bill No., Date, Place of Supply, RCM toggle, line items (Product, Qty, Rate, GST%, Batch, Expiry), Amount Paid, Payment Mode
-
-**GST auto-detection:** Select Place of Supply → IGST or CGST+SGST detected automatically with colour banner.
-
-**GST rates:** 0%, 0.1%, 0.25%, 1%, 1.5%, 3%, 5%, 6%, 7.5%, 9%, 12%, 14%, 18%, 28%
-
-**Edit:** Click Edit on any purchase row → opens same full-page form pre-filled.
-
-**Payment tracking:** Partial or full payment at entry; add more payments later. Status: Unpaid → Partial → Paid.
-
-> ⚠️ Editing a purchase bill does not reverse old stock movements. Adjust stock manually if needed.
+### ITC
+- Regular → Eligible ITC (Section 4A)
+- Reverse Charge → RCM ITC (Section 4D)
 
 ---
 
 ## 📋 Sales Quotations / Proforma Invoice
 
-`Desktop sidebar → Quotations` | `Mobile → More → Quotations`
+`More → Quotations`
 
-### What is a Quotation?
+| Feature | Details |
+|---|---|
+| Quotation Number | Auto-generated (QUOT/YY-YY/001) |
+| Validity | Set validity days |
+| Status | Draft / Sent / Approved / Converted |
+| PDF | "SALES QUOTATION" heading, 1 copy |
+| Convert | 1-click → Tax Invoice + stock deduction |
 
-A price estimate sent to the customer **before** the sale. No stock is deducted, no GST liability is created. Quotation number series: `QT-0001`, `QT-0002`, …
-
-### Creating a Quotation
-
-`Quotations → New Quotation`
-
-**Form layout:**
-- Top section (2-column): Buyer info on left, GST summary panel on right
-- **Full-width items table** below — proper HTML table with wide description column
-- **4 empty rows by default** — type or search product directly
-- Product autocomplete fills: Selling Price ✅, GST% ✅, HSN, Unit
-- Live GST summary updates as you type
-- IGST / CGST+SGST auto-detected from buyer state
-
-**Item table columns:** # | Product/Description | Qty | Rate ₹ | GST% | Disc% | ✕
-
-**Fixed fields:** Payment Mode always shows **"Advance"** on the PDF (not editable)
-
-### Quotation PDF vs Tax Invoice PDF
-
-| | Tax Invoice | Sales Quotation |
-|---|---|---|
-| Title | TAX INVOICE | SALES QUOTATION |
-| Number | Invoice No. | Quotation No. |
-| Copies | 3 (Original / Duplicate / Triplicate) | 1 |
-| Dispatch field | ✅ | ❌ Removed |
-| Payment Mode | As entered | Always "Advance" |
-| Valid Until date | ❌ | ✅ |
-| Stock deducted | ✅ | ❌ |
-| GST liability | ✅ | ❌ |
-
-### Convert Quotation → Tax Invoice
-
-On the Quotation Detail page → **Convert to Tax Invoice** section:
-1. Select payment mode
-2. Enter amount paid (if any)
-3. Click **Convert** — new Tax Invoice is created, stock deducted, redirected to invoice
-
-### Actions on Quotation Detail
-- 📄 **Download PDF** — with A4/A4L/A5/A5L size picker
-- 🔄 **Convert to Tax Invoice**
-- 🗑️ **Delete Quotation** — permanent, no stock impact
+> Quotations do NOT deduct stock or create GST liability — only conversion does.
 
 ---
 
 ## 📦 Batch / Expiry Tracking
 
-### Adding Batch in Purchase
-Enter Batch No. and Expiry Date per line item. Multiple batches per product supported.
+`More → Batch Tracker`
 
-### Using Batch in Billing
-Product autocomplete → Batch dropdown shows:
-- `BATCH-001 (Qty: 50 | Exp: 2025-06-30)` — ✅ green
-- `BATCH-002 (Qty: 10 | Exp: 2024-01-01)` — ⚠️ EXPIRED red
-
-### Batch List
-`More → Batch Tracker` — Qty In, Qty Out, Balance per batch. Expired and near-expiry (≤ 30 days) highlighted.
-
-### Expiry Alert
-Orange banner on Purchases page when any batch expires within 30 days.
+- Enter Batch No. + Expiry on Purchase Bill
+- Select batch when billing (optional)
+- Track: purchased from whom → sold to whom
+- Expiry Alert: orange banner for batches expiring within 30 days
 
 ---
 
 ## 📊 GST Reports
 
-`More → Reports` — always set date range before generating.
+`More → Reports` — set date range before generating.
 
-| Report | Contents | Formats |
+| Report | Contents | Format |
 |---|---|---|
-| **GSTR-1** | Outward supplies, rate-wise (5/12/18/28%) | PDF + Excel |
-| **Purchase Register (GSTR-2B)** | Inward supplies, vendor GSTIN, RCM flag, tax amounts | PDF + Excel |
-| **GSTR-3B Summary** | Section 3.1 output tax + Section 4 ITC + net payable | PDF + Excel |
-| **Stock Report** | Current inventory — HSN, unit, cost, selling price, stock value | PDF + Excel |
+| **GSTR-1** | Outward supplies, rate-wise | PDF + Excel |
+| **GSTR-2B / Purchase Register** | Inward supplies, vendor GSTIN, RCM | PDF + Excel |
+| **GSTR-3B Summary** | Output tax + ITC + Net Payable | PDF + Excel |
+| **Stock Report** | Inventory — HSN, cost, selling, value | PDF + Excel |
 
-**GSTR-3B Section 4 (ITC):**
-- 4(A) — ITC available from purchases (normal)
-- 4(D) — RCM purchases
-- Net Tax Payable = Output Tax − ITC
+### GSTR-3B ITC Cross-Utilization (GST Act compliant)
+
+| ITC | Used Against |
+|---|---|
+| **IGST ITC** | IGST → CGST → SGST |
+| **CGST ITC** | CGST → IGST |
+| **SGST ITC** | SGST → IGST |
+
+> IGST credit of ₹1,226 automatically covers CGST ₹233 + SGST ₹233 → Net Payable = ₹0 ✅
 
 ---
 
 ## 📄 PDF Page Sizes
 
-All invoice, quotation, and ledger PDFs support 4 sizes:
-
-| Option | Dimensions | Best For |
+| Size | Dimensions | Best For |
 |---|---|---|
-| **A4** | 210 × 297 mm Portrait | Default — all printers |
-| **A4 Landscape** | 297 × 210 mm | Wide tables, landscape printing |
-| **A5** | 148 × 210 mm Portrait | Booklet-style compact invoices |
-| **A5 Landscape** | 210 × 148 mm | Small horizontal format |
+| **A4** | 210 × 297 mm | Default |
+| **A4 Landscape** | 297 × 210 mm | Wide tables |
+| **A5** | 148 × 210 mm | Compact booklets |
+| **A5 Landscape** | 210 × 148 mm | Small horizontal |
 
-**How to use:** On Invoice Detail / Buyer Ledger / Quotation Detail pages — click a size tile → then Download PDF.
-
-**A5 behaviour:**
-- Column widths scale to 67% of A4 values
-- Fonts scale to 80% — text fits narrow cells
-- Margins tightened to 6mm
-- Entire invoice copy wrapped in `KeepTogether` — header, items, totals, HSN table, signature **never split** across pages
-- Logo scales proportionally
+A5 scaling: 67% column widths, 80% fonts, 6mm margins, full KeepTogether (never splits).
 
 ---
 
@@ -388,32 +356,55 @@ All invoice, quotation, and ledger PDFs support 4 sizes:
 | Section | Fields |
 |---|---|
 | **Company Info** | Name, Address, Phone, Email, GSTIN, State, Logo |
-| **Bank Details** | Bank Name, Account No., IFSC, Account Holder |
-| **UPI** | UPI ID (generates QR code on invoice PDFs) |
-| **Users** | Add/delete cashier or admin accounts |
+| **Bank Details** | Bank Name, Account No., IFSC, Holder |
+| **UPI** | UPI ID → QR code on all invoice PDFs |
+| **Invoice Settings** | Prefix, starting number |
+| **Users** | Add / Change Password / Delete |
 
-**Company State** is critical — controls whether IGST or CGST+SGST applies.
+**Logo:** Upload PNG/JPG → displays at 2.5cm × 2cm on PDF invoices. Recommended: 295×236px @ 300dpi.
 
 ---
 
 ## 📱 Mobile Interface
 
-Mobile layout auto-loads on phones/tablets.
+Auto-loads on phones/tablets.
 
 ### Bottom Navigation
 | Tab | Pages |
 |---|---|
 | 🏠 Home | Dashboard |
 | 📄 Bills | Invoice list |
-| ➕ FAB | Create new invoice |
+| ➕ | New Invoice |
 | 👥 Buyers | Buyer list + ledger |
-| ⋯ More | All other pages |
+| ⋯ More | Everything else |
 
-### More Menu (slide-up panel)
-**Inventory:** Products, Rate List, Vendors, Purchases, Batch Tracker
-**Sales:** Quotations
-**Reports:** Invoices, Buyer Ledger, PDF Reports
-**Admin:** Settings, Manage Users, Logout
+### More Menu
+Inventory · Sales · Reports · Admin
+
+---
+
+## 🗃️ Sample Database
+
+`sample_billing.db` — pre-filled demo data for testing.
+
+| Data | Count |
+|---|---|
+| Users | 2 (admin + cashier) |
+| Vendors | 5 |
+| Buyers | 8 (local + outstation + opening balances) |
+| Products | 15 (FMCG items) |
+| Variations | 13 (sizes/packs) |
+| Purchases | 6 (with items, payments, batches) |
+| Invoices | 7 (local + IGST + cancelled) |
+| Payments | 8 (Cash/UPI/Cheque/NEFT) |
+| Quotations | 3 (Draft/Sent/Approved) |
+| Batch Records | 41 |
+
+### How to Use
+1. Download `sample_billing.db`
+2. Rename your existing `data/billing_app.db` as backup
+3. Copy `sample_billing.db` → `data/billing_app.db`
+4. Restart app
 
 ---
 
@@ -421,40 +412,53 @@ Mobile layout auto-loads on phones/tablets.
 
 ```
 billing-app/
+├── app.py                    # Flask routes
+├── database_manager.py       # DB functions + schema
+├── pdf_generator.py          # Invoice + Ledger PDFs
+├── reports_generator.py      # GSTR reports PDF + Excel
+├── settings.json             # Company settings
+├── install.sh                # Linux/Mac installer
+├── install.bat               # Windows installer
+├── start.sh / start.bat      # App launchers
+├── requirements.txt
+├── DejaVuSans.ttf            # Font for ₹ symbol
+├── DejaVuSans-Bold.ttf
 │
-├── app.py                      # All Flask routes
-├── database_manager.py         # All DB functions
-├── pdf_generator.py            # Invoice + Ledger PDFs (A4/A4L/A5/A5L)
-├── reports_generator.py        # GSTR-1/2B/3B/Stock — PDF + Excel
-├── settings.json               # Company settings (auto-created)
-├── billing.db                  # SQLite database
-│
-├── uploads/                    # Company logo files
-├── invoices/                   # Auto-saved A4 invoice PDFs
+├── data/
+│   └── billing_app.db        # SQLite database ← BACK THIS UP!
+├── backups/                  # Auto daily backups
+├── invoices/                 # Auto-saved A4 PDFs
+├── reports/                  # Downloaded reports
+├── static/uploads/           # Logo files
 │
 └── templates/
-    ├── base.html               # Desktop sidebar nav (Quotations added)
+    ├── base.html
     ├── dashboard.html
-    ├── billing.html            # 4-step invoice wizard
+    ├── billing.html
     ├── invoices.html
-    ├── invoice_detail.html     # PDF size picker (A4/A4L/A5/A5L)
+    ├── invoice_detail.html
     ├── products.html
-    ├── product_rate_list.html  # With variations expand/collapse
+    ├── product_form.html
+    ├── product_rate_list.html
+    ├── product_variations.html
     ├── buyers.html
-    ├── buyer_ledger.html       # Edit/delete payments + PDF size picker
+    ├── buyer_form.html
+    ├── buyer_ledger.html
     ├── vendors.html
+    ├── vendor_form.html
     ├── purchases.html
-    ├── purchase_form.html      # Full-page purchase add/edit
-    ├── proforma_list.html      # Quotation list
-    ├── proforma_form.html      # Quotation form — full-width table, 4 rows
-    ├── proforma_detail.html    # Quotation detail, convert, PDF + size picker
+    ├── purchase_form.html
+    ├── proforma_list.html
+    ├── proforma_form.html
+    ├── proforma_detail.html
     ├── batches.html
+    ├── batch_history.html
     ├── reports.html
     ├── settings.html
+    ├── users.html
     ├── login.html
     └── mobile/
-        ├── base_mobile.html    # Quotations in More menu
-        └── ...
+        └── (all mobile equivalents)
 ```
 
 ### Database Tables
@@ -462,21 +466,19 @@ billing-app/
 | Table | Contents |
 |---|---|
 | `users` | Login credentials, roles |
-| `buyers` | Customer profiles, opening balances |
+| `buyers` | Customer profiles, opening balance, state |
 | `vendors` | Supplier profiles |
-| `products` | Products, prices, stock |
-| `product_variations` | Size/color variants — own price & stock |
-| `invoices` | Invoice headers |
-| `invoice_items` | Line items per invoice (with batch_no) |
-| `customer_payments` | Payment receipts — editable & deletable |
-| `purchases` | Purchase bills (type: Resale / Raw Material) |
-| `purchase_items` | Line items per purchase bill |
+| `products` | Products, HSN, GST, cost, selling, stock |
+| `product_variations` | Size/color variants — own cost, price, stock |
+| `invoices` | Invoice headers — all tax fields, paid amount |
+| `invoice_items` | Line items (variation_id, batch_no) |
+| `customer_payments` | Payments — editable + deletable |
+| `purchases` | Purchase bills — GST, RCM flag |
+| `purchase_items` | Line items with batch/expiry |
 | `purchase_payments` | Payments to vendors |
-| `batch_tracking` | Batch IN (purchase) and OUT (sale) movements |
+| `batch_tracking` | IN (purchase) and OUT (sale) movements |
 | `proforma_invoices` | Quotation headers |
 | `proforma_items` | Quotation line items |
-
-**Backup:** Copy `billing.db`. Restore by replacing the file and restarting the app.
 
 ---
 
@@ -484,55 +486,71 @@ billing-app/
 
 | Component | Technology |
 |---|---|
-| Backend | Python 3 + Flask |
-| Database | SQLite (file-based) |
-| PDF | ReportLab (A4/A4L/A5/A5L) |
-| Excel | openpyxl |
-| Frontend (Desktop) | HTML + Bootstrap 5 + Jinja2 |
-| Frontend (Mobile) | Custom responsive CSS |
+| Backend | Python 3.8+ + Flask 2.3+ |
+| Database | SQLite (zero config) |
+| PDF | ReportLab 4.0+ |
+| Excel | openpyxl 3.1+ |
+| Amount in Words | num2words (en_IN) |
+| QR Code | qrcode + Pillow |
+| Frontend | Bootstrap 5 + Jinja2 |
 | Charts | Chart.js 4.4.1 (CDN) |
 | Icons | Bootstrap Icons (CDN) |
-| Auth | Werkzeug password hashing |
+| Auth | Werkzeug pbkdf2 hashing |
 
 ---
 
 ## ⚠️ Important Notes
 
-1. **Default password** `admin123` — change immediately after first login
-2. **Company State** — set before creating any invoices; wrong state = wrong IGST/CGST/SGST
-3. **Proforma/Quotation** — does NOT deduct stock and does NOT create GST liability
-4. **Convert Quotation** — 1-click creates Tax Invoice, deducts stock, records sale
-5. **Purchase Type** — Resale = stock increases; Raw Material = expense only, no stock
-6. **Editing purchases** — does not reverse old stock movements; adjust stock manually if needed
-7. **Batch Tracking** — optional; skip batch fields if not needed
-8. **A5 PDFs** — entire invoice guaranteed on one page (KeepTogether applied)
-9. **PDF auto-save** — A4 PDFs saved in `invoices/` folder; other sizes download only
-10. **Low stock threshold** — change `LOW_STOCK_THRESHOLD` in `database_manager.py` (default: 5)
-11. **Internet** — required for Chart.js + Bootstrap Icons (CDN); offline = no charts/icons
-12. **Change port** — last line of `app.py`: `app.run(port=5000)`
-13. **Manual items in billing** — items typed without autocomplete do NOT update stock
+1. **Default password** `admin123` — change immediately via Settings → Users
+2. **Company State** — set before invoices; controls IGST vs CGST/SGST
+3. **Variation cost** — set each variation's own purchase rate for correct profit
+4. **ITC cross-utilization** — IGST credit offsets CGST/SGST per GST Act (automatic)
+5. **Quotations** — no stock deduction, no GST liability until converted
+6. **Purchase Type** — Resale = stock up; Raw Material = no stock change
+7. **Cancel invoice** — restores stock; marks `[CANCELLED]` in invoice number
+8. **Edit purchase** — old stock not reversed; adjust manually if needed
+9. **A5 PDFs** — entire invoice on one page (KeepTogether)
+10. **PDF auto-save** — A4 only saved to `invoices/`; other sizes download only
+11. **Logo** — 2.5cm × 2cm recommended; 295×236px @ 300dpi
+12. **DejaVu fonts** — required for ₹ symbol in PDFs; falls back to `Rs.` if missing
+13. **Low stock threshold** — default 5; change in `database_manager.py`
+14. **Manual items** — without autocomplete, stock not deducted
+15. **Internet** — needed at startup for Chart.js + Bootstrap Icons CDN
 
 ---
 
 ## 📌 Changelog
 
 ### Latest — Current Version
-- ✅ **Quotation form items table** — rewritten as proper `<table>` (was CSS grid); description column now full-width (`min-width: 240px`), never cramped
-- ✅ **4 default rows** in quotation form — no need to manually click "Add Row" to start
-- ✅ **Autocomplete fixed** — selling price and GST rate now fill correctly from product search
-- ✅ **Sales Quotations / Proforma** — full QT-XXXX numbering, separate list, detail, PDF
-- ✅ **Convert Quotation → Tax Invoice** — 1 click, stock deducted
-- ✅ **Quotation PDF** — "SALES QUOTATION", Advance mode, Valid Until, no dispatch row, 1 copy
-- ✅ **PDF Page Sizes** — A4 / A4 Landscape / A5 / A5 Landscape for invoices, quotations, ledger
-- ✅ **A5 PDF layout** — all widths, logo, fonts scale proportionally; single-page KeepTogether
-- ✅ **Rate List** — with variation rows expand/collapse per product
-- ✅ **Buyer Ledger** — edit/delete payment entries, edit modal with all fields
-- ✅ **Purchase Type** — Resale vs Raw Material (conditional stock update)
-- ✅ **Purchase Edit** — full-page edit with item-level changes
-- ✅ **GSTR-1, GSTR-2B, GSTR-3B** — PDF & Excel with ITC section 4
-- ✅ **Batch Tracking** — from purchase to billing, expiry alerts
-- ✅ **UPI QR Code** — on all invoice PDFs
+
+#### Bug Fixes
+- ✅ **PDF crash** — `NoneType.split()` when `order_ref`, `dispatch_info`, or item fields are NULL; all fields now safely coerced to string
+- ✅ **Profit calculation** — was using parent product cost for variation items; now uses variation's own cost → correct margin per size
+- ✅ **GSTR-3B Net Tax Payable** — IGST ITC was not offsetting CGST/SGST; now follows GST Act cross-utilization rules
+- ✅ **GSTR-3B ITC section** — was hidden when no purchases existed; now always shown with ₹0 values
+- ✅ **Change Password** — no option existed; added password change modal for all users
+
+#### New Features
+- ✅ **Windows installer** (`install.bat`) — step-by-step visible progress, no terminal needed
+- ✅ **Sample database** — 15 products, 8 buyers, 5 vendors, 6 purchases, 7 invoices, 3 quotations
+- ✅ **Default logo** — BillPro logo PNG (2.5cm × 2cm, 300dpi, transparent)
+- ✅ **User password change** — Change Password button for every user in Settings → Users
+
+#### Previous Releases
+- ✅ Quotation form — HTML table layout, 4 default rows
+- ✅ Sales Quotations — full create/list/detail/PDF/convert flow
+- ✅ PDF Page Sizes — A4 / A4L / A5 / A5L
+- ✅ Buyer Ledger — edit/delete payment entries
+- ✅ Purchase Type — Resale vs Raw Material
+- ✅ Purchase Edit — full-page item-level editing
+- ✅ GSTR-1, GSTR-2B, GSTR-3B — PDF + Excel with ITC
+- ✅ Batch Tracking — purchase to billing, expiry alerts
+- ✅ UPI QR Code — on all invoice PDFs
+- ✅ Product Variations — own price, cost, stock
+- ✅ Rate List — with variations expand/collapse
+- ✅ Opening Balance — buyer opening balance
+- ✅ Mobile Interface — dedicated UI for all pages
 
 ---
 
-*Built with Flask + SQLite · Runs locally · No subscription required*
+*Built with Flask + SQLite · Runs locally · No subscription · GST compliant*
