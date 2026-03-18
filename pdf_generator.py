@@ -691,7 +691,8 @@ def create_invoice_pdf(invoice_data, items, settings,
 #  2. LEDGER PDF
 # ─────────────────────────────────────────────
 def create_ledger_pdf(buyer_details, ledger_data, start_date, end_date,
-                      settings, save_to_disk=True, page_size='A4'):
+                      settings, save_to_disk=True, page_size='A4',
+                      ledger_title='Buyer Ledger / Khata'):
     """
     Generates a buyer ledger statement PDF.
     page_size: 'A4', 'A4L', 'A5', 'A5L'
@@ -732,7 +733,7 @@ def create_ledger_pdf(buyer_details, ledger_data, start_date, end_date,
         style_addr
     ))
     elements.append(Spacer(1, 0.5*cm))
-    elements.append(Paragraph("<b>LEDGER STATEMENT</b>", style_title))
+    elements.append(Paragraph(f"<b>{ledger_title.upper()}</b>", style_title))
 
     # ── Party Info Header ─────────────────────────────────────────
     period = f"Period: {start_date} to {end_date}" if start_date else "All Time"

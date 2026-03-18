@@ -190,6 +190,23 @@ def create_tables():
         "ALTER TABLE purchases ADD COLUMN place_of_supply TEXT DEFAULT ''",
         "ALTER TABLE purchases ADD COLUMN reverse_charge INTEGER DEFAULT 0",
         "ALTER TABLE purchases ADD COLUMN purchase_type TEXT DEFAULT 'Resale'",  # Resale or Raw Material
+        # purchase_items columns (for existing DBs that had old schema with 'amount' only)
+        "ALTER TABLE purchase_items ADD COLUMN taxable_amount REAL DEFAULT 0",
+        "ALTER TABLE purchase_items ADD COLUMN cgst_amount REAL DEFAULT 0",
+        "ALTER TABLE purchase_items ADD COLUMN sgst_amount REAL DEFAULT 0",
+        "ALTER TABLE purchase_items ADD COLUMN igst_amount REAL DEFAULT 0",
+        "ALTER TABLE purchase_items ADD COLUMN total_amount REAL DEFAULT 0",
+        "ALTER TABLE purchase_items ADD COLUMN gst_rate REAL DEFAULT 0",
+        # vendor_payments table (for existing DBs without vendor ledger)
+        """CREATE TABLE IF NOT EXISTS vendor_payments (
+            id           INTEGER PRIMARY KEY AUTOINCREMENT,
+            vendor_id    INTEGER NOT NULL,
+            payment_date TEXT,
+            amount       REAL,
+            payment_mode TEXT,
+            reference_no TEXT,
+            notes        TEXT,
+            FOREIGN KEY (vendor_id) REFERENCES vendors(id))""",
     ]:
         try:
             c.execute(col_sql)
@@ -321,6 +338,20 @@ def create_tables():
             payment_mode TEXT,
             notes        TEXT,
             FOREIGN KEY (buyer_id) REFERENCES buyers(id)
+        )
+    ''')
+
+    # ── Vendor Payments (Ledger) ──────────────
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS vendor_payments (
+            id           INTEGER PRIMARY KEY AUTOINCREMENT,
+            vendor_id    INTEGER NOT NULL,
+            payment_date TEXT,
+            amount       REAL,
+            payment_mode TEXT,
+            reference_no TEXT,
+            notes        TEXT,
+            FOREIGN KEY (vendor_id) REFERENCES vendors(id)
         )
     ''')
 
@@ -1210,6 +1241,251 @@ def get_all_buyer_balances():
             'name'    : b['name'],
             'phone'   : b.get('phone', ''),
             'balance' : bal
+        })
+    return result
+
+
+
+# ─────────────────────────────────────────────
+#  VENDOR LEDGER
+# ─────────────────────────────────────────────
+
+def add_vendor_payment(payment_data):
+    """
+    Record a payment made to a vendor (independent of any purchase bill).
+    payment_data: { vendor_id, payment_date, amount, payment_mode, reference_no, notes }
+    """
+    return add_record('vendor_payments', payment_data)
+
+
+def delete_vendor_payment(payment_id):
+    """Delete a vendor payment entry."""
+    conn = get_db_connection()
+    c = conn.cursor()
+    try:
+        c.execute("DELETE FROM vendor_payments WHERE id = ?", (payment_id,))
+        conn.commit()
+        return c.rowcount > 0
+    except Exception as e:
+        print(f"[delete_vendor_payment ERROR] {e}")
+        return False
+    finally:
+        conn.close()
+
+
+def update_vendor_payment(payment_id, data):
+    """Update a vendor payment entry."""
+    conn = get_db_connection()
+    c = conn.cursor()
+    try:
+        c.execute("""
+            UPDATE vendor_payments
+               SET payment_date = ?, amount = ?, payment_mode = ?,
+                   reference_no = ?, notes = ?
+             WHERE id = ?
+        """, (
+            data.get('payment_date', ''),
+            float(data.get('amount', 0)),
+            data.get('payment_mode', 'Cash'),
+            data.get('reference_no', ''),
+            data.get('notes', ''),
+            payment_id,
+        ))
+        conn.commit()
+        return c.rowcount > 0
+    except Exception as e:
+        print(f"[update_vendor_payment ERROR] {e}")
+        return False
+    finally:
+        conn.close()
+
+
+def get_vendor_payment(payment_id):
+    """Fetch a single vendor payment row."""
+    return execute_query(
+        "SELECT * FROM vendor_payments WHERE id = ?",
+        (payment_id,), fetchone=True
+    )
+
+
+def get_vendor_ledger(vendor_id, start_date=None, end_date=None):
+    """
+    Generates a full ledger for a vendor showing:
+      - Purchase debits  (what we owe them)
+      - Payment credits  (what we paid them)
+        Sources of payments:
+          1. purchase_payments — payments made directly against a purchase bill
+          2. vendor_payments   — standalone payments added from vendor ledger page
+      - Running balance after each transaction
+
+    Balance > 0  = we owe money to vendor
+    Balance <= 0 = we have overpaid or no dues
+
+    Returns: (ledger_list, closing_balance)
+    """
+    conn = get_db_connection()
+    c = conn.cursor()
+
+    # ── Purchases query (debit = what we owe) ────────────────────
+    q_pur = """
+        SELECT id, purchase_date AS date, bill_no AS ref,
+               'Purchase' AS type, total_amount AS debit, 0 AS credit, '' AS payment_mode
+        FROM purchases
+        WHERE vendor_id = ?
+    """
+    p_pur = [vendor_id]
+
+    # ── Purchase payments (credit = paid against a specific bill) ─
+    # Join with purchases to filter by vendor_id
+    q_pp = """
+        SELECT pp.id, pp.payment_date AS date,
+               'Payment' AS ref,
+               'Payment' AS type,
+               0 AS debit, pp.amount AS credit,
+               pp.payment_mode
+        FROM purchase_payments pp
+        JOIN purchases p ON pp.purchase_id = p.id
+        WHERE p.vendor_id = ?
+    """
+    p_pp = [vendor_id]
+
+    # ── Standalone vendor payments (credit = direct payment) ──────
+    q_vp = """
+        SELECT id, payment_date AS date, 'Payment' AS ref,
+               'Payment' AS type, 0 AS debit, amount AS credit, payment_mode
+        FROM vendor_payments
+        WHERE vendor_id = ?
+    """
+    p_vp = [vendor_id]
+
+    if start_date and end_date:
+        q_pur += " AND purchase_date BETWEEN ? AND ?"
+        p_pur += [start_date, end_date]
+        q_pp  += " AND pp.payment_date BETWEEN ? AND ?"
+        p_pp  += [start_date, end_date]
+        q_vp  += " AND payment_date BETWEEN ? AND ?"
+        p_vp  += [start_date, end_date]
+
+        # Opening balance = purchases before period - payments before period
+        c.execute("""
+            SELECT COALESCE(SUM(total_amount), 0) FROM purchases
+            WHERE vendor_id = ? AND purchase_date < ?
+        """, (vendor_id, start_date))
+        prev_debit = c.fetchone()[0] or 0.0
+
+        # Purchase payments before period
+        c.execute("""
+            SELECT COALESCE(SUM(pp.amount), 0)
+            FROM purchase_payments pp
+            JOIN purchases p ON pp.purchase_id = p.id
+            WHERE p.vendor_id = ? AND pp.payment_date < ?
+        """, (vendor_id, start_date))
+        prev_pp = c.fetchone()[0] or 0.0
+
+        # Standalone vendor payments before period
+        c.execute("""
+            SELECT COALESCE(SUM(amount), 0) FROM vendor_payments
+            WHERE vendor_id = ? AND payment_date < ?
+        """, (vendor_id, start_date))
+        prev_vp = c.fetchone()[0] or 0.0
+
+        opening_balance = prev_debit - prev_pp - prev_vp
+    else:
+        opening_balance = 0.0
+
+    c.execute(q_pur, tuple(p_pur))
+    purchases = rows_to_list(c.fetchall())
+
+    c.execute(q_pp, tuple(p_pp))
+    purchase_payments = rows_to_list(c.fetchall())
+
+    c.execute(q_vp, tuple(p_vp))
+    vendor_payments = rows_to_list(c.fetchall())
+
+    conn.close()
+
+    # Annotate purchase ref
+    for entry in purchases:
+        entry['ref'] = f"Bill No: {entry['ref']}" if entry.get('ref') else 'Purchase'
+
+    # Annotate purchase_payments ref — show which bill it was against
+    for entry in purchase_payments:
+        mode = entry.get('payment_mode', '')
+        entry['ref'] = f"Payment against Bill ({mode})" if mode else "Payment against Bill"
+
+    # Annotate standalone vendor payments
+    for entry in vendor_payments:
+        mode = entry.get('payment_mode', '')
+        entry['ref'] = f"Payment ({mode})" if mode else "Payment"
+
+    # Merge all and sort by date
+    all_entries = purchases + purchase_payments + vendor_payments
+    all_entries.sort(key=lambda x: (x['date'] or ''))
+
+    # Build running balance
+    ledger = [{
+        'date'    : start_date or '-',
+        'ref'     : 'Opening Balance',
+        'type'    : 'Opening',
+        'debit'   : 0,
+        'credit'  : 0,
+        'balance' : round(opening_balance, 2)
+    }]
+    balance = opening_balance
+    for entry in all_entries:
+        balance += entry['debit'] - entry['credit']
+        entry['balance'] = round(balance, 2)
+        ledger.append(entry)
+
+    return ledger, round(balance, 2)
+
+
+def get_vendor_current_balance(vendor_id):
+    """
+    Fast calculation of vendor outstanding balance:
+      Total purchases - purchase_payments - vendor_payments
+    """
+    conn = get_db_connection()
+    c = conn.cursor()
+    try:
+        # Total purchase amount
+        c.execute("SELECT COALESCE(SUM(total_amount),0) FROM purchases WHERE vendor_id=?", (vendor_id,))
+        total_purchases = c.fetchone()[0] or 0.0
+
+        # Payments made against purchase bills
+        c.execute("""
+            SELECT COALESCE(SUM(pp.amount),0)
+            FROM purchase_payments pp
+            JOIN purchases p ON pp.purchase_id = p.id
+            WHERE p.vendor_id = ?
+        """, (vendor_id,))
+        purchase_payments = c.fetchone()[0] or 0.0
+
+        # Standalone vendor payments
+        c.execute("SELECT COALESCE(SUM(amount),0) FROM vendor_payments WHERE vendor_id=?", (vendor_id,))
+        vendor_payments = c.fetchone()[0] or 0.0
+
+        return round(total_purchases - purchase_payments - vendor_payments, 2)
+    except Exception as e:
+        print(f"[get_vendor_current_balance ERROR] {e}")
+        return 0.0
+    finally:
+        conn.close()
+
+
+def get_all_vendor_balances():
+    """
+    Returns all vendors with their current outstanding payable balance.
+    """
+    vendors = get_all('vendors')
+    result = []
+    for v in vendors:
+        bal = get_vendor_current_balance(v['id'])
+        result.append({
+            'id'     : v['id'],
+            'name'   : v['name'],
+            'phone'  : v.get('phone', ''),
+            'balance': bal
         })
     return result
 
@@ -2408,3 +2684,4 @@ def delete_proforma(proforma_id):
         return False
     finally:
         conn.close()
+

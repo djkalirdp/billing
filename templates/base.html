@@ -548,7 +548,7 @@
 
       <li class="nav-item">
         <a href="{{ url_for('vendors') }}"
-           class="nav-link-item {% if 'vendor' in request.endpoint %}active{% endif %}">
+           class="nav-link-item {% if 'vendor' in request.endpoint or request.endpoint == 'vendor_ledger' or request.endpoint == 'vendor_ledger_pdf' %}active{% endif %}">
           <i class="bi bi-truck"></i>
           <span>Vendors</span>
         </a>

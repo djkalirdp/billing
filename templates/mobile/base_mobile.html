@@ -426,7 +426,7 @@
     <a href="{{ url_for('buyers') }}" class="m-nav-item {% if request.endpoint in ['buyers','buyer_ledger','add_buyer','edit_buyer'] %}active{% endif %}">
       <i class="bi bi-people"></i>Buyers
     </a>
-    <button type="button" class="m-nav-item {% if request.endpoint in ['products','add_product','edit_product','vendors','add_vendor','edit_vendor','purchases','settings','manage_users'] %}active{% endif %}"
+    <button type="button" class="m-nav-item {% if request.endpoint in ['products','add_product','edit_product','vendors','add_vendor','edit_vendor','vendor_ledger','vendor_ledger_pdf','purchases','settings','manage_users'] %}active{% endif %}"
             onclick="document.getElementById('moreSheet').classList.add('open')"
             style="border:none;background:none;cursor:pointer;">
       <i class="bi bi-grid-3x3-gap-fill"></i>More

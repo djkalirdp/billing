@@ -1144,6 +1144,10 @@ def vendors():
     vendor_list = db.get_all('vendors')
     if search:
         vendor_list = [v for v in vendor_list if search.lower() in v['name'].lower()]
+    # Attach outstanding balance to each vendor
+    balances = {v['id']: db.get_vendor_current_balance(v['id']) for v in vendor_list}
+    for v in vendor_list:
+        v['balance'] = balances.get(v['id'], 0)
     return mrender('vendors.html', vendors=vendor_list, search=search)
 
 
@@ -1196,6 +1200,131 @@ def delete_vendor(vendor_id):
         flash(f'Vendor "{vendor["name"]}" deleted.', 'success')
     return redirect(url_for('vendors'))
 
+
+
+
+# ─────────────────────────────────────────────
+#  VENDOR LEDGER
+# ─────────────────────────────────────────────
+@app.route('/vendors/<int:vendor_id>/ledger')
+@login_required
+def vendor_ledger(vendor_id):
+    vendor = db.get_by_id('vendors', vendor_id)
+    if not vendor:
+        flash('Vendor not found.', 'danger')
+        return redirect(url_for('vendors'))
+
+    start = request.args.get('start', (datetime.now() - timedelta(days=30)).strftime('%Y-%m-%d'))
+    end   = request.args.get('end',   datetime.now().strftime('%Y-%m-%d'))
+
+    ledger_data, closing_balance = db.get_vendor_ledger(vendor_id, start, end)
+
+    return mrender('vendor_ledger.html',
+        vendor          = vendor,
+        ledger          = ledger_data,
+        closing_balance = closing_balance,
+        start           = start,
+        end             = end,
+    )
+
+
+@app.route('/vendors/<int:vendor_id>/ledger/pdf')
+@login_required
+def vendor_ledger_pdf(vendor_id):
+    vendor = db.get_by_id('vendors', vendor_id)
+    if not vendor:
+        flash('Vendor not found.', 'danger')
+        return redirect(url_for('vendors'))
+
+    start     = request.args.get('start', (datetime.now() - timedelta(days=30)).strftime('%Y-%m-%d'))
+    end       = request.args.get('end',   datetime.now().strftime('%Y-%m-%d'))
+    page_size = request.args.get('size', 'A4').upper()
+
+    ledger_data, _ = db.get_vendor_ledger(vendor_id, start, end)
+    settings  = load_settings()
+
+    # Reuse buyer ledger PDF — pass vendor dict as buyer_details
+    buyer_details = {
+        'name'   : vendor['name'],
+        'address': vendor.get('address', ''),
+        'gstin'  : vendor.get('gstin', ''),
+        'phone'  : vendor.get('phone', ''),
+    }
+    pdf_bytes = pdf_generator.create_ledger_pdf(
+        buyer_details, ledger_data, start, end, settings,
+        page_size=page_size, ledger_title='Vendor Ledger / Khata'
+    )
+    safe_name = "".join(c for c in vendor['name'] if c.isalnum() or c in ' _').strip()
+    return pdf_generator.get_pdf_response(pdf_bytes, f"VendorLedger_{safe_name}_{page_size}.pdf")
+
+
+@app.route('/vendors/<int:vendor_id>/payment', methods=['POST'])
+@login_required
+def add_vendor_payment(vendor_id):
+    vendor = db.get_by_id('vendors', vendor_id)
+    if not vendor:
+        flash('Vendor not found.', 'danger')
+        return redirect(url_for('vendors'))
+
+    f = request.form
+    try:
+        amount = float(f.get('amount', 0))
+        if amount <= 0:
+            flash('Payment amount must be greater than 0.', 'danger')
+            return redirect(url_for('vendor_ledger', vendor_id=vendor_id))
+
+        db.add_vendor_payment({
+            'vendor_id'   : vendor_id,
+            'payment_date': f.get('payment_date', datetime.now().strftime('%Y-%m-%d')),
+            'amount'      : amount,
+            'payment_mode': f.get('payment_mode', 'Cash'),
+            'reference_no': f.get('reference_no', ''),
+            'notes'       : f.get('notes', ''),
+        })
+        flash(f'Payment of ₹{amount:,.2f} recorded for {vendor["name"]}.', 'success')
+    except ValueError:
+        flash('Invalid amount entered.', 'danger')
+
+    return redirect(url_for('vendor_ledger', vendor_id=vendor_id,
+                             start=f.get('start'), end=f.get('end')))
+
+
+@app.route('/vendor-payments/<int:payment_id>/delete', methods=['POST'])
+@admin_required
+def delete_vendor_payment(payment_id):
+    pay = db.get_vendor_payment(payment_id)
+    if not pay:
+        flash('Payment not found.', 'danger')
+        return redirect(url_for('vendors'))
+    vendor_id = pay['vendor_id']
+    if db.delete_vendor_payment(payment_id):
+        flash('Payment entry deleted.', 'success')
+    else:
+        flash('Failed to delete payment.', 'danger')
+    return redirect(url_for('vendor_ledger', vendor_id=vendor_id))
+
+
+@app.route('/vendor-payments/<int:payment_id>/edit', methods=['POST'])
+@admin_required
+def edit_vendor_payment(payment_id):
+    pay = db.get_vendor_payment(payment_id)
+    if not pay:
+        flash('Payment not found.', 'danger')
+        return redirect(url_for('vendors'))
+    vendor_id = pay['vendor_id']
+    f = request.form
+    data = {
+        'payment_date': f.get('payment_date', pay['payment_date']),
+        'amount'      : f.get('amount', pay['amount']),
+        'payment_mode': f.get('payment_mode', pay['payment_mode']),
+        'reference_no': f.get('reference_no', ''),
+        'notes'       : f.get('notes', ''),
+    }
+    if db.update_vendor_payment(payment_id, data):
+        flash('Payment updated successfully.', 'success')
+    else:
+        flash('Failed to update payment.', 'danger')
+    return redirect(url_for('vendor_ledger', vendor_id=vendor_id))
 
 # ─────────────────────────────────────────────
 #  PURCHASES  (Admin only)
