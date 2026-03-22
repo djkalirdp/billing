@@ -629,75 +629,120 @@ def create_gstr3b_pdf(data):
     elems.append(tl_t)
 
     # ── Section 4: Eligible ITC ──────────────────────────────
+    # ITC section ALWAYS shows — even if 0 (no purchases)
+    # Net Tax Payable ALWAYS shows = Output Tax - ITC
     itc = data.get('itc', {})
-    if itc:
-        elems.append(sh('4 — Eligible Input Tax Credit (ITC) from Purchases', col=C_SUCCESS))
-        ei  = itc.get('eligible_itc', {})
-        rcm = itc.get('rcm_itc', {})
+    ei  = itc.get('eligible_itc', {}) if itc else {}
+    rcm = itc.get('rcm_itc',      {}) if itc else {}
 
-        itc_rows = [
-            ['ITC Type', 'Taxable Value', 'CGST', 'SGST', 'IGST', 'Total ITC'],
-            [
-                'Eligible ITC (Regular Purchases)',
-                _rupee(ei.get('taxable', 0)),
-                _rupee(ei.get('cgst', 0)),
-                _rupee(ei.get('sgst', 0)),
-                _rupee(ei.get('igst', 0)),
-                _rupee(ei.get('total_tax', 0)),
-            ],
-            [
-                'RCM ITC (Reverse Charge)',
-                '—',
-                _rupee(rcm.get('cgst', 0)),
-                _rupee(rcm.get('sgst', 0)),
-                _rupee(rcm.get('igst', 0)),
-                _rupee(rcm.get('total_tax', 0)),
-            ],
-        ]
-        total_itc = _num(ei.get('total_tax', 0)) + _num(rcm.get('total_tax', 0))
-        itc_rows.append([
-            'Total ITC Available', '—', '—', '—', '—', _rupee(total_itc)
-        ])
-        itc_t = Table(itc_rows, colWidths=[5.5*cm,3*cm,2.5*cm,2.5*cm,2.5*cm,3*cm])
-        ts = _tbl_style(header_col=C_SUCCESS)
-        for col in [1,2,3,4,5]:
-            ts.add('ALIGN', (col,1), (col,-1), 'RIGHT')
-        ts.add('FONTNAME', (0,-1), (-1,-1), 'Helvetica-Bold')
-        ts.add('BACKGROUND', (0,-1), (-1,-1), colors.HexColor('#ECFDF5'))
-        itc_t.setStyle(ts)
-        elems.append(itc_t)
-        elems.append(Spacer(1, 10))
+    elems.append(sh('4 — Eligible Input Tax Credit (ITC) from Purchases', col=C_SUCCESS))
 
-        # Net Tax Payable
-        elems.append(sh('Net Tax Payable (Output − ITC)', col=C_DANGER))
-        out_cgst  = _num(t.get('total_cgst', 0))
-        out_sgst  = _num(t.get('total_sgst', 0))
-        out_igst  = _num(t.get('total_igst', 0))
-        out_total = _num(t.get('total_gst',  0))
-        itc_cgst  = _num(ei.get('cgst', 0)) + _num(rcm.get('cgst', 0))
-        itc_sgst  = _num(ei.get('sgst', 0)) + _num(rcm.get('sgst', 0))
-        itc_igst  = _num(ei.get('igst', 0)) + _num(rcm.get('igst', 0))
-        itc_total = total_itc
+    itc_rows = [
+        ['ITC Type', 'Taxable Value', 'CGST', 'SGST', 'IGST', 'Total ITC'],
+        [
+            'Eligible ITC (Regular Purchases)',
+            _rupee(ei.get('taxable', 0)),
+            _rupee(ei.get('cgst', 0)),
+            _rupee(ei.get('sgst', 0)),
+            _rupee(ei.get('igst', 0)),
+            _rupee(ei.get('total_tax', 0)),
+        ],
+        [
+            'RCM ITC (Reverse Charge)',
+            '—',
+            _rupee(rcm.get('cgst', 0)),
+            _rupee(rcm.get('sgst', 0)),
+            _rupee(rcm.get('igst', 0)),
+            _rupee(rcm.get('total_tax', 0)),
+        ],
+    ]
+    total_itc = _num(ei.get('total_tax', 0)) + _num(rcm.get('total_tax', 0))
+    itc_rows.append([
+        'Total ITC Available', '—', '—', '—', '—', _rupee(total_itc)
+    ])
+    itc_t = Table(itc_rows, colWidths=[5.5*cm,3*cm,2.5*cm,2.5*cm,2.5*cm,3*cm])
+    ts = _tbl_style(header_col=C_SUCCESS)
+    for col in [1,2,3,4,5]:
+        ts.add('ALIGN', (col,1), (col,-1), 'RIGHT')
+    ts.add('FONTNAME', (0,-1), (-1,-1), 'Helvetica-Bold')
+    ts.add('BACKGROUND', (0,-1), (-1,-1), colors.HexColor('#ECFDF5'))
+    itc_t.setStyle(ts)
+    elems.append(itc_t)
+    elems.append(Spacer(1, 10))
 
-        net_cgst  = max(0, out_cgst  - itc_cgst)
-        net_sgst  = max(0, out_sgst  - itc_sgst)
-        net_igst  = max(0, out_igst  - itc_igst)
-        net_total = net_cgst + net_sgst + net_igst
+    # ── Net Tax Payable — ALWAYS shown, ITC subtracted ────────────
+    elems.append(sh('Net Tax Payable (Output − ITC)', col=C_DANGER))
+    out_cgst  = _num(t.get('total_cgst', 0))
+    out_sgst  = _num(t.get('total_sgst', 0))
+    out_igst  = _num(t.get('total_igst', 0))
+    out_total = _num(t.get('total_gst',  0))
+    itc_cgst  = _num(ei.get('cgst', 0)) + _num(rcm.get('cgst', 0))
+    itc_sgst  = _num(ei.get('sgst', 0)) + _num(rcm.get('sgst', 0))
+    itc_igst  = _num(ei.get('igst', 0)) + _num(rcm.get('igst', 0))
+    itc_total = total_itc
 
-        net_rows = [
-            ['', 'CGST', 'SGST', 'IGST', 'Total'],
-            ['Output Tax (Sales)',   _rupee(out_cgst),  _rupee(out_sgst),  _rupee(out_igst),  _rupee(out_total)],
-            ['Less: ITC Available',  _rupee(itc_cgst),  _rupee(itc_sgst),  _rupee(itc_igst),  _rupee(itc_total)],
-            ['Net Tax Payable (Cash)',_rupee(net_cgst),  _rupee(net_sgst),  _rupee(net_igst),  _rupee(net_total)],
-        ]
-        net_t = Table(net_rows, colWidths=[6*cm,3*cm,3*cm,3*cm,3*cm])
-        ts2 = _tbl_style(header_col=C_DANGER)
-        for col in [1,2,3,4]:
-            ts2.add('ALIGN', (col,1), (col,-1), 'RIGHT')
-        ts2.add('FONTNAME', (0,-1), (-1,-1), 'Helvetica-Bold')
-        ts2.add('BACKGROUND', (0,-1), (-1,-1), colors.HexColor('#FEF2F2'))
-        net_t.setStyle(ts2)
-        elems.append(net_t)
+    # ── GST ITC Cross-Utilization (as per GST Act) ───────────────
+    # Rule: IGST credit can offset IGST first, then CGST, then SGST
+    #       CGST credit can offset CGST first, then IGST
+    #       SGST credit can offset SGST first, then IGST
+
+    # Step 1: Use same-head ITC first
+    rem_igst_itc = itc_igst
+    rem_cgst_itc = itc_cgst
+    rem_sgst_itc = itc_sgst
+
+    # IGST vs IGST
+    net_igst      = max(0, out_igst - rem_igst_itc)
+    rem_igst_itc  = max(0, rem_igst_itc - out_igst)
+
+    # CGST vs CGST
+    net_cgst      = max(0, out_cgst - rem_cgst_itc)
+    rem_cgst_itc  = max(0, rem_cgst_itc - out_cgst)
+
+    # SGST vs SGST
+    net_sgst      = max(0, out_sgst - rem_sgst_itc)
+    rem_sgst_itc  = max(0, rem_sgst_itc - out_sgst)
+
+    # Step 2: Use remaining IGST ITC against CGST, then SGST
+    if rem_igst_itc > 0 and net_cgst > 0:
+        used         = min(rem_igst_itc, net_cgst)
+        net_cgst    -= used
+        rem_igst_itc -= used
+
+    if rem_igst_itc > 0 and net_sgst > 0:
+        used         = min(rem_igst_itc, net_sgst)
+        net_sgst    -= used
+        rem_igst_itc -= used
+
+    # Step 3: Use remaining CGST ITC against IGST
+    if rem_cgst_itc > 0 and net_igst > 0:
+        used         = min(rem_cgst_itc, net_igst)
+        net_igst    -= used
+
+    # Step 4: Use remaining SGST ITC against IGST
+    if rem_sgst_itc > 0 and net_igst > 0:
+        used         = min(rem_sgst_itc, net_igst)
+        net_igst    -= used
+
+    net_cgst  = round(net_cgst,  2)
+    net_sgst  = round(net_sgst,  2)
+    net_igst  = round(net_igst,  2)
+    net_total = round(net_cgst + net_sgst + net_igst, 2)
+
+    net_rows = [
+        ['', 'CGST', 'SGST', 'IGST', 'Total'],
+        ['Output Tax (Sales)',    _rupee(out_cgst),  _rupee(out_sgst),  _rupee(out_igst),  _rupee(out_total)],
+        ['Less: ITC Available',   _rupee(itc_cgst),  _rupee(itc_sgst),  _rupee(itc_igst),  _rupee(itc_total)],
+        ['Net Tax Payable (Cash)', _rupee(net_cgst),  _rupee(net_sgst),  _rupee(net_igst),  _rupee(net_total)],
+    ]
+    net_t = Table(net_rows, colWidths=[6*cm,3*cm,3*cm,3*cm,3*cm])
+    ts2 = _tbl_style(header_col=C_DANGER)
+    for col in [1,2,3,4]:
+        ts2.add('ALIGN', (col,1), (col,-1), 'RIGHT')
+    ts2.add('FONTNAME', (0,-1), (-1,-1), 'Helvetica-Bold')
+    ts2.add('BACKGROUND', (0,-1), (-1,-1), colors.HexColor('#FEF2F2'))
+    net_t.setStyle(ts2)
+    elems.append(net_t)
 
     # Note
     elems.append(Spacer(1, 12))
