@@ -473,6 +473,12 @@
         <a href="{{ url_for('proforma_list') }}" class="more-tile {% if 'proforma' in request.endpoint %}active{% endif %}">
           <i class="bi bi-file-earmark-text" style="color:#7c3aed;"></i><span>Quotations</span>
         </a>
+        <a href="{{ url_for('credit_notes') }}" class="more-tile {% if 'credit_note' in request.endpoint %}active{% endif %}">
+          <i class="bi bi-arrow-return-left" style="color:#7c3aed;"></i><span>Credit Notes</span>
+        </a>
+        <a href="{{ url_for('debit_notes') }}" class="more-tile {% if 'debit_note' in request.endpoint %}active{% endif %}">
+          <i class="bi bi-arrow-return-right" style="color:#d97706;"></i><span>Debit Notes</span>
+        </a>
         <a href="{{ url_for('batch_list') }}" class="more-tile">
           <i class="bi bi-boxes" style="color:#f59e0b;"></i><span>Batches</span>
         </a>

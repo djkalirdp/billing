@@ -1,0 +1,127 @@
+{% extends 'mobile/base_mobile.html' %}
+{% block title %}New Debit Note{% endblock %}
+{% block page_title %}New Debit Note{% endblock %}
+{% block topbar_actions %}
+<a href="{{ url_for('debit_notes') }}" class="m-icon-btn"><i class="bi bi-x-lg"></i></a>
+{% endblock %}
+{% block content %}
+<form method="POST" action="{{ url_for('new_debit_note') }}" id="dnForm">
+  <div class="m-card" style="margin:14px 14px 10px;">
+    <div class="m-card-header" style="background:#fffbeb;">
+      <i class="bi bi-arrow-return-right" style="color:#d97706;font-size:18px;"></i>
+      <span class="m-card-title">Debit Note Details</span>
+    </div>
+    <div class="m-card-body">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+        <div class="m-fg"><label class="m-label">Date</label>
+          <input type="date" name="dn_date" class="m-input" value="{{ today }}" required /></div>
+        <div class="m-fg"><label class="m-label">DN No.</label>
+          <input type="text" class="m-input" value="{{ next_dn_no }}" readonly style="background:#f8fafc;color:#d97706;font-weight:700;" /></div>
+      </div>
+      <div class="m-fg"><label class="m-label">Vendor *</label>
+        <select name="vendor_id" class="m-select" required>
+          <option value="">-- Select --</option>
+          {% for v in vendors %}<option value="{{ v.id }}">{{ v.name }}</option>{% endfor %}
+        </select></div>
+      <div class="m-fg"><label class="m-label">Against Purchase</label>
+        <select name="purchase_id" class="m-select">
+          <option value="">-- Optional --</option>
+          {% for p in purchases %}<option value="{{ p.id }}">{{ p.bill_no or p.id }} — {{ p.vendor_name }}</option>{% endfor %}
+        </select></div>
+      <div class="m-fg"><label class="m-label">Reason</label>
+        <input type="text" name="reason" class="m-input" placeholder="Purchase return, quality issue..." /></div>
+    </div>
+  </div>
+  <div class="m-card" style="margin:0 14px 10px;border-color:#fde68a;background:#fffbeb;">
+    <div class="m-card-body">
+      <div style="font-weight:700;font-size:13.5px;color:#78350f;margin-bottom:10px;"><i class="bi bi-boxes me-2"></i>Stock Return?</div>
+      <div style="display:flex;flex-direction:column;gap:8px;">
+        <label style="display:flex;align-items:flex-start;gap:10px;padding:10px;background:white;border-radius:8px;cursor:pointer;">
+          <input type="radio" name="stock_return" value="1" style="margin-top:2px;" />
+          <div><div style="font-weight:700;font-size:13px;">Yes — Maal vendor ko wapas bheja</div>
+            <div style="font-size:11.5px;color:#64748b;">Stock kam ho jaayega</div></div>
+        </label>
+        <label style="display:flex;align-items:flex-start;gap:10px;padding:10px;background:white;border-radius:8px;cursor:pointer;">
+          <input type="radio" name="stock_return" value="0" checked style="margin-top:2px;" />
+          <div><div style="font-weight:700;font-size:13px;">No — Sirf financial adjustment</div>
+            <div style="font-size:11.5px;color:#64748b;">Stock nahi badlega</div></div>
+        </label>
+      </div>
+    </div>
+  </div>
+  <div class="m-section-lbl">Items</div>
+  <div style="padding:0 14px;" id="itemsContainer"></div>
+  <div style="padding:0 14px 10px;">
+    <button type="button" class="m-btn m-btn-outline" onclick="addRow()" style="border-color:#d97706;color:#d97706;">
+      <i class="bi bi-plus-circle"></i> Add Item
+    </button>
+  </div>
+  <div style="background:linear-gradient(135deg,#d97706,#b45309);color:white;border-radius:12px;padding:14px 16px;margin:0 14px 12px;display:flex;justify-content:space-between;align-items:center;">
+    <div><div style="font-size:11px;opacity:.8;">Grand Total</div>
+      <div style="font-size:20px;font-weight:800;" id="grandDisplay">₹ 0.00</div></div>
+    <i class="bi bi-arrow-return-right" style="font-size:24px;opacity:.4;"></i>
+  </div>
+  <div class="m-fg" style="padding:0 14px 4px;">
+    <label class="m-label">Notes</label>
+    <textarea name="notes" class="m-input" rows="2" placeholder="Optional..."></textarea>
+  </div>
+  <div style="padding:0 14px 24px;display:flex;gap:10px;">
+    <a href="{{ url_for('debit_notes') }}" class="m-btn m-btn-outline" style="flex:1;">Cancel</a>
+    <button type="submit" class="m-btn m-btn-primary" id="saveBtn" style="flex:2;background:#d97706;border-color:#d97706;">
+      <i class="bi bi-save2"></i> Save DN
+    </button>
+  </div>
+</form>
+{% endblock %}
+{% block scripts %}
+<script>
+let rowCount=0;
+function addRow(){
+  const idx=rowCount++;
+  const div=document.createElement('div');
+  div.style.cssText='background:white;border:1px solid #e2e8f0;border-radius:10px;padding:12px;margin-bottom:8px;position:relative;';
+  div.id=`row_${idx}`;
+  div.innerHTML=`
+    <span style="position:absolute;top:10px;left:10px;width:20px;height:20px;background:#d97706;color:white;border-radius:50%;font-size:10px;font-weight:800;display:flex;align-items:center;justify-content:center;">${idx+1}</span>
+    <button type="button" onclick="delRow(${idx})" style="position:absolute;top:8px;right:8px;background:#fef2f2;color:#dc2626;border:none;border-radius:6px;padding:3px 7px;cursor:pointer;"><i class="bi bi-trash3"></i></button>
+    <div style="margin-top:28px;">
+      <div class="m-fg"><label class="m-label">Description</label>
+        <input type="text" name="description[]" class="m-input" placeholder="Product..." />
+        <input type="hidden" name="product_id[]" value="0" />
+        <input type="hidden" name="hsn[]" value="" /></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;">
+        <div class="m-fg"><label class="m-label">GST%</label>
+          <select name="gst_rate[]" id="gst_${idx}" class="m-select" onchange="recalc(${idx})">
+            <option value="0">0%</option><option value="5">5%</option>
+            <option value="12">12%</option><option value="18" selected>18%</option><option value="28">28%</option>
+          </select></div>
+        <div class="m-fg"><label class="m-label">Qty</label>
+          <input type="number" name="quantity[]" id="qty_${idx}" class="m-input" value="1" step="0.01" oninput="recalc(${idx})" /></div>
+        <div class="m-fg"><label class="m-label">Rate</label>
+          <input type="number" name="rate[]" id="rate_${idx}" class="m-input" value="0" step="0.01" oninput="recalc(${idx})" /></div>
+      </div>
+      <input type="hidden" name="amount[]" id="amt_${idx}" value="0" />
+      <div style="text-align:right;font-weight:800;color:#d97706;font-size:14px;" id="tot_${idx}">₹ 0.00</div>
+    </div>`;
+  document.getElementById('itemsContainer').appendChild(div);
+}
+function delRow(idx){const el=document.getElementById(`row_${idx}`);if(el){el.remove();recalcGrand();}}
+function recalc(idx){
+  const q=parseFloat(document.getElementById(`qty_${idx}`)?.value||0);
+  const r=parseFloat(document.getElementById(`rate_${idx}`)?.value||0);
+  const g=parseFloat(document.getElementById(`gst_${idx}`)?.value||0);
+  const amt=q*r*(1+g/100);
+  const a=document.getElementById(`amt_${idx}`);
+  const t=document.getElementById(`tot_${idx}`);
+  if(a)a.value=amt.toFixed(4);if(t)t.textContent='₹ '+amt.toFixed(2);recalcGrand();
+}
+function recalcGrand(){
+  let total=0;for(let i=0;i<rowCount;i++){const a=document.getElementById(`amt_${i}`);if(a)total+=parseFloat(a.value||0);}
+  document.getElementById('grandDisplay').textContent='₹ '+total.toFixed(2);
+}
+document.getElementById('dnForm').addEventListener('submit',function(){
+  const b=document.getElementById('saveBtn');b.innerHTML='<span class="spinner-border spinner-border-sm me-2"></span>Saving...';b.disabled=true;
+});
+addRow();addRow();
+</script>
+{% endblock %}

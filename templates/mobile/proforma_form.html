@@ -1,0 +1,344 @@
+{% extends 'mobile/base_mobile.html' %}
+{% block title %}New Quotation{% endblock %}
+{% block page_title %}New Quotation{% endblock %}
+
+{% block topbar_actions %}
+<a href="{{ url_for('proforma_list') }}" class="m-icon-btn"><i class="bi bi-x-lg"></i></a>
+{% endblock %}
+
+{% block head %}
+<style>
+.item-row {
+  background: white;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px;
+  margin-bottom: 10px;
+  position: relative;
+}
+.item-num-badge {
+  position: absolute;
+  top: 10px; left: 10px;
+  width: 22px; height: 22px;
+  background: #7c3aed;
+  color: white;
+  border-radius: 50%;
+  font-size: 11px;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.item-del-btn {
+  position: absolute;
+  top: 8px; right: 8px;
+  background: #fef2f2;
+  color: #dc2626;
+  border: none;
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 13px;
+  cursor: pointer;
+}
+.item-fields { margin-top: 30px; }
+.item-row-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
+.item-row-grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-top: 8px; }
+.item-total {
+  text-align: right;
+  font-weight: 800;
+  font-size: 14px;
+  color: #7c3aed;
+  margin-top: 8px;
+}
+.ac-drop {
+  position: absolute;
+  z-index: 9999;
+  background: white;
+  border: 1.5px solid var(--accent);
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0,0,0,.15);
+  max-height: 200px;
+  overflow-y: auto;
+  left: 12px; right: 12px;
+}
+.ac-item {
+  padding: 10px 14px;
+  cursor: pointer;
+  font-size: 13px;
+  border-bottom: 1px solid #f1f5f9;
+}
+.ac-item:active { background: #eff6ff; }
+.ac-item:last-child { border-bottom: none; }
+.grand-box {
+  background: linear-gradient(135deg,#7c3aed,#6d28d9);
+  color: white;
+  border-radius: 12px;
+  padding: 16px;
+  margin: 0 14px 12px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<form method="POST" action="{{ url_for('new_proforma') }}" id="qForm">
+
+  <!-- Basic Info -->
+  <div class="m-card" style="margin:14px 14px 10px;">
+    <div class="m-card-header">
+      <i class="bi bi-file-earmark-text" style="color:#7c3aed;font-size:18px;"></i>
+      <span class="m-card-title">Quotation Details</span>
+    </div>
+    <div class="m-card-body">
+      <div class="m-fg">
+        <label class="m-label">Quotation No.</label>
+        <input type="text" name="quotation_no" class="m-input"
+               value="{{ next_quot_no }}" readonly style="background:#f8fafc;" />
+      </div>
+      <div class="m-fg">
+        <label class="m-label">Date</label>
+        <input type="date" name="quotation_date" class="m-input"
+               value="{{ today }}" required />
+      </div>
+      <div class="m-fg">
+        <label class="m-label">Validity (days)</label>
+        <input type="number" name="validity_days" class="m-input"
+               value="30" min="1" placeholder="30" />
+      </div>
+    </div>
+  </div>
+
+  <!-- Buyer -->
+  <div class="m-card" style="margin:0 14px 10px;">
+    <div class="m-card-header">
+      <i class="bi bi-person" style="color:var(--accent);font-size:18px;"></i>
+      <span class="m-card-title">Buyer</span>
+    </div>
+    <div class="m-card-body" style="position:relative;">
+      <div class="m-fg">
+        <label class="m-label">Buyer Name <span style="color:red">*</span></label>
+        <input type="text" name="buyer_name" id="buyerInput" class="m-input"
+               placeholder="Type buyer name..." autocomplete="off"
+               oninput="searchBuyer(this.value)" required />
+        <div id="buyerDrop" class="ac-drop" style="display:none;"></div>
+      </div>
+      <div class="m-fg">
+        <label class="m-label">Address</label>
+        <input type="text" name="buyer_address" id="buyerAddr" class="m-input" placeholder="Optional" />
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+        <div class="m-fg">
+          <label class="m-label">GSTIN</label>
+          <input type="text" name="buyer_gstin" id="buyerGstin" class="m-input" placeholder="Optional" />
+        </div>
+        <div class="m-fg">
+          <label class="m-label">Phone</label>
+          <input type="text" name="buyer_phone" id="buyerPhone" class="m-input" placeholder="Optional" />
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Items -->
+  <div class="m-section-lbl">Items</div>
+  <div style="padding:0 14px;" id="itemsContainer"></div>
+
+  <div style="padding:0 14px 12px;">
+    <button type="button" class="m-btn m-btn-outline" onclick="addRow()"
+            style="border-color:#7c3aed;color:#7c3aed;">
+      <i class="bi bi-plus-circle"></i> Add Item
+    </button>
+  </div>
+
+  <!-- Totals -->
+  <div class="grand-box">
+    <div>
+      <div style="font-size:11px;opacity:.8;text-transform:uppercase;letter-spacing:.05em;">Grand Total</div>
+      <div style="font-size:22px;font-weight:800;" id="grandDisplay">₹ 0.00</div>
+    </div>
+    <i class="bi bi-receipt" style="font-size:28px;opacity:.4;"></i>
+  </div>
+
+  <!-- Notes -->
+  <div class="m-card" style="margin:0 14px 12px;">
+    <div class="m-card-body">
+      <div class="m-fg">
+        <label class="m-label">Notes / Terms</label>
+        <textarea name="notes" class="m-input" rows="2"
+                  placeholder="Optional notes or terms..."></textarea>
+      </div>
+    </div>
+  </div>
+
+  <!-- Submit -->
+  <div style="padding:0 14px 24px;display:flex;gap:10px;">
+    <a href="{{ url_for('proforma_list') }}" class="m-btn m-btn-outline" style="flex:1;">
+      Cancel
+    </a>
+    <button type="submit" class="m-btn m-btn-primary" style="flex:2;background:#7c3aed;border-color:#7c3aed;" id="saveBtn">
+      <i class="bi bi-save2"></i> Save Quotation
+    </button>
+  </div>
+
+</form>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const PRODUCTS = {{ products | tojson }};
+let rowCount = 0;
+
+function addRow(pf) {
+  const idx = rowCount++;
+  const div = document.createElement('div');
+  div.className = 'item-row';
+  div.id = `row_${idx}`;
+  div.innerHTML = `
+    <span class="item-num-badge">${idx+1}</span>
+    <button type="button" class="item-del-btn" onclick="delRow(${idx})">
+      <i class="bi bi-trash3"></i>
+    </button>
+    <div class="item-fields">
+      <div class="m-fg" style="position:relative;">
+        <label class="m-label">Product / Description</label>
+        <input type="text" name="description[]" id="desc_${idx}" class="m-input"
+               placeholder="Product name..." autocomplete="off"
+               oninput="searchProduct(${idx}, this.value)" />
+        <input type="hidden" name="product_id[]" id="pid_${idx}" value="0" />
+        <input type="hidden" name="variation_id[]" id="vid_${idx}" value="" />
+        <div id="pdrop_${idx}" class="ac-drop" style="display:none;"></div>
+      </div>
+      <div class="item-row-grid">
+        <div class="m-fg">
+          <label class="m-label">HSN</label>
+          <input type="text" name="hsn[]" id="hsn_${idx}" class="m-input" placeholder="0000" />
+        </div>
+        <div class="m-fg">
+          <label class="m-label">GST %</label>
+          <select name="gst_rate[]" id="gst_${idx}" class="m-select" onchange="recalc(${idx})">
+            <option value="0">0%</option>
+            <option value="5">5%</option>
+            <option value="12">12%</option>
+            <option value="18" selected>18%</option>
+            <option value="28">28%</option>
+          </select>
+        </div>
+      </div>
+      <div class="item-row-grid3">
+        <div class="m-fg">
+          <label class="m-label">Qty</label>
+          <input type="number" name="quantity[]" id="qty_${idx}" class="m-input"
+                 step="0.01" min="0" value="1" oninput="recalc(${idx})" />
+        </div>
+        <div class="m-fg">
+          <label class="m-label">Rate (₹)</label>
+          <input type="number" name="rate[]" id="rate_${idx}" class="m-input"
+                 step="0.01" min="0" value="0" oninput="recalc(${idx})" />
+        </div>
+        <div class="m-fg">
+          <label class="m-label">Disc %</label>
+          <input type="number" name="discount_percent[]" id="disc_${idx}" class="m-input"
+                 step="0.01" min="0" max="100" value="0" oninput="recalc(${idx})" />
+        </div>
+      </div>
+      <input type="hidden" name="amount[]" id="amt_${idx}" value="0" />
+      <div class="item-total" id="tot_${idx}">₹ 0.00</div>
+    </div>`;
+  document.getElementById('itemsContainer').appendChild(div);
+  if (pf) acPick(idx, pf);
+}
+
+function delRow(idx) {
+  const el = document.getElementById(`row_${idx}`);
+  if (el) { el.remove(); recalcAll(); }
+}
+
+function recalc(idx) {
+  const qty  = parseFloat(document.getElementById(`qty_${idx}`)?.value || 0);
+  const rate = parseFloat(document.getElementById(`rate_${idx}`)?.value || 0);
+  const disc = parseFloat(document.getElementById(`disc_${idx}`)?.value || 0);
+  const gst  = parseFloat(document.getElementById(`gst_${idx}`)?.value || 0);
+  const base = qty * rate;
+  const discAmt = base * disc / 100;
+  const taxable = base - discAmt;
+  const amt = taxable * (1 + gst / 100);
+  const amtEl = document.getElementById(`amt_${idx}`);
+  const totEl = document.getElementById(`tot_${idx}`);
+  if (amtEl) amtEl.value = amt.toFixed(4);
+  if (totEl) totEl.textContent = '₹ ' + amt.toFixed(2);
+  recalcGrand();
+}
+
+function recalcAll() {
+  for (let i = 0; i < rowCount; i++) {
+    if (document.getElementById(`qty_${i}`)) recalc(i);
+  }
+}
+
+function recalcGrand() {
+  let total = 0;
+  for (let i = 0; i < rowCount; i++) {
+    const a = document.getElementById(`amt_${i}`);
+    if (a) total += parseFloat(a.value || 0);
+  }
+  document.getElementById('grandDisplay').textContent = '₹ ' + total.toFixed(2);
+}
+
+function searchProduct(idx, q) {
+  const drop = document.getElementById(`pdrop_${idx}`);
+  if (!q || q.length < 1) { drop.style.display = 'none'; return; }
+  const matches = PRODUCTS.filter(p =>
+    p.name.toLowerCase().includes(q.toLowerCase()) ||
+    (p.variation_name && p.variation_name.toLowerCase().includes(q.toLowerCase()))
+  ).slice(0, 8);
+  if (!matches.length) { drop.style.display = 'none'; return; }
+  drop.innerHTML = matches.map(p => {
+    const label = p.variation_name ? `${p.name} — ${p.variation_name}` : p.name;
+    return `<div class="ac-item" onclick='acPick(${idx}, ${JSON.stringify(p)})'>${label}<span style="float:right;color:#64748b;">₹${p.selling_price}</span></div>`;
+  }).join('');
+  drop.style.display = 'block';
+}
+
+function acPick(idx, p) {
+  document.getElementById(`desc_${idx}`).value  = p.variation_name ? `${p.name} ${p.variation_name}` : p.name;
+  document.getElementById(`pid_${idx}`).value   = p.id || 0;
+  document.getElementById(`vid_${idx}`).value   = p.variation_id || '';
+  document.getElementById(`hsn_${idx}`).value   = p.hsn || '';
+  document.getElementById(`rate_${idx}`).value  = p.selling_price || 0;
+  const gstEl = document.getElementById(`gst_${idx}`);
+  if (gstEl) {
+    for (let o of gstEl.options) {
+      if (parseFloat(o.value) === parseFloat(p.gst_rate || 0)) { o.selected = true; break; }
+    }
+  }
+  const drop = document.getElementById(`pdrop_${idx}`);
+  if (drop) drop.style.display = 'none';
+  recalc(idx);
+}
+
+function searchBuyer(q) {
+  // Simple search using fetch
+  if (!q || q.length < 2) { document.getElementById('buyerDrop').style.display='none'; return; }
+  fetch(`/billing/buyer-info?name=${encodeURIComponent(q)}`)
+    .then(r => r.json()).then(d => {
+      if (d.found) {
+        document.getElementById('buyerAddr').value  = d.address || '';
+        document.getElementById('buyerGstin').value = d.gstin || '';
+        document.getElementById('buyerPhone').value = d.phone || '';
+        document.getElementById('buyerDrop').style.display = 'none';
+      }
+    }).catch(() => {});
+}
+
+document.getElementById('qForm').addEventListener('submit', function() {
+  const btn = document.getElementById('saveBtn');
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Saving...';
+  btn.disabled = true;
+});
+
+// Add 3 default rows
+addRow(); addRow(); addRow();
+</script>
+{% endblock %}

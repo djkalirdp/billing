@@ -60,6 +60,14 @@
         <input type="number" name="opening_balance" class="m-input" step="0.01" min="0"
                value="{{ '%.2f'|format(buyer.opening_balance) if buyer else '0.00' }}"
                placeholder="0.00" />
+        <span style="font-size:11px;color:var(--text-muted);">Pehle se baki rakam (software use se pehle ki)</span>
+      </div>
+      <div class="m-fg">
+        <label class="m-label">Credit Limit (₹) <span style="font-size:11px;color:var(--text-muted);font-weight:400;">— 0 = no limit</span></label>
+        <input type="number" name="credit_limit" class="m-input" step="0.01" min="0"
+               value="{{ '%.2f'|format(buyer.credit_limit) if buyer and buyer.credit_limit else '0.00' }}"
+               placeholder="0.00" />
+        <span style="font-size:11px;color:var(--text-muted);">Billing mein warning aayegi jab outstanding limit cross kare</span>
       </div>
     </div>
   </div>

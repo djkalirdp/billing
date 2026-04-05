@@ -1,0 +1,40 @@
+{% extends 'mobile/base_mobile.html' %}
+{% block title %}Credit Notes{% endblock %}
+{% block page_title %}Credit Notes{% endblock %}
+
+{% block topbar_actions %}
+<a href="{{ url_for('new_credit_note') }}" class="m-icon-btn accent"><i class="bi bi-plus-lg"></i></a>
+{% endblock %}
+
+{% block content %}
+<div class="m-section-lbl">All Credit Notes</div>
+{% if credit_notes %}
+  {% for cn in credit_notes %}
+  <a href="{{ url_for('credit_note_detail', cn_id=cn.id) }}"
+     style="display:block;background:white;border:1px solid var(--border);border-radius:var(--radius);margin:0 14px 10px;padding:14px;text-decoration:none;color:inherit;">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+      <div>
+        <div style="font-weight:800;color:#7c3aed;">{{ cn.cn_no }}</div>
+        <div style="font-weight:600;font-size:13.5px;margin-top:3px;">{{ cn.buyer_name or '—' }}</div>
+        <div style="font-size:12px;color:var(--text-muted);margin-top:2px;">{{ cn.cn_date }} · {{ cn.reason or '—' }}</div>
+      </div>
+      <div style="text-align:right;">
+        <div style="font-weight:800;font-size:15px;color:#7c3aed;">₹ {{ "%.2f"|format(cn.grand_total) }}</div>
+        {% if cn.stock_return %}
+        <div style="font-size:11px;color:#059669;font-weight:700;margin-top:3px;">✅ Stock Return</div>
+        {% endif %}
+      </div>
+    </div>
+  </a>
+  {% endfor %}
+{% else %}
+  <div class="m-empty">
+    <i class="bi bi-arrow-return-left"></i>
+    <p>Koi Credit Note nahi.</p>
+    <a href="{{ url_for('new_credit_note') }}" class="m-btn m-btn-primary" style="display:inline-flex;margin-top:12px;">
+      <i class="bi bi-plus"></i> New Credit Note
+    </a>
+  </div>
+{% endif %}
+<div style="height:20px;"></div>
+{% endblock %}

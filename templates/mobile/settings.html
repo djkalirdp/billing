@@ -207,6 +207,62 @@
     </div>
   </div>
 
+  <!-- Invoice Template -->
+  <div class="m-card" style="margin:0 14px 12px;">
+    <div class="m-card-header">
+      <i class="bi bi-file-earmark-text" style="color:var(--accent);font-size:18px;"></i>
+      <span class="m-card-title">Invoice PDF Template</span>
+    </div>
+    <div class="m-card-body">
+      <p style="font-size:12px;color:var(--text-muted);margin-bottom:12px;">Invoice download karte waqt kaun sa format use ho.</p>
+      <div style="display:flex;flex-direction:column;gap:10px;">
+        <label style="display:flex;align-items:flex-start;gap:10px;padding:12px;border:2px solid var(--border);border-radius:10px;cursor:pointer;"
+               id="tpl1Lbl">
+          <input type="radio" name="invoice_template" value="1"
+                 {% if settings.get('invoice_template','1') == '1' %}checked{% endif %}
+                 onchange="highlightTpl()" style="margin-top:3px;" />
+          <div>
+            <div style="font-weight:700;font-size:13px;">Preview 1 — Standard</div>
+            <div style="font-size:11.5px;color:var(--text-muted);margin-top:2px;">3 copies · Dynamic rows</div>
+          </div>
+        </label>
+        <label style="display:flex;align-items:flex-start;gap:10px;padding:12px;border:2px solid var(--border);border-radius:10px;cursor:pointer;"
+               id="tpl2Lbl">
+          <input type="radio" name="invoice_template" value="2"
+                 {% if settings.get('invoice_template','1') == '2' %}checked{% endif %}
+                 onchange="highlightTpl()" style="margin-top:3px;" />
+          <div>
+            <div style="font-weight:700;font-size:13px;">Preview 2 — Classic (11 Rows)</div>
+            <div style="font-size:11.5px;color:var(--text-muted);margin-top:2px;">Single copy · Fixed 11 rows per page</div>
+          </div>
+        </label>
+      </div>
+    </div>
+  </div>
+
+  <!-- Firm Type -->
+  <div class="m-card" style="margin:0 14px 12px;">
+    <div class="m-card-header">
+      <i class="bi bi-building" style="color:var(--accent);font-size:18px;"></i>
+      <span class="m-card-title">Firm Type</span>
+    </div>
+    <div class="m-card-body">
+      <p style="font-size:12px;color:var(--text-muted);margin-bottom:12px;">Trading ya Manufacturing mode select karo.</p>
+      <div style="display:flex;flex-direction:column;gap:10px;">
+        <label style="display:flex;align-items:center;gap:10px;padding:12px;border:2px solid var(--border);border-radius:10px;cursor:pointer;font-weight:600;font-size:13px;">
+          <input type="radio" name="firm_type" value="trading"
+                 {% if settings.get('firm_type','trading') == 'trading' %}checked{% endif %} />
+          🛒 Trading (Retail / Wholesale)
+        </label>
+        <label style="display:flex;align-items:center;gap:10px;padding:12px;border:2px solid var(--border);border-radius:10px;cursor:pointer;font-weight:600;font-size:13px;">
+          <input type="radio" name="firm_type" value="manufacturing"
+                 {% if settings.get('firm_type','trading') == 'manufacturing' %}checked{% endif %} />
+          🏭 Manufacturing
+        </label>
+      </div>
+    </div>
+  </div>
+
   <!-- Save Button -->
   <div style="padding:4px 14px 12px;">
     <button type="submit" class="m-btn m-btn-primary" id="saveBtn">
@@ -294,6 +350,13 @@ function uploadLogo(input) {
   document.getElementById('uploadStatus').style.display = 'flex';
   document.getElementById('logoForm').submit();
 }
+
+function highlightTpl() {
+  const v = document.querySelector('input[name="invoice_template"]:checked')?.value;
+  document.getElementById('tpl1Lbl').style.borderColor = v === '1' ? 'var(--accent)' : 'var(--border)';
+  document.getElementById('tpl2Lbl').style.borderColor = v === '2' ? 'var(--accent)' : 'var(--border)';
+}
+document.addEventListener('DOMContentLoaded', highlightTpl);
 
 document.getElementById('settingsForm').addEventListener('submit', function () {
   const btn = document.getElementById('saveBtn');

@@ -1,0 +1,145 @@
+{% extends 'mobile/base_mobile.html' %}
+{% block title %}New Credit Note{% endblock %}
+{% block page_title %}New Credit Note{% endblock %}
+{% block topbar_actions %}
+<a href="{{ url_for('credit_notes') }}" class="m-icon-btn"><i class="bi bi-x-lg"></i></a>
+{% endblock %}
+{% block content %}
+<form method="POST" action="{{ url_for('new_credit_note') }}" id="cnForm">
+
+  <div class="m-card" style="margin:14px 14px 10px;">
+    <div class="m-card-header" style="background:#f5f3ff;">
+      <i class="bi bi-arrow-return-left" style="color:#7c3aed;font-size:18px;"></i>
+      <span class="m-card-title">Credit Note Details</span>
+    </div>
+    <div class="m-card-body">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+        <div class="m-fg"><label class="m-label">Date</label>
+          <input type="date" name="cn_date" class="m-input" value="{{ today }}" required /></div>
+        <div class="m-fg"><label class="m-label">CN No.</label>
+          <input type="text" class="m-input" value="{{ next_cn_no }}" readonly style="background:#f8fafc;color:#7c3aed;font-weight:700;" /></div>
+      </div>
+      <div class="m-fg"><label class="m-label">Buyer *</label>
+        <select name="buyer_id" class="m-select" required>
+          <option value="">-- Select --</option>
+          {% for b in buyers %}<option value="{{ b.id }}">{{ b.name }}</option>{% endfor %}
+        </select></div>
+      <div class="m-fg"><label class="m-label">Against Invoice</label>
+        <select name="invoice_id" class="m-select">
+          <option value="">-- Optional --</option>
+          {% for inv in invoices %}{% if "[CANCELLED]" not in inv.invoice_no %}
+          <option value="{{ inv.id }}">{{ inv.invoice_no }} ({{ inv.invoice_date }})</option>
+          {% endif %}{% endfor %}
+        </select></div>
+      <div class="m-fg"><label class="m-label">Reason</label>
+        <input type="text" name="reason" class="m-input" placeholder="Sale return, price correction..." /></div>
+    </div>
+  </div>
+
+  <!-- Stock Return -->
+  <div class="m-card" style="margin:0 14px 10px;border-color:#a7f3d0;background:#f0fdf4;">
+    <div class="m-card-body">
+      <div style="font-weight:700;font-size:13.5px;color:#065f46;margin-bottom:10px;"><i class="bi bi-boxes me-2"></i>Stock Return?</div>
+      <div style="display:flex;flex-direction:column;gap:10px;">
+        <label style="display:flex;align-items:flex-start;gap:10px;padding:10px;background:white;border-radius:8px;cursor:pointer;">
+          <input type="radio" name="stock_return" value="1" style="margin-top:2px;" />
+          <div><div style="font-weight:700;font-size:13px;">Yes — Maal wapas aaya</div>
+            <div style="font-size:11.5px;color:#64748b;">Stock badh jaayega</div></div>
+        </label>
+        <label style="display:flex;align-items:flex-start;gap:10px;padding:10px;background:white;border-radius:8px;cursor:pointer;">
+          <input type="radio" name="stock_return" value="0" checked style="margin-top:2px;" />
+          <div><div style="font-weight:700;font-size:13px;">No — Sirf financial adjustment</div>
+            <div style="font-size:11.5px;color:#64748b;">Stock nahi badlega</div></div>
+        </label>
+      </div>
+    </div>
+  </div>
+
+  <!-- Items -->
+  <div class="m-section-lbl">Items</div>
+  <div style="padding:0 14px;" id="itemsContainer"></div>
+  <div style="padding:0 14px 10px;">
+    <button type="button" class="m-btn m-btn-outline" onclick="addRow()"
+            style="border-color:#7c3aed;color:#7c3aed;">
+      <i class="bi bi-plus-circle"></i> Add Item
+    </button>
+  </div>
+
+  <!-- Grand Total -->
+  <div style="background:linear-gradient(135deg,#7c3aed,#6d28d9);color:white;border-radius:12px;padding:14px 16px;margin:0 14px 12px;display:flex;justify-content:space-between;align-items:center;">
+    <div><div style="font-size:11px;opacity:.8;">Grand Total</div>
+      <div style="font-size:20px;font-weight:800;" id="grandDisplay">₹ 0.00</div></div>
+    <i class="bi bi-arrow-return-left" style="font-size:24px;opacity:.4;"></i>
+  </div>
+
+  <div class="m-fg" style="padding:0 14px 4px;">
+    <label class="m-label">Notes</label>
+    <textarea name="notes" class="m-input" rows="2" placeholder="Optional..."></textarea>
+  </div>
+
+  <div style="padding:0 14px 24px;display:flex;gap:10px;">
+    <a href="{{ url_for('credit_notes') }}" class="m-btn m-btn-outline" style="flex:1;">Cancel</a>
+    <button type="submit" class="m-btn m-btn-primary" id="saveBtn"
+            style="flex:2;background:#7c3aed;border-color:#7c3aed;">
+      <i class="bi bi-save2"></i> Save CN
+    </button>
+  </div>
+</form>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const PRODUCTS = {{ products | tojson if products is defined else '[]' }};
+let rowCount=0;
+function addRow(){
+  const idx=rowCount++;
+  const div=document.createElement('div');
+  div.style.cssText='background:white;border:1px solid #e2e8f0;border-radius:10px;padding:12px;margin-bottom:8px;position:relative;';
+  div.id=`row_${idx}`;
+  div.innerHTML=`
+    <span style="position:absolute;top:10px;left:10px;width:20px;height:20px;background:#7c3aed;color:white;border-radius:50%;font-size:10px;font-weight:800;display:flex;align-items:center;justify-content:center;">${idx+1}</span>
+    <button type="button" onclick="delRow(${idx})" style="position:absolute;top:8px;right:8px;background:#fef2f2;color:#dc2626;border:none;border-radius:6px;padding:3px 7px;cursor:pointer;"><i class="bi bi-trash3"></i></button>
+    <div style="margin-top:28px;">
+      <div class="m-fg"><label class="m-label">Description</label>
+        <input type="text" name="description[]" id="desc_${idx}" class="m-input" placeholder="Product..." />
+        <input type="hidden" name="product_id[]" value="0" />
+        <input type="hidden" name="hsn[]" id="hsn_${idx}" value="" /></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;">
+        <div class="m-fg"><label class="m-label">GST%</label>
+          <select name="gst_rate[]" id="gst_${idx}" class="m-select" onchange="recalc(${idx})">
+            <option value="0">0%</option><option value="5">5%</option>
+            <option value="12">12%</option><option value="18" selected>18%</option><option value="28">28%</option>
+          </select></div>
+        <div class="m-fg"><label class="m-label">Qty</label>
+          <input type="number" name="quantity[]" id="qty_${idx}" class="m-input" value="1" step="0.01" oninput="recalc(${idx})" /></div>
+        <div class="m-fg"><label class="m-label">Rate</label>
+          <input type="number" name="rate[]" id="rate_${idx}" class="m-input" value="0" step="0.01" oninput="recalc(${idx})" /></div>
+      </div>
+      <input type="hidden" name="amount[]" id="amt_${idx}" value="0" />
+      <div style="text-align:right;font-weight:800;color:#7c3aed;font-size:14px;" id="tot_${idx}">₹ 0.00</div>
+    </div>`;
+  document.getElementById('itemsContainer').appendChild(div);
+}
+function delRow(idx){const el=document.getElementById(`row_${idx}`);if(el){el.remove();recalcGrand();}}
+function recalc(idx){
+  const q=parseFloat(document.getElementById(`qty_${idx}`)?.value||0);
+  const r=parseFloat(document.getElementById(`rate_${idx}`)?.value||0);
+  const g=parseFloat(document.getElementById(`gst_${idx}`)?.value||0);
+  const amt=q*r*(1+g/100);
+  const a=document.getElementById(`amt_${idx}`);
+  const t=document.getElementById(`tot_${idx}`);
+  if(a)a.value=amt.toFixed(4);
+  if(t)t.textContent='₹ '+amt.toFixed(2);
+  recalcGrand();
+}
+function recalcGrand(){
+  let total=0;
+  for(let i=0;i<rowCount;i++){const a=document.getElementById(`amt_${i}`);if(a)total+=parseFloat(a.value||0);}
+  document.getElementById('grandDisplay').textContent='₹ '+total.toFixed(2);
+}
+document.getElementById('cnForm').addEventListener('submit',function(){
+  const b=document.getElementById('saveBtn');b.innerHTML='<span class="spinner-border spinner-border-sm me-2"></span>Saving...';b.disabled=true;
+});
+addRow();addRow();
+</script>
+{% endblock %}

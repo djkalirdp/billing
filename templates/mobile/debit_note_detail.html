@@ -1,0 +1,33 @@
+{% extends 'mobile/base_mobile.html' %}
+{% block title %}{{ dn.dn_no }}{% endblock %}
+{% block page_title %}Debit Note{% endblock %}
+{% block topbar_actions %}
+<a href="{{ url_for('debit_notes') }}" class="m-icon-btn"><i class="bi bi-arrow-left"></i></a>
+{% endblock %}
+{% block content %}
+<div style="background:linear-gradient(135deg,#d97706,#b45309);color:white;margin:14px 14px 10px;border-radius:var(--radius);padding:18px;">
+  <div style="font-size:12px;opacity:.8;">{{ dn.dn_no }}</div>
+  <div style="font-family:var(--font-head);font-size:18px;font-weight:800;margin-top:3px;">{{ dn.vendor_name or "—" }}</div>
+  <div style="font-size:12.5px;opacity:.75;margin-top:3px;">{{ dn.dn_date }} · {{ dn.reason or "—" }}</div>
+  {% if dn.stock_return %}<span style="background:rgba(255,255,255,.25);padding:3px 10px;border-radius:99px;font-size:11.5px;font-weight:700;display:inline-block;margin-top:6px;">✅ Stock Return</span>{% endif %}
+</div>
+<div class="m-section-lbl">{{ items|length }} Items</div>
+{% for it in items %}
+<div style="background:white;border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin:0 14px 8px;display:flex;justify-content:space-between;align-items:flex-start;gap:10px;">
+  <div><div style="font-weight:700;font-size:13.5px;">{{ loop.index }}. {{ it.description }}</div>
+    <div style="font-size:12px;color:var(--text-muted);margin-top:3px;">GST: {{ it.gst_rate }}% · Qty: {{ it.quantity }} · Rate: ₹{{ "%.2f"|format(it.rate) }}</div></div>
+  <div style="font-weight:800;color:#d97706;">₹ {{ "%.2f"|format(it.amount) }}</div>
+</div>
+{% endfor %}
+<div class="m-section-lbl">Summary</div>
+<div class="m-card" style="margin:0 14px 12px;">
+  <div class="m-card-body">
+    <div class="m-sum-row"><span class="m-sum-lbl">Subtotal</span><span class="m-sum-val">₹ {{ "%.2f"|format(dn.subtotal) }}</span></div>
+    <div class="m-sum-row"><span class="m-sum-lbl">GST</span><span class="m-sum-val">₹ {{ "%.2f"|format(dn.total_gst) }}</span></div>
+    <div class="m-sum-row" style="font-weight:800;font-size:15px;color:#d97706;"><span>Grand Total</span><span>₹ {{ "%.2f"|format(dn.grand_total) }}</span></div>
+  </div>
+</div>
+<div style="padding:0 14px 24px;">
+  <a href="{{ url_for('debit_notes') }}" class="m-btn m-btn-outline w-100" style="justify-content:center;"><i class="bi bi-list-ul"></i> All Debit Notes</a>
+</div>
+{% endblock %}

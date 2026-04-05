@@ -71,6 +71,13 @@
                value="{{ '%.2f'|format(product.wholesale_price) if product and product.wholesale_price else '' }}"
                placeholder="0.00 (optional)" />
       </div>
+      <div class="m-fg">
+        <label class="m-label">Reorder Level <span style="font-size:11px;color:var(--text-muted);font-weight:400;">— low stock alert</span></label>
+        <input type="number" name="reorder_level" class="m-input" step="1" min="0"
+               value="{{ product.reorder_level if product and product.reorder_level is not none else 5 }}"
+               placeholder="5" />
+        <span style="font-size:11px;color:var(--text-muted);">Jab stock is se kam ho tab alert aayega. Default: 5. 0 = band.</span>
+      </div>
     </div>
   </div>
 

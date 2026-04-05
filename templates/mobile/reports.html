@@ -19,6 +19,10 @@
 .month-btn{background:#f1f5f9;border:1.5px solid var(--border);border-radius:10px;padding:8px 4px;font-size:12px;font-weight:700;color:var(--text-main);cursor:pointer;text-align:center;-webkit-tap-highlight-color:transparent;}
 .month-btn:active,.month-btn.active{background:#eff6ff;border-color:var(--accent);color:var(--accent);}
 .info-banner{background:#fffbeb;border:1px solid #fde68a;border-radius:10px;padding:10px 12px;font-size:12px;color:#92400e;margin-bottom:10px;}
+.size-row{display:grid;grid-template-columns:repeat(4,1fr);gap:5px;margin-bottom:10px;}
+.size-btn{background:#f1f5f9;border:1.5px solid var(--border);border-radius:8px;padding:7px 4px;font-size:11px;font-weight:800;color:var(--text-main);cursor:pointer;text-align:center;}
+.size-btn.active{background:#eff6ff;border-color:var(--accent);color:var(--accent);}
+.only-due-row{display:flex;align-items:center;gap:8px;margin-bottom:10px;font-size:13px;font-weight:600;}
 </style>
 {% endblock %}
 
@@ -182,6 +186,86 @@
   </div>
 </div>
 
+<!-- ── Customer Outstanding ─────────────────────────────── -->
+<div class="rep-card" style="border-top:4px solid #2563eb;">
+  <div class="rep-card-head">
+    <div class="rep-icon" style="background:#eff6ff;">
+      <i class="bi bi-people-fill" style="color:#2563eb;"></i>
+    </div>
+    <div>
+      <div class="rep-title">Customer Outstanding</div>
+      <div class="rep-sub">Kisse kitne paise lene hain — receivable</div>
+    </div>
+  </div>
+  <div class="rep-body">
+    <div class="month-grid" id="coMonths"></div>
+    <div class="date-row">
+      <div class="m-fg"><label class="m-label">From</label>
+        <input type="date" id="coStart" class="m-input" /></div>
+      <div class="m-fg"><label class="m-label">To</label>
+        <input type="date" id="coEnd" class="m-input" /></div>
+    </div>
+    <div class="size-row" id="coSizeRow">
+      <button type="button" class="size-btn active" onclick="setSize('co','A4',this)">A4<br><small>Portrait</small></button>
+      <button type="button" class="size-btn" onclick="setSize('co','A4L',this)">A4<br><small>Landscape</small></button>
+      <button type="button" class="size-btn" onclick="setSize('co','A5',this)">A5<br><small>Portrait</small></button>
+      <button type="button" class="size-btn" onclick="setSize('co','A5L',this)">A5<br><small>Land.</small></button>
+    </div>
+    <div class="only-due-row">
+      <input type="checkbox" id="coDue" />
+      <label for="coDue">Only Due (zero balance hide karo)</label>
+    </div>
+    <div class="btn-row">
+      <a href="#" class="btn-pdf" onclick="return dlOutstanding('customer','pdf')">
+        <i class="bi bi-file-earmark-pdf"></i> PDF
+      </a>
+      <a href="#" class="btn-excel" onclick="return dlOutstanding('customer','excel')">
+        <i class="bi bi-file-earmark-excel"></i> Excel
+      </a>
+    </div>
+  </div>
+</div>
+
+<!-- ── Vendor Outstanding ────────────────────────────────── -->
+<div class="rep-card" style="border-top:4px solid #d97706;">
+  <div class="rep-card-head">
+    <div class="rep-icon" style="background:#fffbeb;">
+      <i class="bi bi-truck" style="color:#d97706;"></i>
+    </div>
+    <div>
+      <div class="rep-title">Vendor Outstanding</div>
+      <div class="rep-sub">Kisko kitne paise dene hain — payable</div>
+    </div>
+  </div>
+  <div class="rep-body">
+    <div class="month-grid" id="voMonths"></div>
+    <div class="date-row">
+      <div class="m-fg"><label class="m-label">From</label>
+        <input type="date" id="voStart" class="m-input" /></div>
+      <div class="m-fg"><label class="m-label">To</label>
+        <input type="date" id="voEnd" class="m-input" /></div>
+    </div>
+    <div class="size-row" id="voSizeRow">
+      <button type="button" class="size-btn active" onclick="setSize('vo','A4',this)">A4<br><small>Portrait</small></button>
+      <button type="button" class="size-btn" onclick="setSize('vo','A4L',this)">A4<br><small>Landscape</small></button>
+      <button type="button" class="size-btn" onclick="setSize('vo','A5',this)">A5<br><small>Portrait</small></button>
+      <button type="button" class="size-btn" onclick="setSize('vo','A5L',this)">A5<br><small>Land.</small></button>
+    </div>
+    <div class="only-due-row">
+      <input type="checkbox" id="voDue" />
+      <label for="voDue">Only Due (zero balance hide karo)</label>
+    </div>
+    <div class="btn-row">
+      <a href="#" class="btn-pdf" onclick="return dlOutstanding('vendor','pdf')">
+        <i class="bi bi-file-earmark-pdf"></i> PDF
+      </a>
+      <a href="#" class="btn-excel" onclick="return dlOutstanding('vendor','excel')">
+        <i class="bi bi-file-earmark-excel"></i> Excel
+      </a>
+    </div>
+  </div>
+</div>
+
 <!-- ── Batch Tracker Quick Link ──────────────────────────────── -->
 <div class="rep-card" style="border-top:4px solid #f59e0b;">
   <div class="rep-card-head">
@@ -221,6 +305,8 @@ const MONTH_SECTIONS = [
   { id: 'gstr1Months',  startId: 'gstr1Start',  endId: 'gstr1End'  },
   { id: 'gstr3bMonths', startId: 'gstr3bStart', endId: 'gstr3bEnd' },
   { id: 'gstr2bMonths', startId: 'gstr2bStart', endId: 'gstr2bEnd' },
+  { id: 'coMonths',     startId: 'coStart',      endId: 'coEnd'     },
+  { id: 'voMonths',     startId: 'voStart',      endId: 'voEnd'     },
 ];
 
 const today     = new Date();
@@ -256,6 +342,27 @@ function buildMonthGrid(containerId, startId, endId) {
 }
 
 MONTH_SECTIONS.forEach(s => buildMonthGrid(s.id, s.startId, s.endId));
+
+// ── Size trackers ────────────────────────────────────────────────
+const _sizes = { co: 'A4', vo: 'A4' };
+function setSize(prefix, size, btn) {
+  _sizes[prefix] = size;
+  const row = document.getElementById(prefix + 'SizeRow');
+  row.querySelectorAll('.size-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+}
+
+// ── Outstanding download ──────────────────────────────────────────
+function dlOutstanding(type, fmt) {
+  const isC = type === 'customer';
+  const start   = document.getElementById(isC ? 'coStart' : 'voStart').value;
+  const end     = document.getElementById(isC ? 'coEnd'   : 'voEnd').value;
+  const onlyDue = document.getElementById(isC ? 'coDue'   : 'voDue').checked ? '1' : '0';
+  const size    = _sizes[isC ? 'co' : 'vo'];
+  const route   = isC ? '/reports/customer-outstanding' : '/reports/vendor-outstanding';
+  window.location.href = `${route}?start=${start}&end=${end}&only_due=${onlyDue}&format=${fmt}&size=${size}`;
+  return false;
+}
 
 // ── Download function ────────────────────────────────────────────
 function dlReport(type, fmt) {

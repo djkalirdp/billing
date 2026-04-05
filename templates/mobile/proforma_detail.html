@@ -1,0 +1,239 @@
+{% extends 'mobile/base_mobile.html' %}
+{% block title %}{{ proforma.quotation_no }}{% endblock %}
+{% block page_title %}Quotation Detail{% endblock %}
+
+{% block topbar_actions %}
+<a href="{{ url_for('proforma_list') }}" class="m-icon-btn"><i class="bi bi-arrow-left"></i></a>
+<a href="{{ url_for('proforma_pdf', proforma_id=proforma.id) }}?size=A4"
+   class="m-icon-btn" style="color:#dc2626;" target="_blank">
+  <i class="bi bi-file-pdf"></i>
+</a>
+{% endblock %}
+
+{% block head %}
+<style>
+.q-hero {
+  margin: 14px 14px 10px;
+  background: linear-gradient(135deg,#7c3aed,#6d28d9);
+  border-radius: var(--radius);
+  padding: 18px;
+  color: white;
+}
+.q-hero-no   { font-size: 13px; opacity: .8; }
+.q-hero-name { font-family: var(--font-head); font-size: 19px; font-weight: 800; margin-top: 4px; }
+.q-hero-date { font-size: 12.5px; opacity: .75; margin-top: 4px; }
+.q-status-chip {
+  display: inline-block;
+  padding: 4px 12px;
+  border-radius: 99px;
+  font-size: 12px;
+  font-weight: 700;
+  background: rgba(255,255,255,.25);
+  margin-top: 8px;
+}
+.item-card {
+  background: white;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px 14px;
+  margin: 0 14px 8px;
+}
+.item-name { font-weight: 700; font-size: 13.5px; }
+.item-sub  { font-size: 12px; color: var(--text-muted); margin-top: 3px; }
+.item-amt  { font-weight: 800; font-size: 14px; text-align: right; color: #7c3aed; }
+.sum-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 16px;
+  font-size: 13.5px;
+  border-bottom: 1px solid #f1f5f9;
+}
+.sum-row:last-child { border-bottom: none; }
+.sum-row.total {
+  font-weight: 800;
+  font-size: 15px;
+  background: #f5f3ff;
+  color: #7c3aed;
+}
+.action-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 13px;
+  border-radius: 10px;
+  font-size: 13.5px;
+  font-weight: 800;
+  cursor: pointer;
+  border: none;
+  text-decoration: none;
+  width: 100%;
+  margin-bottom: 8px;
+}
+.btn-convert { background: #ecfdf5; color: #059669; }
+.btn-pdf     { background: #fef2f2; color: #dc2626; }
+.btn-delete  { background: #fef2f2; color: #dc2626; border: 1.5px solid #fecaca; }
+.btn-back    { background: #f8fafc; color: #475569; border: 1.5px solid var(--border); }
+</style>
+{% endblock %}
+
+{% block content %}
+
+<!-- Hero -->
+<div class="q-hero">
+  <div class="q-hero-no">{{ proforma.quotation_no }}</div>
+  <div class="q-hero-name">{{ proforma.buyer_name or '—' }}</div>
+  <div class="q-hero-date">
+    {{ proforma.quotation_date }}
+    {% if proforma.validity_days %}
+      · Valid {{ proforma.validity_days }} days
+    {% endif %}
+  </div>
+  <span class="q-status-chip">{{ proforma.status or 'Draft' }}</span>
+</div>
+
+<!-- Buyer Info -->
+{% if proforma.buyer_address or proforma.buyer_gstin or proforma.buyer_phone %}
+<div class="m-section-lbl">Buyer Info</div>
+<div class="m-card" style="margin:0 14px 10px;">
+  <div class="m-card-body">
+    {% if proforma.buyer_address %}
+    <div class="m-sum-row">
+      <span class="m-sum-lbl">Address</span>
+      <span class="m-sum-val" style="max-width:200px;text-align:right;font-size:12.5px;">{{ proforma.buyer_address }}</span>
+    </div>
+    {% endif %}
+    {% if proforma.buyer_gstin %}
+    <div class="m-sum-row">
+      <span class="m-sum-lbl">GSTIN</span>
+      <span class="m-sum-val" style="font-size:12.5px;">{{ proforma.buyer_gstin }}</span>
+    </div>
+    {% endif %}
+    {% if proforma.buyer_phone %}
+    <div class="m-sum-row">
+      <span class="m-sum-lbl">Phone</span>
+      <span class="m-sum-val">{{ proforma.buyer_phone }}</span>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endif %}
+
+<!-- Items -->
+<div class="m-section-lbl">{{ items|length }} Items</div>
+
+{% for it in items %}
+<div class="item-card">
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;">
+    <div style="flex:1;">
+      <div class="item-name">{{ loop.index }}. {{ it.description }}</div>
+      <div class="item-sub">
+        HSN: {{ it.hsn or '—' }} &nbsp;·&nbsp;
+        GST: {{ it.gst_rate }}% &nbsp;·&nbsp;
+        Qty: {{ it.quantity }} &nbsp;·&nbsp;
+        Rate: ₹{{ "%.2f"|format(it.rate) }}
+        {% if it.discount_percent and it.discount_percent > 0 %}
+        &nbsp;·&nbsp; Disc: {{ it.discount_percent }}%
+        {% endif %}
+      </div>
+    </div>
+    <div class="item-amt">₹ {{ "%.2f"|format(it.amount) }}</div>
+  </div>
+</div>
+{% endfor %}
+
+<!-- Summary -->
+<div class="m-section-lbl">Summary</div>
+<div class="m-card" style="margin:0 14px 10px;">
+  <div>
+    <div class="sum-row">
+      <span>Subtotal</span>
+      <span>₹ {{ "%.2f"|format(proforma.subtotal) }}</span>
+    </div>
+    {% if proforma.total_discount and proforma.total_discount > 0 %}
+    <div class="sum-row">
+      <span>Discount</span>
+      <span style="color:#dc2626;">- ₹ {{ "%.2f"|format(proforma.total_discount) }}</span>
+    </div>
+    {% endif %}
+    {% if proforma.total_igst and proforma.total_igst > 0 %}
+    <div class="sum-row">
+      <span>IGST</span>
+      <span>₹ {{ "%.2f"|format(proforma.total_igst) }}</span>
+    </div>
+    {% else %}
+    <div class="sum-row">
+      <span>CGST</span>
+      <span>₹ {{ "%.2f"|format(proforma.total_cgst) }}</span>
+    </div>
+    <div class="sum-row">
+      <span>SGST</span>
+      <span>₹ {{ "%.2f"|format(proforma.total_sgst) }}</span>
+    </div>
+    {% endif %}
+    {% if proforma.freight and proforma.freight > 0 %}
+    <div class="sum-row">
+      <span>Freight</span>
+      <span>₹ {{ "%.2f"|format(proforma.freight) }}</span>
+    </div>
+    {% endif %}
+    <div class="sum-row total">
+      <span>Grand Total</span>
+      <span>₹ {{ "%.2f"|format(proforma.grand_total) }}</span>
+    </div>
+  </div>
+</div>
+
+<!-- Notes -->
+{% if proforma.notes %}
+<div class="m-section-lbl">Notes</div>
+<div class="m-card" style="margin:0 14px 10px;">
+  <div class="m-card-body">
+    <p style="font-size:13px;color:#475569;margin:0;">{{ proforma.notes }}</p>
+  </div>
+</div>
+{% endif %}
+
+<!-- Actions -->
+<div class="m-section-lbl">Actions</div>
+<div style="padding:0 14px 24px;">
+
+  <!-- Convert to Invoice -->
+  {% if proforma.status != 'Converted' %}
+  <form method="POST" action="{{ url_for('convert_proforma', proforma_id=proforma.id) }}"
+        onsubmit="return confirm('Is quotation ko Tax Invoice mein convert karein?')">
+    <button type="submit" class="action-btn btn-convert">
+      <i class="bi bi-arrow-right-circle"></i> Convert to Tax Invoice
+    </button>
+  </form>
+  {% else %}
+  <div class="action-btn" style="background:#fef3c7;color:#78350f;cursor:default;">
+    <i class="bi bi-check-circle-fill"></i> Already Converted
+  </div>
+  {% endif %}
+
+  <!-- PDF Download -->
+  <a href="{{ url_for('proforma_pdf', proforma_id=proforma.id) }}?size=A4"
+     class="action-btn btn-pdf" target="_blank">
+    <i class="bi bi-file-pdf"></i> Download PDF
+  </a>
+
+  <!-- Delete -->
+  {% if user_role == 'Admin' %}
+  <form method="POST" action="{{ url_for('delete_proforma', proforma_id=proforma.id) }}"
+        onsubmit="return confirm('Yeh quotation delete karein? Undo nahi hoga.')">
+    <button type="submit" class="action-btn btn-delete">
+      <i class="bi bi-trash3"></i> Delete Quotation
+    </button>
+  </form>
+  {% endif %}
+
+  <!-- Back -->
+  <a href="{{ url_for('proforma_list') }}" class="action-btn btn-back">
+    <i class="bi bi-arrow-left"></i> Back to Quotations
+  </a>
+
+</div>
+
+{% endblock %}
