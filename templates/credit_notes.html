@@ -1,0 +1,61 @@
+{% extends 'base.html' %}
+{% block title %}Credit Notes{% endblock %}
+{% block page_title %}Credit Notes{% endblock %}
+
+{% block topbar_actions %}
+<a href="{{ url_for('new_credit_note') }}" class="btn-primary-custom">
+  <i class="bi bi-plus-lg"></i> New Credit Note
+</a>
+{% endblock %}
+
+{% block content %}
+<div class="table-wrap">
+  <div class="table-head-bar">
+    <span class="table-head-title"><i class="bi bi-arrow-return-left me-2" style="color:#7c3aed;"></i>Credit Notes</span>
+  </div>
+  {% if credit_notes %}
+  <div style="overflow-x:auto;">
+    <table class="table-custom">
+      <thead>
+        <tr>
+          <th>CN No.</th><th>Date</th><th>Buyer</th><th>Reason</th>
+          <th>Stock Return</th><th style="text-align:right;">Amount</th><th style="text-align:center;">Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for cn in credit_notes %}
+        <tr>
+          <td><strong style="color:#7c3aed;">{{ cn.cn_no }}</strong></td>
+          <td style="font-size:12.5px;color:var(--text-muted);">{{ cn.cn_date }}</td>
+          <td>{{ cn.buyer_name or '—' }}</td>
+          <td style="font-size:12.5px;">{{ cn.reason or '—' }}</td>
+          <td style="text-align:center;">
+            {% if cn.stock_return %}
+              <span style="background:#ecfdf5;color:#059669;padding:3px 10px;border-radius:99px;font-size:11.5px;font-weight:700;">✅ Yes</span>
+            {% else %}
+              <span style="background:#f1f5f9;color:#64748b;padding:3px 10px;border-radius:99px;font-size:11.5px;">No</span>
+            {% endif %}
+          </td>
+          <td style="text-align:right;font-weight:700;color:#7c3aed;">₹ {{ "%.2f"|format(cn.grand_total) }}</td>
+          <td style="text-align:center;">
+            <a href="{{ url_for('credit_note_detail', cn_id=cn.id) }}"
+               class="tbl-btn" style="background:#f5f3ff;color:#7c3aed;">
+              <i class="bi bi-eye"></i> View
+            </a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div style="padding:60px;text-align:center;color:var(--text-muted);">
+    <i class="bi bi-arrow-return-left" style="font-size:40px;display:block;margin-bottom:12px;opacity:.3;"></i>
+    <p>Koi Credit Note nahi. Naya banao!</p>
+    <a href="{{ url_for('new_credit_note') }}" class="btn-primary-custom mt-3" style="display:inline-flex;">
+      <i class="bi bi-plus"></i> New Credit Note
+    </a>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

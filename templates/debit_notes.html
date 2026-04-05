@@ -1,0 +1,61 @@
+{% extends 'base.html' %}
+{% block title %}Debit Notes{% endblock %}
+{% block page_title %}Debit Notes{% endblock %}
+
+{% block topbar_actions %}
+<a href="{{ url_for('new_debit_note') }}" class="btn-primary-custom">
+  <i class="bi bi-plus-lg"></i> New Debit Note
+</a>
+{% endblock %}
+
+{% block content %}
+<div class="table-wrap">
+  <div class="table-head-bar">
+    <span class="table-head-title"><i class="bi bi-arrow-return-right me-2" style="color:#d97706;"></i>Debit Notes</span>
+  </div>
+  {% if debit_notes %}
+  <div style="overflow-x:auto;">
+    <table class="table-custom">
+      <thead>
+        <tr>
+          <th>DN No.</th><th>Date</th><th>Vendor</th><th>Reason</th>
+          <th>Stock Return</th><th style="text-align:right;">Amount</th><th style="text-align:center;">Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for dn in debit_notes %}
+        <tr>
+          <td><strong style="color:#d97706;">{{ dn.dn_no }}</strong></td>
+          <td style="font-size:12.5px;color:var(--text-muted);">{{ dn.dn_date }}</td>
+          <td>{{ dn.vendor_name or '—' }}</td>
+          <td style="font-size:12.5px;">{{ dn.reason or '—' }}</td>
+          <td style="text-align:center;">
+            {% if dn.stock_return %}
+              <span style="background:#ecfdf5;color:#059669;padding:3px 10px;border-radius:99px;font-size:11.5px;font-weight:700;">✅ Yes</span>
+            {% else %}
+              <span style="background:#f1f5f9;color:#64748b;padding:3px 10px;border-radius:99px;font-size:11.5px;">No</span>
+            {% endif %}
+          </td>
+          <td style="text-align:right;font-weight:700;color:#d97706;">₹ {{ "%.2f"|format(dn.grand_total) }}</td>
+          <td style="text-align:center;">
+            <a href="{{ url_for('debit_note_detail', dn_id=dn.id) }}"
+               class="tbl-btn" style="background:#fffbeb;color:#d97706;">
+              <i class="bi bi-eye"></i> View
+            </a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div style="padding:60px;text-align:center;color:var(--text-muted);">
+    <i class="bi bi-arrow-return-right" style="font-size:40px;display:block;margin-bottom:12px;opacity:.3;"></i>
+    <p>Koi Debit Note nahi. Naya banao!</p>
+    <a href="{{ url_for('new_debit_note') }}" class="btn-primary-custom mt-3" style="display:inline-flex;">
+      <i class="bi bi-plus"></i> New Debit Note
+    </a>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

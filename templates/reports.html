@@ -19,6 +19,8 @@
 .dl-pdf   { background:#dc2626; color:white; }
 .dl-excel { background:#059669; color:white; }
 .dl-btn:hover { opacity:.85; }
+.size-opt-btn{padding:5px 10px;border:1.5px solid var(--border);border-radius:7px;font-size:11.5px;font-weight:700;color:#475569;cursor:pointer;background:white;transition:all .15s;}
+.size-opt-btn.active,.size-opt-btn:hover{border-color:var(--accent);background:#eff6ff;color:var(--accent);}
 </style>
 {% endblock %}
 
@@ -208,6 +210,111 @@
 
 </div>
 
+<!-- ── Row 3: Outstanding Reports ── -->
+<div class="rep-grid" style="margin-top:14px;">
+
+  <!-- Customer Outstanding -->
+  <div class="rep-card">
+    <div class="rep-card-head">
+      <div class="rep-icon" style="background:#eff6ff;"><i class="bi bi-people-fill" style="color:#2563eb;"></i></div>
+      <div>
+        <div style="font-weight:800;font-size:15px;">Customer Outstanding</div>
+        <div style="font-size:12px;color:var(--text-muted);">Kisse kitne paise lene hain — receivable report</div>
+      </div>
+    </div>
+    <div class="rep-card-body">
+      <div class="dl-row">
+        <div><label class="rep-label">From</label><input type="date" id="co_start" class="rep-date" /></div>
+        <div><label class="rep-label">To</label><input type="date" id="co_end" class="rep-date" /></div>
+        <div style="display:flex;align-items:flex-end;">
+          <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;padding-bottom:2px;">
+            <input type="checkbox" id="co_due" /> Only Due
+          </label>
+        </div>
+      </div>
+    </div>
+    <div style="padding:0 16px 8px;">
+      <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;margin-bottom:5px;">PDF Size</div>
+      <div style="display:flex;gap:5px;margin-bottom:10px;" id="coSizeRow">
+        <button type="button" class="size-opt-btn active" onclick="setOutSize('co','A4',this)">A4 Portrait</button>
+        <button type="button" class="size-opt-btn" onclick="setOutSize('co','A4L',this)">A4 Landscape</button>
+        <button type="button" class="size-opt-btn" onclick="setOutSize('co','A5',this)">A5</button>
+        <button type="button" class="size-opt-btn" onclick="setOutSize('co','A5L',this)">A5 Landscape</button>
+      </div>
+    </div>
+    <div class="dl-btns" style="padding:0 16px 16px;">
+      <a href="#" class="dl-btn dl-pdf" onclick="return dlOutstanding('customer','pdf')">
+        <i class="bi bi-file-pdf"></i> PDF
+      </a>
+      <a href="#" class="dl-btn dl-excel" onclick="return dlOutstanding('customer','excel')">
+        <i class="bi bi-file-earmark-excel"></i> Excel
+      </a>
+    </div>
+  </div>
+
+  <!-- Vendor Outstanding -->
+  <div class="rep-card">
+    <div class="rep-card-head">
+      <div class="rep-icon" style="background:#fffbeb;"><i class="bi bi-truck" style="color:#d97706;"></i></div>
+      <div>
+        <div style="font-weight:800;font-size:15px;">Vendor Outstanding</div>
+        <div style="font-size:12px;color:var(--text-muted);">Kisko kitne paise dene hain — payable report</div>
+      </div>
+    </div>
+    <div class="rep-card-body">
+      <div class="dl-row">
+        <div><label class="rep-label">From</label><input type="date" id="vo_start" class="rep-date" /></div>
+        <div><label class="rep-label">To</label><input type="date" id="vo_end" class="rep-date" /></div>
+        <div style="display:flex;align-items:flex-end;">
+          <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;padding-bottom:2px;">
+            <input type="checkbox" id="vo_due" /> Only Due
+          </label>
+        </div>
+      </div>
+    </div>
+    <div style="padding:0 16px 8px;">
+      <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;margin-bottom:5px;">PDF Size</div>
+      <div style="display:flex;gap:5px;margin-bottom:10px;" id="voSizeRow">
+        <button type="button" class="size-opt-btn active" onclick="setOutSize('vo','A4',this)">A4 Portrait</button>
+        <button type="button" class="size-opt-btn" onclick="setOutSize('vo','A4L',this)">A4 Landscape</button>
+        <button type="button" class="size-opt-btn" onclick="setOutSize('vo','A5',this)">A5</button>
+        <button type="button" class="size-opt-btn" onclick="setOutSize('vo','A5L',this)">A5 Landscape</button>
+      </div>
+    </div>
+    <div class="dl-btns" style="padding:0 16px 16px;">
+      <a href="#" class="dl-btn dl-pdf" onclick="return dlOutstanding('vendor','pdf')">
+        <i class="bi bi-file-pdf"></i> PDF
+      </a>
+      <a href="#" class="dl-btn dl-excel" onclick="return dlOutstanding('vendor','excel')">
+        <i class="bi bi-file-earmark-excel"></i> Excel
+      </a>
+    </div>
+  </div>
+
+</div>
+
+<!-- ── Credit Note / Debit Note Links ── -->
+<div style="display:flex;gap:12px;margin-top:14px;flex-wrap:wrap;">
+  <a href="{{ url_for('credit_notes') }}"
+     style="display:flex;align-items:center;gap:10px;padding:14px 20px;background:white;border:1.5px solid var(--border);border-radius:12px;text-decoration:none;color:inherit;flex:1;min-width:200px;transition:border-color .18s;"
+     onmouseover="this.style.borderColor='#7c3aed'" onmouseout="this.style.borderColor='var(--border)'">
+    <i class="bi bi-arrow-return-left" style="font-size:22px;color:#7c3aed;"></i>
+    <div>
+      <div style="font-weight:800;font-size:14px;">Credit Notes</div>
+      <div style="font-size:12px;color:var(--text-muted);">Sale return, price correction</div>
+    </div>
+  </a>
+  <a href="{{ url_for('debit_notes') }}"
+     style="display:flex;align-items:center;gap:10px;padding:14px 20px;background:white;border:1.5px solid var(--border);border-radius:12px;text-decoration:none;color:inherit;flex:1;min-width:200px;transition:border-color .18s;"
+     onmouseover="this.style.borderColor='#d97706'" onmouseout="this.style.borderColor='var(--border)'">
+    <i class="bi bi-arrow-return-right" style="font-size:22px;color:#d97706;"></i>
+    <div>
+      <div style="font-weight:800;font-size:14px;">Debit Notes</div>
+      <div style="font-size:12px;color:var(--text-muted);">Purchase return, vendor adjustment</div>
+    </div>
+  </a>
+</div>
+
 {% endblock %}
 
 {% block scripts %}
@@ -248,6 +355,24 @@ buildPills('stockPills',  'stockStart',  'stockEnd');
 buildPills('gstr1Pills',  'gstr1Start',  'gstr1End');
 buildPills('gstr2bPills', 'gstr2bStart', 'gstr2bEnd');
 buildPills('gstr3bPills', 'gstr3bStart', 'gstr3bEnd');
+
+const _outSizes = { co: 'A4', vo: 'A4' };
+function setOutSize(prefix, size, btn) {
+  _outSizes[prefix] = size;
+  document.getElementById(prefix + 'SizeRow').querySelectorAll('.size-opt-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+}
+
+function dlOutstanding(type, fmt) {
+  const isCustomer = type === 'customer';
+  const start   = document.getElementById(isCustomer ? 'co_start' : 'vo_start').value;
+  const end     = document.getElementById(isCustomer ? 'co_end'   : 'vo_end').value;
+  const onlyDue = document.getElementById(isCustomer ? 'co_due'   : 'vo_due').checked ? '1' : '0';
+  const size    = _outSizes[isCustomer ? 'co' : 'vo'];
+  const route   = isCustomer ? '/reports/customer-outstanding' : '/reports/vendor-outstanding';
+  window.location.href = `${route}?start=${start}&end=${end}&only_due=${onlyDue}&format=${fmt}&size=${size}`;
+  return false;
+}
 
 function dlReport(type, fmt) {
   const map = {

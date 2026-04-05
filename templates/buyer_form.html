@@ -110,22 +110,40 @@
       </div>
     </div>
 
-    <!-- Opening Balance -->
+    <!-- Opening Balance + Credit Limit -->
     <div class="form-card">
       <div class="form-card-head">
         <i class="bi bi-wallet2" style="color:var(--warning);"></i>
-        <span class="form-card-title">Opening Balance</span>
+        <span class="form-card-title">Balance & Credit Settings</span>
       </div>
       <div class="form-card-body">
-        <div class="fg" style="max-width:240px;">
-          <label>Opening Balance (₹)</label>
-          <input type="number" name="opening_balance" step="0.01" min="0"
-                 value="{{ '%.2f'|format(buyer.opening_balance) if buyer else '0.00' }}"
-                 placeholder="0.00" />
-          <span class="hint">
-            <i class="bi bi-info-circle me-1"></i>
-            Amount the buyer already owed before using this software.
-          </span>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
+
+          <div class="fg">
+            <label>Opening Balance (₹)</label>
+            <input type="number" name="opening_balance" step="0.01" min="0"
+                   value="{{ '%.2f'|format(buyer.opening_balance) if buyer else '0.00' }}"
+                   placeholder="0.00" />
+            <span class="hint">
+              <i class="bi bi-info-circle me-1"></i>
+              Amount buyer already owed before software use.
+            </span>
+          </div>
+
+          <div class="fg">
+            <label>
+              Credit Limit (₹)
+              <span style="font-size:11px;color:var(--text-muted);font-weight:400;"> — 0 = no limit</span>
+            </label>
+            <input type="number" name="credit_limit" step="0.01" min="0"
+                   value="{{ '%.2f'|format(buyer.credit_limit) if buyer and buyer.credit_limit else '0.00' }}"
+                   placeholder="0.00" />
+            <span class="hint">
+              <i class="bi bi-shield-exclamation me-1"></i>
+              Billing mein warning aayegi jab outstanding limit cross kare.
+            </span>
+          </div>
+
         </div>
       </div>
     </div>

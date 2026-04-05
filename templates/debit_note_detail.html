@@ -1,0 +1,100 @@
+{% extends 'base.html' %}
+{% block title %}{{ dn.dn_no }}{% endblock %}
+{% block page_title %}Debit Note Detail{% endblock %}
+
+{% block topbar_actions %}
+<a href="{{ url_for('debit_notes') }}" class="btn-outline-custom"><i class="bi bi-arrow-left"></i> All DNs</a>
+{% endblock %}
+
+{% block content %}
+<div style="display:grid;grid-template-columns:1fr 300px;gap:16px;align-items:start;">
+  <div>
+    <div style="background:white;border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;margin-bottom:14px;">
+      <div style="padding:14px 18px;border-bottom:1px solid var(--border);background:#fffbeb;display:flex;align-items:center;justify-content:space-between;">
+        <span style="font-weight:800;font-size:15px;color:#d97706;"><i class="bi bi-arrow-return-right me-2"></i>{{ dn.dn_no }}</span>
+        <span style="font-size:12.5px;color:var(--text-muted);">{{ dn.dn_date }}</span>
+      </div>
+      <div style="padding:16px 18px;">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px;">
+          <div><div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;margin-bottom:4px;">Vendor</div>
+            <div style="font-weight:700;">{{ dn.vendor_name or '—' }}</div>
+            {% if dn.vendor_address %}<div style="font-size:12.5px;color:var(--text-muted);">{{ dn.vendor_address }}</div>{% endif %}
+            {% if dn.vendor_gstin %}<div style="font-size:12px;color:var(--text-muted);">GSTIN: {{ dn.vendor_gstin }}</div>{% endif %}
+          </div>
+          <div>
+            <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;margin-bottom:4px;">Details</div>
+            <div style="font-size:13px;"><strong>Reason:</strong> {{ dn.reason or '—' }}</div>
+            <div style="font-size:13px;margin-top:4px;">
+              <strong>Stock Return:</strong>
+              {% if dn.stock_return %}<span style="color:#059669;font-weight:700;">✅ Yes</span>
+              {% else %}<span style="color:#64748b;">No</span>{% endif %}
+            </div>
+            {% if dn.notes %}<div style="font-size:12.5px;color:var(--text-muted);margin-top:4px;">{{ dn.notes }}</div>{% endif %}
+          </div>
+        </div>
+        <table class="table-custom">
+          <thead>
+            <tr><th>S.No.</th><th>Description</th><th>HSN</th><th>GST%</th><th>Qty</th><th style="text-align:right;">Rate</th><th style="text-align:right;">Amount</th></tr>
+          </thead>
+          <tbody>
+            {% for it in items %}
+            <tr>
+              <td>{{ loop.index }}</td>
+              <td><strong>{{ it.description }}</strong></td>
+              <td style="color:var(--text-muted);">{{ it.hsn or '—' }}</td>
+              <td style="text-align:center;">{{ it.gst_rate }}%</td>
+              <td style="text-align:center;">{{ it.quantity }}</td>
+              <td style="text-align:right;">₹ {{ "%.2f"|format(it.rate) }}</td>
+              <td style="text-align:right;font-weight:700;">₹ {{ "%.2f"|format(it.amount) }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  <div>
+    <div style="background:white;border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;">
+      <div style="padding:12px 16px;border-bottom:1px solid var(--border);font-weight:800;font-size:13px;">Summary</div>
+      <div style="padding:14px 16px;">
+        <div style="display:flex;justify-content:space-between;padding:6px 0;font-size:13.5px;border-bottom:1px solid #f1f5f9;"><span>Subtotal</span><span>₹ {{ "%.2f"|format(dn.subtotal) }}</span></div>
+        <div style="display:flex;justify-content:space-between;padding:6px 0;font-size:13.5px;border-bottom:1px solid #f1f5f9;"><span>CGST</span><span>₹ {{ "%.2f"|format(dn.total_cgst) }}</span></div>
+        <div style="display:flex;justify-content:space-between;padding:6px 0;font-size:13.5px;border-bottom:1px solid #f1f5f9;"><span>SGST</span><span>₹ {{ "%.2f"|format(dn.total_sgst) }}</span></div>
+        <div style="display:flex;justify-content:space-between;padding:10px 0;font-size:16px;font-weight:800;color:#d97706;"><span>Grand Total</span><span>₹ {{ "%.2f"|format(dn.grand_total) }}</span></div>
+        <div style="margin-bottom:10px;">
+          <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;margin-bottom:5px;">PDF Size</div>
+          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:4px;" id="dnSizeRow">
+            <button type="button" onclick="setDnSize('A4',this)" style="padding:5px 2px;border:1.5px solid #d97706;border-radius:7px;font-size:11px;font-weight:700;cursor:pointer;background:#fffbeb;color:#d97706;">A4</button>
+            <button type="button" onclick="setDnSize('A4L',this)" style="padding:5px 2px;border:1.5px solid var(--border);border-radius:7px;font-size:11px;font-weight:700;color:#475569;cursor:pointer;background:white;">A4L</button>
+            <button type="button" onclick="setDnSize('A5',this)" style="padding:5px 2px;border:1.5px solid var(--border);border-radius:7px;font-size:11px;font-weight:700;color:#475569;cursor:pointer;background:white;">A5</button>
+            <button type="button" onclick="setDnSize('A5L',this)" style="padding:5px 2px;border:1.5px solid var(--border);border-radius:7px;font-size:11px;font-weight:700;color:#475569;cursor:pointer;background:white;">A5L</button>
+          </div>
+        </div>
+        <a id="dnPdfBtn" href="{{ url_for('debit_note_pdf', dn_id=dn.id) }}?size=A4"
+           class="btn-primary-custom w-100" target="_blank"
+           style="justify-content:center;background:#dc2626;border-color:#dc2626;margin-bottom:8px;">
+          <i class="bi bi-file-pdf"></i> Download PDF
+        </a>
+        <a href="{{ url_for('debit_notes') }}" class="btn-outline-custom w-100" style="justify-content:center;margin-top:4px;">
+          <i class="bi bi-list-ul"></i> All Debit Notes
+        </a>
+        <a href="{{ url_for('new_debit_note') }}" class="btn-primary-custom w-100 mt-2"
+           style="justify-content:center;background:#d97706;border-color:#d97706;">
+          <i class="bi bi-plus"></i> New Debit Note
+        </a>
+      </div>
+    </div>
+  </div>
+</div>
+{% block scripts %}
+<script>
+function setDnSize(size, btn) {
+  document.getElementById('dnSizeRow').querySelectorAll('button').forEach(b => {
+    b.style.background='white'; b.style.borderColor='var(--border)'; b.style.color='#475569';
+  });
+  btn.style.background='#fffbeb'; btn.style.borderColor='#d97706'; btn.style.color='#d97706';
+  document.getElementById('dnPdfBtn').href = `/debit-notes/{{ dn.id }}/pdf?size=${size}`;
+}
+</script>
+{% endblock %}
+{% endblock %}

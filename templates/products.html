@@ -144,7 +144,7 @@
 {% block content %}
 
 <!-- Low stock banner -->
-{% set low_count = products | selectattr('stock_qty', 'le', 10) | list | length %}
+{% set low_count = products | selectattr('stock_qty', 'le', 10) | list | length %}{# reorder_level used per-row below #}
 {% if low_count > 0 %}
 <div class="low-stock-banner">
   <i class="bi bi-exclamation-triangle-fill fs-5"></i>
@@ -237,8 +237,9 @@
       </thead>
       <tbody>
         {% for p in products %}
-        {% set is_low = p.stock_qty <= 10 %}
-        {% set is_critical = p.stock_qty <= 5 %}
+        {% set rl = p.reorder_level if p.reorder_level is defined and p.reorder_level is not none else 5 %}
+        {% set is_low = p.stock_qty <= rl %}
+        {% set is_critical = p.stock_qty <= (rl * 0.5) %}
         <tr>
 
           <td>
@@ -282,6 +283,7 @@
 
           <td>
             {% set qty = p.stock_qty | float %}
+                {% set rl_bar = p.reorder_level if p.reorder_level is defined and p.reorder_level is not none else 5 %}
             {% set bar_pct = [qty / 100 * 100, 100] | min %}
             {% set bar_cls = 'low' if is_critical else ('medium' if is_low else '') %}
             <div class="stock-bar-wrap">

@@ -203,6 +203,18 @@
           <td style="text-align:right;">
             {% if b.balance > 0 %}
               <span class="balance-pos">₹ {{ "%.2f"|format(b.balance) }}</span>
+              {% set cl = b.credit_limit if b.credit_limit is defined and b.credit_limit else 0 %}
+              {% if cl > 0 %}
+                {% if b.balance >= cl %}
+                  <div style="font-size:10.5px;color:#dc2626;font-weight:700;margin-top:2px;">
+                    <i class="bi bi-exclamation-triangle-fill"></i> Limit Full
+                  </div>
+                {% elif b.balance >= cl * 0.8 %}
+                  <div style="font-size:10.5px;color:#d97706;font-weight:700;margin-top:2px;">
+                    <i class="bi bi-exclamation-circle"></i> Near Limit
+                  </div>
+                {% endif %}
+              {% endif %}
             {% else %}
               <span class="balance-zero">
                 <i class="bi bi-check-circle me-1"></i>Cleared

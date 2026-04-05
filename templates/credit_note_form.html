@@ -1,0 +1,253 @@
+{% extends 'base.html' %}
+{% block title %}New Credit Note{% endblock %}
+{% block page_title %}New Credit Note{% endblock %}
+
+{% block topbar_actions %}
+<a href="{{ url_for('credit_notes') }}" class="btn-outline-custom"><i class="bi bi-arrow-left"></i> Back</a>
+{% endblock %}
+
+{% block head %}
+<style>
+.cn-layout{display:grid;grid-template-columns:1fr 320px;gap:16px;align-items:start;}
+@media(max-width:1024px){.cn-layout{grid-template-columns:1fr;}}
+.s-card{background:white;border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;margin-bottom:14px;}
+.s-head{padding:13px 18px;border-bottom:1px solid var(--border);background:#f8fafc;display:flex;align-items:center;gap:8px;font-weight:800;font-size:13.5px;}
+.s-body{padding:16px 18px;}
+.fg{display:flex;flex-direction:column;gap:5px;margin-bottom:12px;}
+.fg label{font-size:11px;font-weight:800;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;}
+.fg input,.fg select,.fg textarea{padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;font-family:var(--font-body);font-size:13.5px;outline:none;}
+.fg input:focus,.fg select:focus{border-color:var(--accent);}
+.item-row{background:#f8fafc;border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:8px;position:relative;}
+.item-num{position:absolute;top:10px;left:10px;width:22px;height:22px;background:#7c3aed;color:white;border-radius:50%;font-size:11px;font-weight:800;display:flex;align-items:center;justify-content:center;}
+.item-del{position:absolute;top:8px;right:8px;background:#fef2f2;color:#dc2626;border:none;border-radius:6px;padding:4px 8px;cursor:pointer;}
+.item-body{margin-top:28px;}
+.item-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;}
+.info-box{background:#eff6ff;border:1.5px solid #bfdbfe;border-radius:10px;padding:12px;font-size:12.5px;color:#1e40af;margin-bottom:12px;}
+.iput{padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;width:100%;font-family:var(--font-body);font-size:13px;outline:none;box-sizing:border-box;}
+.iput:focus{border-color:#7c3aed;}
+</style>
+{% endblock %}
+
+{% block content %}
+<form method="POST" action="{{ url_for('new_credit_note') }}" id="cnForm">
+<div class="cn-layout">
+  <div>
+    <div class="s-card">
+      <div class="s-head"><i class="bi bi-arrow-return-left" style="color:#7c3aed;"></i> Credit Note Details</div>
+      <div class="s-body">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+          <div class="fg"><label>Date</label><input type="date" name="cn_date" value="{{ today }}" required /></div>
+          <div class="fg"><label>CN No.</label><input type="text" value="{{ next_cn_no }}" readonly style="background:#f8fafc;color:#7c3aed;font-weight:700;" /></div>
+        </div>
+
+        <div class="fg"><label>Buyer *</label>
+          <select name="buyer_id" id="buyerSelect" onchange="loadBuyerInvoices()" required>
+            <option value="">-- Select Buyer --</option>
+            {% for b in buyers %}<option value="{{ b.id }}">{{ b.name }}</option>{% endfor %}
+          </select></div>
+
+        <div class="fg"><label>Invoice (Buyer select hone ke baad load hogi)</label>
+          <select name="invoice_id" id="invoiceSelect" onchange="loadInvoiceItems()" disabled>
+            <option value="">-- Pehle Buyer select karein --</option>
+          </select></div>
+
+        <div class="info-box" id="invoiceInfo" style="display:none;">
+          <i class="bi bi-info-circle me-1"></i>
+          Invoice select karne ke baad items neeche auto-fill ho jaayenge.
+          Sirf delete kar sakte hain — add nahi kar sakte.
+        </div>
+
+        <div class="fg"><label>Reason</label><input type="text" name="reason" placeholder="e.g. Sale return, price correction..." /></div>
+        <div class="fg"><label>Notes</label><textarea name="notes" rows="2" placeholder="Optional..."></textarea></div>
+
+        <div style="background:#f0fdf4;border:1.5px solid #a7f3d0;border-radius:10px;padding:14px;">
+          <div style="font-weight:700;font-size:13.5px;margin-bottom:8px;color:#065f46;"><i class="bi bi-boxes me-2"></i>Stock Return?</div>
+          <div style="display:flex;gap:16px;">
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;"><input type="radio" name="stock_return" value="1" />
+              <span><strong>Yes — Stock wapas aaya</strong><br><small style="color:#64748b;">Product stock badh jaayega</small></span></label>
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;"><input type="radio" name="stock_return" value="0" checked />
+              <span><strong>No — Sirf financial</strong><br><small style="color:#64748b;">Stock nahi badlega</small></span></label>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="s-card">
+      <div class="s-head"><i class="bi bi-list-ul" style="color:#7c3aed;"></i> Items
+        <span style="font-size:11.5px;font-weight:400;color:var(--text-muted);margin-left:8px;" id="itemsHint">
+          Invoice select karein — items auto-load honge
+        </span>
+      </div>
+      <div class="s-body">
+        <div id="itemsContainer">
+          <div style="text-align:center;padding:30px;color:var(--text-muted);">
+            <i class="bi bi-arrow-up" style="font-size:24px;display:block;margin-bottom:8px;opacity:.4;"></i>
+            Pehle buyer aur invoice select karein
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div>
+    <div class="s-card">
+      <div class="s-head"><i class="bi bi-calculator"></i> Summary</div>
+      <div class="s-body">
+        <div style="display:flex;justify-content:space-between;padding:6px 0;font-size:13.5px;border-bottom:1px solid #f1f5f9;"><span>Subtotal</span><span id="subDisplay">₹ 0.00</span></div>
+        <div style="display:flex;justify-content:space-between;padding:6px 0;font-size:13.5px;border-bottom:1px solid #f1f5f9;"><span>GST</span><span id="gstDisplay">₹ 0.00</span></div>
+        <div style="display:flex;justify-content:space-between;padding:10px 0;font-size:16px;font-weight:800;color:#7c3aed;"><span>Grand Total</span><span id="grandDisplay">₹ 0.00</span></div>
+        <button type="submit" class="btn-primary-custom w-100" id="saveBtn"
+                style="background:#7c3aed;border-color:#7c3aed;justify-content:center;padding:12px;">
+          <i class="bi bi-save2"></i> Save Credit Note
+        </button>
+      </div>
+    </div>
+    <div class="s-card" style="background:#fff7ed;border-color:#fed7aa;">
+      <div class="s-head" style="background:#fff7ed;color:#c2410c;"><i class="bi bi-info-circle"></i> Note</div>
+      <div class="s-body" style="font-size:12.5px;color:#92400e;">
+        <ul style="padding-left:16px;margin:0;">
+          <li>Buyer ka outstanding reduce hoga</li>
+          <li>Stock Return = Yes → product stock bhi badh jaayega</li>
+          <li>Buyer Ledger mein entry aayegi</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+</form>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let itemCount = 0;
+
+async function loadBuyerInvoices() {
+  const buyerId = document.getElementById('buyerSelect').value;
+  const sel     = document.getElementById('invoiceSelect');
+  sel.innerHTML = '<option value="">-- Loading... --</option>';
+  sel.disabled  = true;
+
+  if (!buyerId) {
+    sel.innerHTML = '<option value="">-- Pehle Buyer select karein --</option>';
+    return;
+  }
+
+  const res  = await fetch(`/api/buyer-invoices?buyer_id=${buyerId}`);
+  const data = await res.json();
+
+  sel.innerHTML = '<option value="">-- Invoice select karein (optional) --</option>';
+  data.forEach(inv => {
+    const opt = document.createElement('option');
+    opt.value = inv.id;
+    opt.textContent = `${inv.invoice_no}  (${inv.invoice_date})  ₹${parseFloat(inv.grand_total).toFixed(2)}`;
+    sel.appendChild(opt);
+  });
+  sel.disabled = false;
+}
+
+async function loadInvoiceItems() {
+  const invId = document.getElementById('invoiceSelect').value;
+  const cont  = document.getElementById('itemsContainer');
+  const hint  = document.getElementById('itemsHint');
+  const info  = document.getElementById('invoiceInfo');
+
+  if (!invId) {
+    cont.innerHTML = `<div style="text-align:center;padding:30px;color:var(--text-muted);">
+      <i class="bi bi-arrow-up" style="font-size:24px;display:block;margin-bottom:8px;opacity:.4;"></i>
+      Invoice select karein — items load honge</div>`;
+    hint.textContent = 'Invoice select karein — items auto-load honge';
+    info.style.display = 'none';
+    recalcAll();
+    return;
+  }
+
+  cont.innerHTML = '<div style="text-align:center;padding:20px;color:var(--text-muted);"><span class="spinner-border spinner-border-sm"></span> Loading items...</div>';
+  const res   = await fetch(`/api/invoice-items/${invId}`);
+  const items = await res.json();
+
+  cont.innerHTML = '';
+  itemCount = 0;
+  items.forEach(it => addRow(it));
+
+  hint.textContent = `${items.length} items loaded — delete kar sakte hain`;
+  info.style.display = 'block';
+  recalcAll();
+}
+
+function addRow(it) {
+  const idx = itemCount++;
+  const div = document.createElement('div');
+  div.className = 'item-row';
+  div.id = `row_${idx}`;
+  const gstOpts = [0,5,12,18,28].map(g =>
+    `<option value="${g}" ${parseFloat(it?.gst_rate||0)==g?'selected':''}>${g}%</option>`
+  ).join('');
+  div.innerHTML = `
+    <span class="item-num">${idx+1}</span>
+    <button type="button" class="item-del" onclick="delRow(${idx})"><i class="bi bi-trash3"></i></button>
+    <div class="item-body">
+      <div class="fg" style="margin-bottom:8px;">
+        <label>Description</label>
+        <input type="text" name="description[]" id="desc_${idx}" class="iput"
+               value="${it?.description||''}" readonly style="background:#f0fdf4;font-weight:600;" />
+        <input type="hidden" name="product_id[]" value="${it?.product_id||0}" />
+        <input type="hidden" name="hsn[]" id="hsn_${idx}" value="${it?.hsn||''}" />
+      </div>
+      <div class="item-grid">
+        <div class="fg"><label>GST %</label>
+          <select name="gst_rate[]" id="gst_${idx}" onchange="recalc(${idx})" class="iput" style="padding:7px;">
+            ${gstOpts}
+          </select></div>
+        <div class="fg"><label>Qty</label>
+          <input type="number" name="quantity[]" id="qty_${idx}" class="iput"
+                 value="${it?.quantity||1}" step="0.01" min="0" oninput="recalc(${idx})" /></div>
+        <div class="fg"><label>Rate (₹)</label>
+          <input type="number" name="rate[]" id="rate_${idx}" class="iput"
+                 value="${it?.rate||0}" step="0.01" min="0" oninput="recalc(${idx})" /></div>
+        <div class="fg"><label>Amount</label>
+          <input type="hidden" name="amount[]" id="amt_${idx}" value="0" />
+          <div id="tot_${idx}" style="padding:7px 9px;background:#f5f3ff;border-radius:8px;font-weight:700;color:#7c3aed;font-size:13px;">₹ 0.00</div>
+        </div>
+      </div>
+    </div>`;
+  document.getElementById('itemsContainer').appendChild(div);
+  recalc(idx);
+}
+
+function delRow(idx) {
+  const el = document.getElementById(`row_${idx}`);
+  if (el) { el.remove(); recalcAll(); }
+}
+
+function recalc(idx) {
+  const qty  = parseFloat(document.getElementById(`qty_${idx}`)?.value||0);
+  const rate = parseFloat(document.getElementById(`rate_${idx}`)?.value||0);
+  const gst  = parseFloat(document.getElementById(`gst_${idx}`)?.value||0);
+  const amt  = qty * rate * (1 + gst/100);
+  const a    = document.getElementById(`amt_${idx}`);
+  const t    = document.getElementById(`tot_${idx}`);
+  if(a) a.value = amt.toFixed(4);
+  if(t) t.textContent = '₹ ' + amt.toFixed(2);
+  recalcAll();
+}
+
+function recalcAll() {
+  let sub=0, gst=0;
+  for(let i=0;i<itemCount;i++){
+    const a=document.getElementById(`amt_${i}`);
+    const q=parseFloat(document.getElementById(`qty_${i}`)?.value||0);
+    const r=parseFloat(document.getElementById(`rate_${i}`)?.value||0);
+    if(a){ const amt=parseFloat(a.value||0); sub+=q*r; gst+=amt-q*r; }
+  }
+  document.getElementById('subDisplay').textContent  = '₹ '+sub.toFixed(2);
+  document.getElementById('gstDisplay').textContent  = '₹ '+gst.toFixed(2);
+  document.getElementById('grandDisplay').textContent = '₹ '+(sub+gst).toFixed(2);
+}
+
+document.getElementById('cnForm').addEventListener('submit',function(){
+  const b=document.getElementById('saveBtn');
+  b.innerHTML='<span class="spinner-border spinner-border-sm me-2"></span>Saving...';
+  b.disabled=true;
+});
+</script>
+{% endblock %}

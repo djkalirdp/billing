@@ -281,6 +281,17 @@
               <span class="field-hint">Used when billing mode is Wholesale</span>
             </div>
 
+            <div class="form-group">
+              <label class="form-label">
+                Reorder Level (Low Stock Alert)
+                <span style="font-size:11px;color:var(--text-muted);font-weight:400;"> — alert tab aayega jab stock is se kam ho</span>
+              </label>
+              <input type="number" name="reorder_level" class="form-input"
+                     value="{{ product.reorder_level if product and product.reorder_level is not none else 5 }}"
+                     step="1" min="0" placeholder="5" />
+              <span class="field-hint">Default: 5 units. 0 = alert band.</span>
+            </div>
+
           </div>
         </div>
       </div>
