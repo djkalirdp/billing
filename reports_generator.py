@@ -1075,3 +1075,493 @@ def create_gstr2b_excel(data):
     buf = io.BytesIO()
     wb.save(buf)
     return buf.getvalue()
+
+
+# ─────────────────────────────────────────────────────────────────
+#  CUSTOMER OUTSTANDING REPORT — PDF
+# ─────────────────────────────────────────────────────────────────
+def create_customer_outstanding_pdf(data, start_date='', end_date='', only_due=False, page_size='A4'):
+    buf    = io.BytesIO()
+    styles = getSampleStyleSheet()
+
+    # Page size setup
+    _ps = (page_size or 'A4').upper()
+    if _ps == 'A4L':
+        psize = landscape(A4)
+        usable_w = 27.7*cm
+        lrm = 1.5*cm
+    elif _ps == 'A5':
+        from reportlab.lib.pagesizes import A5
+        psize = A5
+        usable_w = 12.8*cm
+        lrm = 1.0*cm
+    elif _ps == 'A5L':
+        from reportlab.lib.pagesizes import A5
+        psize = landscape(A5)
+        usable_w = 19.0*cm
+        lrm = 1.0*cm
+    else:  # A4 default
+        psize = A4
+        usable_w = 19.0*cm
+        lrm = 1.0*cm
+
+    doc = SimpleDocTemplate(buf, pagesize=psize,
+                            leftMargin=lrm, rightMargin=lrm,
+                            topMargin=1.5*cm, bottomMargin=1.5*cm)
+
+    period = f"{start_date} to {end_date}" if start_date and end_date else "All Time"
+    filter_note = " (Only Due)" if only_due else ""
+    elems = _report_header(
+        f'Customer Outstanding Report{filter_note}',
+        f"Period: {period}",
+        styles
+    )
+
+    # Auto-scale columns to usable width
+    headers = ['S.No.', 'Customer', 'Phone', 'Opening Bal',
+               'Total Invoiced', 'Total Paid', 'Outstanding', 'Status']
+    _raw = [1.2, 5.0, 2.8, 2.5, 3.0, 2.8, 2.8, 2.0]
+    _scale = usable_w / (sum(_raw) * cm)
+    col_w = [w * _scale * cm for w in _raw]
+    rows    = [headers]
+
+    total_inv = total_paid = total_out = 0
+    for i, r in enumerate(data, 1):
+        status = '🔴 Due' if r['outstanding'] > 0 else '✅ Clear'
+        rows.append([
+            str(i),
+            r['name'],
+            r.get('phone', '—') or '—',
+            _rupee(r.get('opening', 0)),
+            _rupee(r['total_invoiced']),
+            _rupee(r['total_paid']),
+            _rupee(r['outstanding']),
+            status,
+        ])
+        total_inv  += r['total_invoiced']
+        total_paid += r['total_paid']
+        total_out  += r['outstanding']
+
+    # Totals row
+    rows.append(['', 'TOTAL', '', '', _rupee(total_inv), _rupee(total_paid), _rupee(total_out), ''])
+
+    t = Table(rows, colWidths=col_w, repeatRows=1)
+    ts = _tbl_style(header_col=C_ACCENT)
+    for col in [3,4,5,6]:
+        ts.add('ALIGN', (col,1), (col,-1), 'RIGHT')
+    # Highlight due rows
+    for i, r in enumerate(data, 1):
+        if r['outstanding'] > 0:
+            ts.add('TEXTCOLOR', (6,i), (6,i), C_DANGER)
+            ts.add('FONTNAME',  (6,i), (6,i), 'Helvetica-Bold')
+    # Bold totals
+    ts.add('FONTNAME',   (0,-1), (-1,-1), 'Helvetica-Bold')
+    ts.add('BACKGROUND', (0,-1), (-1,-1), colors.HexColor('#EFF6FF'))
+    ts.add('LINEABOVE',  (0,-1), (-1,-1), 1, C_ACCENT)
+    t.setStyle(ts)
+    elems.append(t)
+
+    elems.append(Spacer(1, 10))
+    elems.append(Paragraph(
+        f"Total Outstanding (Receivable): <b>{_rupee(total_out)}</b>  |  "
+        f"Total Invoiced: {_rupee(total_inv)}  |  Total Collected: {_rupee(total_paid)}",
+        ParagraphStyle('sum', fontName='Helvetica-Bold', fontSize=10,
+                       textColor=C_ACCENT, spaceAfter=4)
+    ))
+
+    doc.build(elems)
+    return buf.getvalue()
+
+
+def create_customer_outstanding_excel(data, start_date='', end_date='', only_due=False):
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Customer Outstanding"
+    period = f"{start_date} to {end_date}" if start_date else "All Time"
+
+    # Header rows
+    ws['A1'] = f"Customer Outstanding Report — {period}"
+    ws['A1'].font = Font(bold=True, size=13, color='2563EB')
+    ws['A2'] = f"Company: {_co('name')}"
+    ws['A2'].font = Font(bold=True, size=10)
+    ws.append([])
+
+    headers = ['S.No.', 'Customer', 'Phone', 'GSTIN', 'Opening Bal',
+               'Total Invoiced', 'Total Paid', 'Outstanding', 'Status']
+    ws.append(headers)
+    hrow = ws.max_row
+    for cell in ws[hrow]:
+        cell.font      = Font(bold=True, color='FFFFFF')
+        cell.fill      = PatternFill('solid', fgColor='2563EB')
+        cell.alignment = Alignment(horizontal='center')
+
+    total_inv = total_paid = total_out = 0
+    for i, r in enumerate(data, 1):
+        status = 'Due' if r['outstanding'] > 0 else 'Clear'
+        ws.append([
+            i, r['name'], r.get('phone',''), r.get('gstin',''),
+            r.get('opening',0),
+            r['total_invoiced'], r['total_paid'], r['outstanding'],
+            status,
+        ])
+        row_num = ws.max_row
+        if r['outstanding'] > 0:
+            ws.cell(row_num, 8).font = Font(bold=True, color='DC2626')
+        total_inv += r['total_invoiced']
+        total_paid += r['total_paid']
+        total_out  += r['outstanding']
+
+    # Totals
+    ws.append(['', 'TOTAL', '', '', '', total_inv, total_paid, total_out, ''])
+    trow = ws.max_row
+    for cell in ws[trow]:
+        cell.font = Font(bold=True)
+        cell.fill = PatternFill('solid', fgColor='EFF6FF')
+
+    # Column widths
+    for col, w in enumerate([6,28,14,20,14,16,14,14,10], 1):
+        ws.column_dimensions[get_column_letter(col)].width = w
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    return buf.getvalue()
+
+
+# ─────────────────────────────────────────────────────────────────
+#  VENDOR OUTSTANDING REPORT — PDF
+# ─────────────────────────────────────────────────────────────────
+def create_vendor_outstanding_pdf(data, start_date='', end_date='', only_due=False, page_size='A4'):
+    buf    = io.BytesIO()
+    styles = getSampleStyleSheet()
+
+    _ps = (page_size or 'A4').upper()
+    if _ps == 'A4L':
+        psize = landscape(A4)
+        usable_w = 27.7*cm
+        lrm = 1.5*cm
+    elif _ps == 'A5':
+        from reportlab.lib.pagesizes import A5
+        psize = A5
+        usable_w = 12.8*cm
+        lrm = 1.0*cm
+    elif _ps == 'A5L':
+        from reportlab.lib.pagesizes import A5
+        psize = landscape(A5)
+        usable_w = 19.0*cm
+        lrm = 1.0*cm
+    else:
+        psize = A4
+        usable_w = 19.0*cm
+        lrm = 1.0*cm
+
+    doc = SimpleDocTemplate(buf, pagesize=psize,
+                            leftMargin=lrm, rightMargin=lrm,
+                            topMargin=1.5*cm, bottomMargin=1.5*cm)
+
+    period = f"{start_date} to {end_date}" if start_date and end_date else "All Time"
+    filter_note = " (Only Due)" if only_due else ""
+    elems = _report_header(
+        f'Vendor Outstanding Report{filter_note}',
+        f"Period: {period}",
+        styles
+    )
+
+    headers = ['S.No.', 'Vendor', 'Phone', 'Total Purchases', 'Total Paid', 'Payable', 'Status']
+    _raw = [1.2, 5.5, 3.0, 3.5, 3.2, 3.2, 2.2]
+    _scale = usable_w / (sum(_raw) * cm)
+    col_w = [w * _scale * cm for w in _raw]
+    rows    = [headers]
+
+    total_pur = total_paid = total_pay = 0
+    for i, r in enumerate(data, 1):
+        status = '🔴 Pay' if r['payable'] > 0 else '✅ Clear'
+        rows.append([
+            str(i),
+            r['name'],
+            r.get('phone','—') or '—',
+            _rupee(r['total_purchases']),
+            _rupee(r['total_paid']),
+            _rupee(r['payable']),
+            status,
+        ])
+        total_pur  += r['total_purchases']
+        total_paid += r['total_paid']
+        total_pay  += r['payable']
+
+    rows.append(['', 'TOTAL', '', _rupee(total_pur), _rupee(total_paid), _rupee(total_pay), ''])
+
+    t = Table(rows, colWidths=col_w, repeatRows=1)
+    ts = _tbl_style(header_col=C_WARN)
+    for col in [3,4,5]:
+        ts.add('ALIGN', (col,1), (col,-1), 'RIGHT')
+    for i, r in enumerate(data, 1):
+        if r['payable'] > 0:
+            ts.add('TEXTCOLOR', (5,i), (5,i), C_DANGER)
+            ts.add('FONTNAME',  (5,i), (5,i), 'Helvetica-Bold')
+    ts.add('FONTNAME',   (0,-1), (-1,-1), 'Helvetica-Bold')
+    ts.add('BACKGROUND', (0,-1), (-1,-1), colors.HexColor('#FFFBEB'))
+    ts.add('LINEABOVE',  (0,-1), (-1,-1), 1, C_WARN)
+    t.setStyle(ts)
+    elems.append(t)
+
+    elems.append(Spacer(1, 10))
+    elems.append(Paragraph(
+        f"Total Payable to Vendors: <b>{_rupee(total_pay)}</b>  |  "
+        f"Total Purchased: {_rupee(total_pur)}  |  Total Paid: {_rupee(total_paid)}",
+        ParagraphStyle('sum2', fontName='Helvetica-Bold', fontSize=10,
+                       textColor=C_WARN, spaceAfter=4)
+    ))
+
+    doc.build(elems)
+    return buf.getvalue()
+
+
+def create_vendor_outstanding_excel(data, start_date='', end_date='', only_due=False):
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Vendor Outstanding"
+    period = f"{start_date} to {end_date}" if start_date else "All Time"
+
+    ws['A1'] = f"Vendor Outstanding Report — {period}"
+    ws['A1'].font = Font(bold=True, size=13, color='D97706')
+    ws['A2'] = f"Company: {_co('name')}"
+    ws['A2'].font = Font(bold=True, size=10)
+    ws.append([])
+
+    headers = ['S.No.', 'Vendor', 'Phone', 'GSTIN',
+               'Total Purchases', 'Total Paid', 'Payable', 'Status']
+    ws.append(headers)
+    hrow = ws.max_row
+    for cell in ws[hrow]:
+        cell.font      = Font(bold=True, color='FFFFFF')
+        cell.fill      = PatternFill('solid', fgColor='D97706')
+        cell.alignment = Alignment(horizontal='center')
+
+    total_pur = total_paid = total_pay = 0
+    for i, r in enumerate(data, 1):
+        status = 'Payable' if r['payable'] > 0 else 'Clear'
+        ws.append([i, r['name'], r.get('phone',''), r.get('gstin',''),
+                   r['total_purchases'], r['total_paid'], r['payable'], status])
+        row_num = ws.max_row
+        if r['payable'] > 0:
+            ws.cell(row_num, 7).font = Font(bold=True, color='DC2626')
+        total_pur  += r['total_purchases']
+        total_paid += r['total_paid']
+        total_pay  += r['payable']
+
+    ws.append(['', 'TOTAL', '', '', total_pur, total_paid, total_pay, ''])
+    trow = ws.max_row
+    for cell in ws[trow]:
+        cell.font = Font(bold=True)
+        cell.fill = PatternFill('solid', fgColor='FFFBEB')
+
+    for col, w in enumerate([6,28,14,20,16,14,14,10], 1):
+        ws.column_dimensions[get_column_letter(col)].width = w
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    return buf.getvalue()
+
+
+
+# ─────────────────────────────────────────────────────────────────
+#  CREDIT NOTE PDF
+# ─────────────────────────────────────────────────────────────────
+def create_credit_note_pdf(cn, items, settings, page_size='A4'):
+    buf    = io.BytesIO()
+    _ps    = (page_size or 'A4').upper()
+    from reportlab.lib.pagesizes import A5
+    if _ps == 'A4L':
+        psize = landscape(A4); lrm = 1.5*cm; uw = 27.7*cm
+    elif _ps == 'A5':
+        psize = A5;            lrm = 1.0*cm; uw = 12.8*cm
+    elif _ps == 'A5L':
+        psize = landscape(A5); lrm = 1.0*cm; uw = 19.0*cm
+    else:
+        psize = A4;            lrm = 1.5*cm; uw = 19.0*cm
+
+    doc  = SimpleDocTemplate(buf, pagesize=psize,
+                              leftMargin=lrm, rightMargin=lrm,
+                              topMargin=1.5*cm, bottomMargin=1.5*cm)
+    sty  = getSampleStyleSheet()
+    c_info = settings.get('company_info', {})
+    elems  = []
+
+    # ── Header ──
+    elems.append(Paragraph(c_info.get('name',''), ParagraphStyle('cname', fontName='Helvetica-Bold', fontSize=14, textColor=C_ACCENT, alignment=1, spaceAfter=2)))
+    gstin = c_info.get('gstin','')
+    if gstin: elems.append(Paragraph(f"GSTIN: {gstin}", ParagraphStyle('gs', fontName='Helvetica', fontSize=8, textColor=C_MUTED, alignment=1, spaceAfter=1)))
+    elems.append(HRFlowable(width='100%', thickness=1.5, color=C_ACCENT, spaceAfter=4))
+    elems.append(Paragraph('<b>CREDIT NOTE</b>', ParagraphStyle('doc', fontName='Helvetica-Bold', fontSize=12, alignment=1, spaceAfter=6)))
+
+    # ── Info table ──
+    lbl = ParagraphStyle('lbl', fontName='Helvetica-Bold', fontSize=8, textColor=C_MUTED)
+    val = ParagraphStyle('val', fontName='Helvetica', fontSize=9)
+    half = uw / 2
+    t_info = Table([
+        [Paragraph('CN No.', lbl),         Paragraph(str(cn.get('cn_no','')), val),
+         Paragraph('Buyer', lbl),           Paragraph(str(cn.get('buyer_name','')), val)],
+        [Paragraph('Date', lbl),            Paragraph(str(cn.get('cn_date','')), val),
+         Paragraph('Against Invoice', lbl), Paragraph(str(cn.get('invoice_id','—')), val)],
+        [Paragraph('Reason', lbl),          Paragraph(str(cn.get('reason','—')), val),
+         Paragraph('Stock Return', lbl),    Paragraph('Yes' if cn.get('stock_return') else 'No', val)],
+    ], colWidths=[2.5*cm, half-2.5*cm, 2.5*cm, half-2.5*cm])
+    t_info.setStyle(TableStyle([
+        ('BOX',     (0,0),(-1,-1), 0.5, C_BORDER),
+        ('GRID',    (0,0),(-1,-1), 0.3, C_BORDER),
+        ('VALIGN',  (0,0),(-1,-1), 'MIDDLE'),
+        ('TOPPADDING', (0,0),(-1,-1), 4),
+        ('BOTTOMPADDING', (0,0),(-1,-1), 4),
+        ('LEFTPADDING', (0,0),(-1,-1), 5),
+    ]))
+    elems.extend([t_info, Spacer(1,6)])
+
+    # ── Items ──
+    hdrs = ['S.No.','Description','HSN','GST%','Qty','Rate','Amount']
+    raw  = [1.0, 6.0, 2.0, 1.5, 1.5, 2.0, 2.5]
+    sc   = uw / (sum(raw)*cm)
+    cw   = [w*sc*cm for w in raw]
+    rows = [[Paragraph(f'<b>{h}</b>', ParagraphStyle('h',fontName='Helvetica-Bold',fontSize=8,alignment=1)) for h in hdrs]]
+    for i, it in enumerate(items, 1):
+        rows.append([
+            Paragraph(str(i), ParagraphStyle('c',fontName='Helvetica',fontSize=8,alignment=1)),
+            Paragraph(str(it.get('description','')), ParagraphStyle('l',fontName='Helvetica',fontSize=8)),
+            Paragraph(str(it.get('hsn','')), ParagraphStyle('c2',fontName='Helvetica',fontSize=8,alignment=1)),
+            Paragraph(f"{it.get('gst_rate',0)}%", ParagraphStyle('c3',fontName='Helvetica',fontSize=8,alignment=1)),
+            Paragraph(str(it.get('quantity',0)), ParagraphStyle('r',fontName='Helvetica',fontSize=8,alignment=2)),
+            Paragraph(f"Rs.{float(it.get('rate',0)):.2f}", ParagraphStyle('r2',fontName='Helvetica',fontSize=8,alignment=2)),
+            Paragraph(f"Rs.{float(it.get('amount',0)):.2f}", ParagraphStyle('r3',fontName='Helvetica-Bold',fontSize=8,alignment=2)),
+        ])
+    t_items = Table(rows, colWidths=cw, repeatRows=1)
+    t_items.setStyle(TableStyle([
+        ('BACKGROUND', (0,0),(-1,0), C_ACCENT),
+        ('TEXTCOLOR',  (0,0),(-1,0), colors.white),
+        ('GRID',       (0,0),(-1,-1), 0.3, C_BORDER),
+        ('ROWBACKGROUNDS',(0,1),(-1,-1),[colors.white, C_LIGHT]),
+        ('TOPPADDING', (0,0),(-1,-1), 4),
+        ('BOTTOMPADDING',(0,0),(-1,-1), 4),
+        ('LEFTPADDING', (0,0),(-1,-1), 4),
+        ('RIGHTPADDING',(0,0),(-1,-1), 4),
+    ]))
+    elems.extend([t_items, Spacer(1,6)])
+
+    # ── Totals ──
+    tot_rows = []
+    if float(cn.get('total_igst',0)) > 0:
+        tot_rows.append(['IGST', f"Rs.{float(cn.get('total_igst',0)):.2f}"])
+    else:
+        tot_rows.append(['CGST', f"Rs.{float(cn.get('total_cgst',0)):.2f}"])
+        tot_rows.append(['SGST', f"Rs.{float(cn.get('total_sgst',0)):.2f}"])
+    tot_rows.append(['Grand Total', f"Rs.{float(cn.get('grand_total',0)):.2f}"])
+    t_tot = Table([[Paragraph(r[0], ParagraphStyle('tl',fontName='Helvetica-Bold',fontSize=9,alignment=2)),
+                    Paragraph(r[1], ParagraphStyle('tv',fontName='Helvetica-Bold' if r[0]=='Grand Total' else 'Helvetica',fontSize=9,alignment=2,textColor=colors.HexColor('#7c3aed') if r[0]=='Grand Total' else colors.black))]
+                   for r in tot_rows],
+                  colWidths=[uw-4*cm, 4*cm])
+    t_tot.setStyle(TableStyle([
+        ('ALIGN',(0,0),(-1,-1),'RIGHT'),
+        ('TOPPADDING',(0,0),(-1,-1),3),
+        ('BOTTOMPADDING',(0,0),(-1,-1),3),
+        ('LINEABOVE',(0,-1),(-1,-1),1,C_ACCENT),
+    ]))
+    elems.append(t_tot)
+
+    if cn.get('notes'):
+        elems.append(Spacer(1,6))
+        elems.append(Paragraph(f"Notes: {cn['notes']}", ParagraphStyle('n',fontName='Helvetica',fontSize=8,textColor=C_MUTED)))
+
+    doc.build(elems)
+    return buf.getvalue()
+
+
+# ─────────────────────────────────────────────────────────────────
+#  DEBIT NOTE PDF
+# ─────────────────────────────────────────────────────────────────
+def create_debit_note_pdf(dn, items, settings, page_size='A4'):
+    buf   = io.BytesIO()
+    _ps   = (page_size or 'A4').upper()
+    from reportlab.lib.pagesizes import A5
+    if _ps == 'A4L':
+        psize = landscape(A4); lrm = 1.5*cm; uw = 27.7*cm
+    elif _ps == 'A5':
+        psize = A5;            lrm = 1.0*cm; uw = 12.8*cm
+    elif _ps == 'A5L':
+        psize = landscape(A5); lrm = 1.0*cm; uw = 19.0*cm
+    else:
+        psize = A4;            lrm = 1.5*cm; uw = 19.0*cm
+
+    doc  = SimpleDocTemplate(buf, pagesize=psize,
+                              leftMargin=lrm, rightMargin=lrm,
+                              topMargin=1.5*cm, bottomMargin=1.5*cm)
+    c_info = settings.get('company_info', {})
+    elems  = []
+
+    elems.append(Paragraph(c_info.get('name',''), ParagraphStyle('cname', fontName='Helvetica-Bold', fontSize=14, textColor=C_WARN, alignment=1, spaceAfter=2)))
+    gstin = c_info.get('gstin','')
+    if gstin: elems.append(Paragraph(f"GSTIN: {gstin}", ParagraphStyle('gs',fontName='Helvetica',fontSize=8,textColor=C_MUTED,alignment=1,spaceAfter=1)))
+    elems.append(HRFlowable(width='100%', thickness=1.5, color=C_WARN, spaceAfter=4))
+    elems.append(Paragraph('<b>DEBIT NOTE</b>', ParagraphStyle('doc',fontName='Helvetica-Bold',fontSize=12,alignment=1,spaceAfter=6)))
+
+    lbl = ParagraphStyle('lbl',fontName='Helvetica-Bold',fontSize=8,textColor=C_MUTED)
+    val = ParagraphStyle('val',fontName='Helvetica',fontSize=9)
+    half = uw / 2
+    t_info = Table([
+        [Paragraph('DN No.',lbl), Paragraph(str(dn.get('dn_no','')),val),
+         Paragraph('Vendor',lbl), Paragraph(str(dn.get('vendor_name','')),val)],
+        [Paragraph('Date',lbl),   Paragraph(str(dn.get('dn_date','')),val),
+         Paragraph('Purchase',lbl),Paragraph(str(dn.get('purchase_id','—')),val)],
+        [Paragraph('Reason',lbl), Paragraph(str(dn.get('reason','—')),val),
+         Paragraph('Stock Return',lbl),Paragraph('Yes' if dn.get('stock_return') else 'No',val)],
+    ], colWidths=[2.5*cm, half-2.5*cm, 2.5*cm, half-2.5*cm])
+    t_info.setStyle(TableStyle([
+        ('BOX',(0,0),(-1,-1),0.5,C_BORDER),('GRID',(0,0),(-1,-1),0.3,C_BORDER),
+        ('VALIGN',(0,0),(-1,-1),'MIDDLE'),('TOPPADDING',(0,0),(-1,-1),4),
+        ('BOTTOMPADDING',(0,0),(-1,-1),4),('LEFTPADDING',(0,0),(-1,-1),5),
+    ]))
+    elems.extend([t_info, Spacer(1,6)])
+
+    hdrs = ['S.No.','Description','HSN','GST%','Qty','Rate','Amount']
+    raw  = [1.0, 6.0, 2.0, 1.5, 1.5, 2.0, 2.5]
+    sc   = uw / (sum(raw)*cm)
+    cw   = [w*sc*cm for w in raw]
+    rows = [[Paragraph(f'<b>{h}</b>', ParagraphStyle('h',fontName='Helvetica-Bold',fontSize=8,alignment=1)) for h in hdrs]]
+    for i, it in enumerate(items, 1):
+        rows.append([
+            Paragraph(str(i), ParagraphStyle('c',fontName='Helvetica',fontSize=8,alignment=1)),
+            Paragraph(str(it.get('description','')), ParagraphStyle('l',fontName='Helvetica',fontSize=8)),
+            Paragraph(str(it.get('hsn','')), ParagraphStyle('c2',fontName='Helvetica',fontSize=8,alignment=1)),
+            Paragraph(f"{it.get('gst_rate',0)}%", ParagraphStyle('c3',fontName='Helvetica',fontSize=8,alignment=1)),
+            Paragraph(str(it.get('quantity',0)), ParagraphStyle('r',fontName='Helvetica',fontSize=8,alignment=2)),
+            Paragraph(f"Rs.{float(it.get('rate',0)):.2f}", ParagraphStyle('r2',fontName='Helvetica',fontSize=8,alignment=2)),
+            Paragraph(f"Rs.{float(it.get('amount',0)):.2f}", ParagraphStyle('r3',fontName='Helvetica-Bold',fontSize=8,alignment=2)),
+        ])
+    t_items = Table(rows, colWidths=cw, repeatRows=1)
+    t_items.setStyle(TableStyle([
+        ('BACKGROUND',(0,0),(-1,0),C_WARN),('TEXTCOLOR',(0,0),(-1,0),colors.white),
+        ('GRID',(0,0),(-1,-1),0.3,C_BORDER),('ROWBACKGROUNDS',(0,1),(-1,-1),[colors.white,C_LIGHT]),
+        ('TOPPADDING',(0,0),(-1,-1),4),('BOTTOMPADDING',(0,0),(-1,-1),4),
+        ('LEFTPADDING',(0,0),(-1,-1),4),('RIGHTPADDING',(0,0),(-1,-1),4),
+    ]))
+    elems.extend([t_items, Spacer(1,6)])
+
+    tot_rows = [
+        ['CGST', f"Rs.{float(dn.get('total_cgst',0)):.2f}"],
+        ['SGST', f"Rs.{float(dn.get('total_sgst',0)):.2f}"],
+        ['Grand Total', f"Rs.{float(dn.get('grand_total',0)):.2f}"],
+    ]
+    t_tot = Table([[Paragraph(r[0],ParagraphStyle('tl',fontName='Helvetica-Bold',fontSize=9,alignment=2)),
+                    Paragraph(r[1],ParagraphStyle('tv',fontName='Helvetica-Bold' if r[0]=='Grand Total' else 'Helvetica',fontSize=9,alignment=2,textColor=colors.HexColor('#d97706') if r[0]=='Grand Total' else colors.black))]
+                   for r in tot_rows],
+                  colWidths=[uw-4*cm, 4*cm])
+    t_tot.setStyle(TableStyle([
+        ('ALIGN',(0,0),(-1,-1),'RIGHT'),('TOPPADDING',(0,0),(-1,-1),3),
+        ('BOTTOMPADDING',(0,0),(-1,-1),3),('LINEABOVE',(0,-1),(-1,-1),1,C_WARN),
+    ]))
+    elems.append(t_tot)
+
+    if dn.get('notes'):
+        elems.append(Spacer(1,6))
+        elems.append(Paragraph(f"Notes: {dn['notes']}", ParagraphStyle('n',fontName='Helvetica',fontSize=8,textColor=C_MUTED)))
+
+    doc.build(elems)
+    return buf.getvalue()
+

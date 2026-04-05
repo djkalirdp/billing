@@ -197,6 +197,16 @@ def create_tables():
         "ALTER TABLE purchase_items ADD COLUMN igst_amount REAL DEFAULT 0",
         "ALTER TABLE purchase_items ADD COLUMN total_amount REAL DEFAULT 0",
         "ALTER TABLE purchase_items ADD COLUMN gst_rate REAL DEFAULT 0",
+        # Custom reorder level per product
+        "ALTER TABLE products ADD COLUMN reorder_level REAL DEFAULT 5",
+        # Credit limit per buyer
+        "ALTER TABLE buyers ADD COLUMN credit_limit REAL DEFAULT 0",
+        # batch_tracking new columns (for existing DBs)
+        "ALTER TABLE batch_tracking ADD COLUMN purchase_item_id INTEGER DEFAULT NULL",
+        "ALTER TABLE batch_tracking ADD COLUMN invoice_item_id INTEGER DEFAULT NULL",
+        "ALTER TABLE batch_tracking ADD COLUMN buyer_id INTEGER DEFAULT NULL",
+        "ALTER TABLE batch_tracking ADD COLUMN tracking_date TEXT DEFAULT ''",
+        "ALTER TABLE batch_tracking ADD COLUMN notes TEXT DEFAULT ''",
         # vendor_payments table (for existing DBs without vendor ledger)
         """CREATE TABLE IF NOT EXISTS vendor_payments (
             id           INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -362,6 +372,78 @@ def create_tables():
             username TEXT UNIQUE NOT NULL,
             password TEXT NOT NULL,
             role     TEXT NOT NULL   -- 'Admin' | 'Cashier'
+        )
+    ''')
+
+    # ── Credit Notes ─────────────────────────
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS credit_notes (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            cn_no           TEXT UNIQUE NOT NULL,
+            cn_date         TEXT NOT NULL,
+            invoice_id      INTEGER,
+            buyer_id        INTEGER,
+            reason          TEXT,
+            stock_return    INTEGER DEFAULT 0,
+            subtotal        REAL DEFAULT 0,
+            total_gst       REAL DEFAULT 0,
+            total_cgst      REAL DEFAULT 0,
+            total_sgst      REAL DEFAULT 0,
+            total_igst      REAL DEFAULT 0,
+            grand_total     REAL DEFAULT 0,
+            notes           TEXT,
+            FOREIGN KEY (invoice_id) REFERENCES invoices(id),
+            FOREIGN KEY (buyer_id)   REFERENCES buyers(id)
+        )
+    ''')
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS credit_note_items (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            cn_id           INTEGER NOT NULL,
+            product_id      INTEGER,
+            description     TEXT,
+            hsn             TEXT,
+            gst_rate        REAL DEFAULT 0,
+            quantity        REAL DEFAULT 0,
+            rate            REAL DEFAULT 0,
+            amount          REAL DEFAULT 0,
+            FOREIGN KEY (cn_id) REFERENCES credit_notes(id)
+        )
+    ''')
+
+    # ── Debit Notes ──────────────────────────
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS debit_notes (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            dn_no           TEXT UNIQUE NOT NULL,
+            dn_date         TEXT NOT NULL,
+            purchase_id     INTEGER,
+            vendor_id       INTEGER,
+            reason          TEXT,
+            stock_return    INTEGER DEFAULT 0,
+            subtotal        REAL DEFAULT 0,
+            total_gst       REAL DEFAULT 0,
+            total_cgst      REAL DEFAULT 0,
+            total_sgst      REAL DEFAULT 0,
+            total_igst      REAL DEFAULT 0,
+            grand_total     REAL DEFAULT 0,
+            notes           TEXT,
+            FOREIGN KEY (purchase_id) REFERENCES purchases(id),
+            FOREIGN KEY (vendor_id)   REFERENCES vendors(id)
+        )
+    ''')
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS debit_note_items (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            dn_id           INTEGER NOT NULL,
+            product_id      INTEGER,
+            description     TEXT,
+            hsn             TEXT,
+            gst_rate        REAL DEFAULT 0,
+            quantity        REAL DEFAULT 0,
+            rate            REAL DEFAULT 0,
+            amount          REAL DEFAULT 0,
+            FOREIGN KEY (dn_id) REFERENCES debit_notes(id)
         )
     ''')
 
@@ -739,11 +821,17 @@ def restore_variation_stock(variation_id, qty):
         conn.close()
 
 
-def get_low_stock_products(threshold=10):
-    """Return all products with stock_qty <= threshold."""
+def get_low_stock_products(threshold=None):
+    """
+    Return all products where stock_qty <= reorder_level.
+    Each product uses its own reorder_level (default 5 if not set).
+    threshold param kept for backward compatibility but ignored.
+    """
     return execute_query(
-        "SELECT * FROM products WHERE stock_qty <= ? ORDER BY stock_qty ASC",
-        (threshold,), fetchall=True
+        """SELECT * FROM products
+           WHERE stock_qty <= COALESCE(reorder_level, 5)
+           ORDER BY stock_qty ASC""",
+        fetchall=True
     )
 
 
@@ -1490,6 +1578,409 @@ def get_all_vendor_balances():
     return result
 
 
+
+
+# ─────────────────────────────────────────────
+#  CREDIT NOTES
+# ─────────────────────────────────────────────
+
+def get_next_cn_number():
+    """Auto-generate next credit note number CN-0001, CN-0002..."""
+    conn = get_db_connection()
+    c = conn.cursor()
+    row = c.execute(
+        "SELECT cn_no FROM credit_notes ORDER BY id DESC LIMIT 1"
+    ).fetchone()
+    conn.close()
+    if row:
+        try:
+            num = int(row['cn_no'].split('-')[-1]) + 1
+            return f"CN-{num:04d}"
+        except:
+            pass
+    return "CN-0001"
+
+
+def save_credit_note(cn_data, items):
+    """
+    Save credit note + items.
+    If cn_data['stock_return'] = 1, restore stock for each item.
+    Also adds credit to buyer ledger as customer_payment.
+    """
+    conn = get_db_connection()
+    c = conn.cursor()
+    try:
+        c.execute("""
+            INSERT INTO credit_notes
+              (cn_no, cn_date, invoice_id, buyer_id, reason,
+               stock_return, subtotal, total_gst,
+               total_cgst, total_sgst, total_igst,
+               grand_total, notes)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
+        """, (
+            cn_data['cn_no'], cn_data['cn_date'],
+            cn_data.get('invoice_id'), cn_data.get('buyer_id'),
+            cn_data.get('reason', ''),
+            1 if cn_data.get('stock_return') else 0,
+            cn_data.get('subtotal', 0),
+            cn_data.get('total_gst', 0),
+            cn_data.get('total_cgst', 0),
+            cn_data.get('total_sgst', 0),
+            cn_data.get('total_igst', 0),
+            cn_data.get('grand_total', 0),
+            cn_data.get('notes', ''),
+        ))
+        cn_id = c.lastrowid
+
+        for item in items:
+            c.execute("""
+                INSERT INTO credit_note_items
+                  (cn_id, product_id, description, hsn,
+                   gst_rate, quantity, rate, amount)
+                VALUES (?,?,?,?,?,?,?,?)
+            """, (
+                cn_id,
+                item.get('product_id') or None,
+                item.get('description', ''),
+                item.get('hsn', ''),
+                item.get('gst_rate', 0),
+                item.get('quantity', 0),
+                item.get('rate', 0),
+                item.get('amount', 0),
+            ))
+            # Restore stock if selected
+            if cn_data.get('stock_return') and item.get('product_id'):
+                c.execute(
+                    "UPDATE products SET stock_qty = stock_qty + ? WHERE id = ?",
+                    (item['quantity'], item['product_id'])
+                )
+
+        # Add credit to buyer ledger as a payment
+        if cn_data.get('buyer_id') and cn_data.get('grand_total', 0) > 0:
+            c.execute("""
+                INSERT INTO customer_payments
+                  (buyer_id, payment_date, amount, payment_mode, notes)
+                VALUES (?,?,?,?,?)
+            """, (
+                cn_data['buyer_id'],
+                cn_data['cn_date'],
+                cn_data['grand_total'],
+                'Credit Note',
+                f"Credit Note {cn_data['cn_no']}: {cn_data.get('reason', '')}",
+            ))
+
+        conn.commit()
+        return cn_id
+    except Exception as e:
+        conn.rollback()
+        print(f"[save_credit_note ERROR] {e}")
+        return None
+    finally:
+        conn.close()
+
+
+def get_all_credit_notes():
+    return execute_query("""
+        SELECT cn.*, b.name AS buyer_name
+        FROM credit_notes cn
+        LEFT JOIN buyers b ON cn.buyer_id = b.id
+        ORDER BY cn.id DESC
+    """, fetchall=True) or []
+
+
+def get_credit_note(cn_id):
+    conn = get_db_connection()
+    c = conn.cursor()
+    cn    = c.execute("""
+        SELECT cn.*, b.name AS buyer_name, b.gstin AS buyer_gstin,
+               b.address AS buyer_address
+        FROM credit_notes cn
+        LEFT JOIN buyers b ON cn.buyer_id = b.id
+        WHERE cn.id = ?
+    """, (cn_id,)).fetchone()
+    items = c.execute(
+        "SELECT * FROM credit_note_items WHERE cn_id = ?", (cn_id,)
+    ).fetchall()
+    conn.close()
+    return (row_to_dict(cn) if cn else None), rows_to_list(items)
+
+
+# ─────────────────────────────────────────────
+#  DEBIT NOTES
+# ─────────────────────────────────────────────
+
+def get_next_dn_number():
+    """Auto-generate next debit note number DN-0001, DN-0002..."""
+    conn = get_db_connection()
+    c = conn.cursor()
+    row = c.execute(
+        "SELECT dn_no FROM debit_notes ORDER BY id DESC LIMIT 1"
+    ).fetchone()
+    conn.close()
+    if row:
+        try:
+            num = int(row['dn_no'].split('-')[-1]) + 1
+            return f"DN-{num:04d}"
+        except:
+            pass
+    return "DN-0001"
+
+
+def save_debit_note(dn_data, items):
+    """
+    Save debit note + items.
+    If dn_data['stock_return'] = 1, remove stock (goods going back to vendor).
+    Also records vendor payment credit.
+    """
+    conn = get_db_connection()
+    c = conn.cursor()
+    try:
+        c.execute("""
+            INSERT INTO debit_notes
+              (dn_no, dn_date, purchase_id, vendor_id, reason,
+               stock_return, subtotal, total_gst,
+               total_cgst, total_sgst, total_igst,
+               grand_total, notes)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
+        """, (
+            dn_data['dn_no'], dn_data['dn_date'],
+            dn_data.get('purchase_id'), dn_data.get('vendor_id'),
+            dn_data.get('reason', ''),
+            1 if dn_data.get('stock_return') else 0,
+            dn_data.get('subtotal', 0),
+            dn_data.get('total_gst', 0),
+            dn_data.get('total_cgst', 0),
+            dn_data.get('total_sgst', 0),
+            dn_data.get('total_igst', 0),
+            dn_data.get('grand_total', 0),
+            dn_data.get('notes', ''),
+        ))
+        dn_id = c.lastrowid
+
+        for item in items:
+            c.execute("""
+                INSERT INTO debit_note_items
+                  (dn_id, product_id, description, hsn,
+                   gst_rate, quantity, rate, amount)
+                VALUES (?,?,?,?,?,?,?,?)
+            """, (
+                dn_id,
+                item.get('product_id') or None,
+                item.get('description', ''),
+                item.get('hsn', ''),
+                item.get('gst_rate', 0),
+                item.get('quantity', 0),
+                item.get('rate', 0),
+                item.get('amount', 0),
+            ))
+            # Reduce stock if goods going back
+            if dn_data.get('stock_return') and item.get('product_id'):
+                c.execute(
+                    "UPDATE products SET stock_qty = MAX(0, stock_qty - ?) WHERE id = ?",
+                    (item['quantity'], item['product_id'])
+                )
+
+        # Add to vendor_payments as credit (reduces what we owe)
+        if dn_data.get('vendor_id') and dn_data.get('grand_total', 0) > 0:
+            c.execute("""
+                INSERT INTO vendor_payments
+                  (vendor_id, payment_date, amount, payment_mode, notes)
+                VALUES (?,?,?,?,?)
+            """, (
+                dn_data['vendor_id'],
+                dn_data['dn_date'],
+                dn_data['grand_total'],
+                'Debit Note',
+                f"Debit Note {dn_data['dn_no']}: {dn_data.get('reason', '')}",
+            ))
+
+        conn.commit()
+        return dn_id
+    except Exception as e:
+        conn.rollback()
+        print(f"[save_debit_note ERROR] {e}")
+        return None
+    finally:
+        conn.close()
+
+
+def get_all_debit_notes():
+    return execute_query("""
+        SELECT dn.*, v.name AS vendor_name
+        FROM debit_notes dn
+        LEFT JOIN vendors v ON dn.vendor_id = v.id
+        ORDER BY dn.id DESC
+    """, fetchall=True) or []
+
+
+def get_debit_note(dn_id):
+    conn = get_db_connection()
+    c = conn.cursor()
+    dn    = c.execute("""
+        SELECT dn.*, v.name AS vendor_name, v.gstin AS vendor_gstin,
+               v.address AS vendor_address
+        FROM debit_notes dn
+        LEFT JOIN vendors v ON dn.vendor_id = v.id
+        WHERE dn.id = ?
+    """, (dn_id,)).fetchone()
+    items = c.execute(
+        "SELECT * FROM debit_note_items WHERE dn_id = ?", (dn_id,)
+    ).fetchall()
+    conn.close()
+    return (row_to_dict(dn) if dn else None), rows_to_list(items)
+
+# ─────────────────────────────────────────────
+#  OUTSTANDING REPORTS
+# ─────────────────────────────────────────────
+
+def get_customer_outstanding(start_date=None, end_date=None, only_due=False):
+    """
+    Returns customer outstanding summary.
+    Each row: buyer_id, name, phone, gstin, total_invoiced, total_paid, outstanding
+    """
+    conn = get_db_connection()
+    c    = conn.cursor()
+    try:
+        buyers = c.execute("SELECT id, name, phone, gstin, opening_balance FROM buyers ORDER BY name").fetchall()
+        result = []
+        for b in buyers:
+            buyer_id = b['id']
+
+            # Total invoiced in period
+            if start_date and end_date:
+                row = c.execute("""
+                    SELECT COALESCE(SUM(grand_total),0)
+                    FROM invoices
+                    WHERE buyer_id=? AND invoice_date BETWEEN ? AND ?
+                      AND invoice_no NOT LIKE '[CANCELLED]%'
+                """, (buyer_id, start_date, end_date)).fetchone()
+            else:
+                row = c.execute("""
+                    SELECT COALESCE(SUM(grand_total),0)
+                    FROM invoices
+                    WHERE buyer_id=? AND invoice_no NOT LIKE '[CANCELLED]%'
+                """, (buyer_id,)).fetchone()
+            total_invoiced = row[0] or 0.0
+
+            # Total paid in period
+            if start_date and end_date:
+                row2 = c.execute("""
+                    SELECT COALESCE(SUM(amount),0)
+                    FROM customer_payments
+                    WHERE buyer_id=? AND payment_date BETWEEN ? AND ?
+                """, (buyer_id, start_date, end_date)).fetchone()
+            else:
+                row2 = c.execute("""
+                    SELECT COALESCE(SUM(amount),0)
+                    FROM customer_payments WHERE buyer_id=?
+                """, (buyer_id,)).fetchone()
+            total_paid = row2[0] or 0.0
+
+            opening = float(b['opening_balance'] or 0)
+            outstanding = round(opening + total_invoiced - total_paid, 2)
+
+            if only_due and outstanding <= 0:
+                continue
+
+            result.append({
+                'id'            : buyer_id,
+                'name'          : b['name'],
+                'phone'         : b['phone'] or '',
+                'gstin'         : b['gstin'] or '',
+                'opening'       : opening,
+                'total_invoiced': round(total_invoiced, 2),
+                'total_paid'    : round(total_paid, 2),
+                'outstanding'   : outstanding,
+            })
+
+        # Sort by outstanding desc
+        result.sort(key=lambda x: x['outstanding'], reverse=True)
+        return result
+    except Exception as e:
+        print(f"[get_customer_outstanding ERROR] {e}")
+        return []
+    finally:
+        conn.close()
+
+
+def get_vendor_outstanding(start_date=None, end_date=None, only_due=False):
+    """
+    Returns vendor outstanding summary.
+    Each row: vendor_id, name, phone, gstin, total_purchases, total_paid, payable
+    """
+    conn = get_db_connection()
+    c    = conn.cursor()
+    try:
+        vendors = c.execute("SELECT id, name, phone, gstin FROM vendors ORDER BY name").fetchall()
+        result  = []
+        for v in vendors:
+            vendor_id = v['id']
+
+            # Total purchases in period
+            if start_date and end_date:
+                row = c.execute("""
+                    SELECT COALESCE(SUM(total_amount),0) FROM purchases
+                    WHERE vendor_id=? AND purchase_date BETWEEN ? AND ?
+                """, (vendor_id, start_date, end_date)).fetchone()
+            else:
+                row = c.execute("""
+                    SELECT COALESCE(SUM(total_amount),0) FROM purchases WHERE vendor_id=?
+                """, (vendor_id,)).fetchone()
+            total_purchases = row[0] or 0.0
+
+            # Purchase payments
+            if start_date and end_date:
+                row2 = c.execute("""
+                    SELECT COALESCE(SUM(pp.amount),0)
+                    FROM purchase_payments pp
+                    JOIN purchases p ON pp.purchase_id=p.id
+                    WHERE p.vendor_id=? AND pp.payment_date BETWEEN ? AND ?
+                """, (vendor_id, start_date, end_date)).fetchone()
+            else:
+                row2 = c.execute("""
+                    SELECT COALESCE(SUM(pp.amount),0)
+                    FROM purchase_payments pp
+                    JOIN purchases p ON pp.purchase_id=p.id
+                    WHERE p.vendor_id=?
+                """, (vendor_id,)).fetchone()
+            pp_paid = row2[0] or 0.0
+
+            # Vendor payments
+            if start_date and end_date:
+                row3 = c.execute("""
+                    SELECT COALESCE(SUM(amount),0) FROM vendor_payments
+                    WHERE vendor_id=? AND payment_date BETWEEN ? AND ?
+                """, (vendor_id, start_date, end_date)).fetchone()
+            else:
+                row3 = c.execute("""
+                    SELECT COALESCE(SUM(amount),0) FROM vendor_payments WHERE vendor_id=?
+                """, (vendor_id,)).fetchone()
+            vp_paid = row3[0] or 0.0
+
+            total_paid = round(pp_paid + vp_paid, 2)
+            payable    = round(total_purchases - total_paid, 2)
+
+            if only_due and payable <= 0:
+                continue
+
+            result.append({
+                'id'             : vendor_id,
+                'name'           : v['name'],
+                'phone'          : v['phone'] or '',
+                'gstin'          : v['gstin'] or '',
+                'total_purchases': round(total_purchases, 2),
+                'total_paid'     : total_paid,
+                'payable'        : payable,
+            })
+
+        result.sort(key=lambda x: x['payable'], reverse=True)
+        return result
+    except Exception as e:
+        print(f"[get_vendor_outstanding ERROR] {e}")
+        return []
+    finally:
+        conn.close()
+
 # ─────────────────────────────────────────────
 #  PURCHASES & VENDOR PAYMENTS
 # ─────────────────────────────────────────────
@@ -1658,7 +2149,7 @@ def get_dashboard_kpi():
     total_profit = row[0] if row and row[0] else 0.0
 
     # 4. Low Stock Count
-    c.execute("SELECT COUNT(*) FROM products WHERE stock_qty <= 10")
+    c.execute("SELECT COUNT(*) FROM products WHERE stock_qty <= COALESCE(reorder_level, 5)")
     row = c.fetchone()
     low_stock = row[0] if row and row[0] else 0
 

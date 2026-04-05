@@ -70,6 +70,11 @@ from werkzeug.utils import secure_filename
 import database_manager as db
 import reports_generator as rg
 import pdf_generator
+try:
+    import pdf_generator_v2
+    _PDF_V2_AVAILABLE = True
+except ImportError:
+    _PDF_V2_AVAILABLE = False
 
 # ── Utility: number to Indian words ──────────────────────────────────────
 def _num_to_words_indian(n):
@@ -100,6 +105,60 @@ def _num_to_words_indian(n):
 # ─────────────────────────────────────────────
 #  APP SETUP
 # ─────────────────────────────────────────────
+# ─────────────────────────────────────────────
+#  LOGGING SETUP
+# ─────────────────────────────────────────────
+import logging
+from logging.handlers import RotatingFileHandler
+
+LOG_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'logs')
+os.makedirs(LOG_DIR, exist_ok=True)
+
+# Activity log — all actions
+activity_handler = RotatingFileHandler(
+    os.path.join(LOG_DIR, 'activity.log'),
+    maxBytes=5*1024*1024,  # 5MB
+    backupCount=5
+)
+activity_handler.setLevel(logging.INFO)
+activity_handler.setFormatter(logging.Formatter(
+    '%(asctime)s | %(levelname)s | %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+))
+
+# Error log — errors only
+error_handler = RotatingFileHandler(
+    os.path.join(LOG_DIR, 'error.log'),
+    maxBytes=5*1024*1024,
+    backupCount=5
+)
+error_handler.setLevel(logging.ERROR)
+error_handler.setFormatter(logging.Formatter(
+    '%(asctime)s | %(levelname)s | %(message)s | %(pathname)s:%(lineno)d',
+    datefmt='%Y-%m-%d %H:%M:%S'
+))
+
+# Console handler
+console_handler = logging.StreamHandler()
+console_handler.setLevel(logging.INFO)
+console_handler.setFormatter(logging.Formatter('%(asctime)s | %(levelname)s | %(message)s', datefmt='%H:%M:%S'))
+
+logger = logging.getLogger('billpro')
+logger.setLevel(logging.DEBUG)
+logger.addHandler(activity_handler)
+logger.addHandler(error_handler)
+logger.addHandler(console_handler)
+
+def log_activity(action, detail='', user=None):
+    """Log user activity."""
+    u = user or session.get('username', 'system')
+    logger.info(f"USER={u} | ACTION={action} | {detail}")
+
+def log_error(action, error, user=None):
+    """Log error."""
+    u = user or session.get('username', 'system')
+    logger.error(f"USER={u} | ACTION={action} | ERROR={error}")
+
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'billing-app-secret-2025-change-this')
 
@@ -238,13 +297,33 @@ with app.app_context():
 # ─────────────────────────────────────────────
 @app.context_processor
 def inject_globals():
+    _s = load_settings()
     return {
         'now'          : datetime.now(),
-        'app_name'     : load_settings().get('company_info', {}).get('name', 'Billing App'),
+        'app_name'     : _s.get('company_info', {}).get('name', 'Billing App'),
         'user_role'    : session.get('role', ''),
         'username'     : session.get('username', ''),
+        'firm_type'    : _s.get('firm_type', 'trading'),
     }
 
+
+# ─────────────────────────────────────────────
+#  REQUEST LOGGING
+# ─────────────────────────────────────────────
+@app.after_request
+def log_request(response):
+    if request.endpoint and request.method in ('POST', 'GET'):
+        if response.status_code >= 400:
+            log_error(
+                f'HTTP_{response.status_code}',
+                f"{request.method} {request.path}"
+            )
+    return response
+
+@app.errorhandler(Exception)
+def handle_exception(e):
+    log_error('UNHANDLED_EXCEPTION', f"{type(e).__name__}: {e} | Path={request.path}")
+    return f"<h2>Server Error</h2><p>{e}</p>", 500
 
 # ─────────────────────────────────────────────
 #  LOGIN / LOGOUT
@@ -461,6 +540,21 @@ def billing():
         'previous_balance' : prev_balance,   # buyer balance BEFORE this invoice
     }
 
+    # ── Credit Limit Check ────────────────────────────────────────
+    buyer_full      = db.get_by_id('buyers', buyer_id)
+    credit_limit    = float(buyer_full.get('credit_limit', 0) or 0) if buyer_full else 0
+    current_balance = db.get_buyer_current_balance(buyer_id)  # existing outstanding
+    new_total_due   = current_balance + grand_total - paid_now
+
+    if credit_limit > 0 and new_total_due > credit_limit:
+        over_by = new_total_due - credit_limit
+        flash(
+            f'⚠️ Credit Limit Warning: {buyer_name} ka credit limit ₹{credit_limit:,.0f} hai. '
+            f'Is invoice ke baad total outstanding ₹{new_total_due:,.0f} hoga — '
+            f'limit se ₹{over_by:,.0f} zyada. Invoice save ho raha hai — please payment collect karein.',
+            'warning'
+        )
+
     invoice_id = db.save_invoice(inv_data, items_data, company_state)
     if not invoice_id:
         flash('Failed to save invoice. Please try again.', 'danger')
@@ -480,7 +574,9 @@ def billing():
     full_inv, full_items = db.get_full_invoice_details(invoice_id)
     if full_inv:
         try:
-            pdf_generator.create_invoice_pdf(
+            _tmpl = settings.get('invoice_template', '1')
+            _gen  = pdf_generator_v2 if (_tmpl == '2' and _PDF_V2_AVAILABLE) else pdf_generator
+            _gen.create_invoice_pdf(
                 full_inv, full_items, settings,
                 previous_balance=prev_balance,
                 paid_amount=paid_now,
@@ -489,6 +585,7 @@ def billing():
         except Exception as e:
             flash(f'Invoice saved but PDF generation failed: {e}', 'warning')
 
+    log_activity('INVOICE_SAVE', f"InvoiceNo={inv_data['invoice_no']} Buyer={buyer_name} Total={grand_total}")
     flash(f"Invoice {inv_data['invoice_no']} saved successfully!", 'success')
     return redirect(url_for('view_invoice', invoice_id=invoice_id))
 
@@ -501,15 +598,17 @@ def buyer_info_api():
     buyers = db.get_all('buyers')
     buyer  = next((b for b in buyers if b['name'].lower() == name.lower()), None)
     if buyer:
-        balance = db.get_buyer_current_balance(buyer['id'])
+        balance      = db.get_buyer_current_balance(buyer['id'])
+        credit_limit = float(buyer.get('credit_limit', 0) or 0)
         return jsonify({
-            'found'  : True,
-            'id'     : buyer['id'],
-            'gstin'  : buyer.get('gstin', ''),
-            'address': buyer.get('address', ''),
-            'state'  : buyer.get('state', ''),
-            'phone'  : buyer.get('phone', ''),
-            'balance': balance,
+            'found'       : True,
+            'id'          : buyer['id'],
+            'gstin'       : buyer.get('gstin', ''),
+            'address'     : buyer.get('address', ''),
+            'state'       : buyer.get('state', ''),
+            'phone'       : buyer.get('phone', ''),
+            'balance'     : balance,
+            'credit_limit': credit_limit,
         })
     return jsonify({'found': False})
 
@@ -640,7 +739,9 @@ def download_invoice_pdf(invoice_id):
     paid       = float(inv.get('paid_amount')      or 0)
     prev_bal   = float(inv.get('previous_balance') or 0)
     page_size  = request.args.get('size', 'A4').upper()
-    pdf_bytes  = pdf_generator.create_invoice_pdf(
+    _tmpl = settings.get('invoice_template', '1')
+    _gen  = pdf_generator_v2 if (_tmpl == '2' and _PDF_V2_AVAILABLE) else pdf_generator
+    pdf_bytes  = _gen.create_invoice_pdf(
         inv, items, settings,
         previous_balance=prev_bal,
         paid_amount=paid,
@@ -667,6 +768,7 @@ def cancel_invoice(invoice_id):
         return redirect(url_for('invoices'))
 
     if db.cancel_invoice(invoice_id):
+        log_activity('INVOICE_CANCEL', f"InvoiceNo={inv['invoice_no']}")
         flash(f"Invoice {inv['invoice_no']} cancelled. Stock restored.", 'success')
     else:
         flash('Failed to cancel invoice.', 'danger')
@@ -780,6 +882,7 @@ def add_product():
                 'wholesale_price': float(f.get('wholesale_price', 0)),
                 'stock_qty'      : added_stock,
                 'rate'           : purch_rate,
+                'reorder_level'  : float(f.get('reorder_level', 5) or 5),
             })
             if new_id:
                 # Record batch_tracking entry if batch_no provided
@@ -793,6 +896,7 @@ def add_product():
                         'tracking_date': datetime.now().strftime('%Y-%m-%d'),
                         'notes'       : 'Opening stock entry',
                     })
+                log_activity('PRODUCT_ADD', f"Name={name}")
                 flash(f'Product "{name}" added successfully!', 'success')
             else:
                 flash('Product name already exists.', 'danger')
@@ -824,6 +928,7 @@ def edit_product(product_id):
                 'unit'           : f.get('unit', ''),
                 'selling_price'  : float(f.get('selling_price', 0)),
                 'wholesale_price': float(f.get('wholesale_price', 0)),
+                'reorder_level'  : float(f.get('reorder_level', 5) or 5),
             }
 
             # WAC stock update
@@ -964,6 +1069,11 @@ def add_buyer():
         except ValueError:
             ob = 0
 
+        try:
+            cl = float(f.get('credit_limit', 0) or 0)
+        except ValueError:
+            cl = 0
+
         result = db.add_record('buyers', {
             'name'           : f.get('name', '').strip(),
             'gstin'          : f.get('gstin', ''),
@@ -972,6 +1082,7 @@ def add_buyer():
             'email'          : f.get('email', ''),
             'state'          : f.get('state', ''),
             'opening_balance': ob,
+            'credit_limit'   : cl,
         })
         if result:
             flash('Buyer added successfully!', 'success')
@@ -997,6 +1108,11 @@ def edit_buyer(buyer_id):
         except ValueError:
             ob = buyer.get('opening_balance', 0)
 
+        try:
+            cl = float(f.get('credit_limit', 0) or 0)
+        except ValueError:
+            cl = buyer.get('credit_limit', 0)
+
         db.update_record('buyers', buyer_id, {
             'name'           : f.get('name', buyer['name']),
             'gstin'          : f.get('gstin', ''),
@@ -1005,6 +1121,7 @@ def edit_buyer(buyer_id):
             'email'          : f.get('email', ''),
             'state'          : f.get('state', ''),
             'opening_balance': ob,
+            'credit_limit'   : cl,
         })
         flash('Buyer updated successfully!', 'success')
         return redirect(url_for('buyers'))
@@ -1656,8 +1773,11 @@ def settings():
             'upi_id'   : f.get('upi_id', '').strip(),
             'upi_name' : f.get('upi_name', '').strip(),
         }
+        data['firm_type']         = f.get('firm_type', 'trading')
+        data['invoice_template']  = f.get('invoice_template', '1')
 
         save_settings(data)
+        log_activity('SETTINGS_SAVE', 'Settings updated')
         flash('Settings saved successfully!', 'success')
         return redirect(url_for('settings'))
 
@@ -1956,6 +2076,380 @@ def gstr2b_report():
         flash(f'Report generation error: {e}', 'danger')
         return redirect(url_for('reports'))
 
+
+
+
+
+# ─────────────────────────────────────────────
+#  API — CN/DN Smart Loading
+# ─────────────────────────────────────────────
+@app.route('/api/buyer-invoices')
+@login_required
+def api_buyer_invoices():
+    """Return invoices for a buyer (for CN smart load)."""
+    buyer_id = request.args.get('buyer_id', type=int)
+    if not buyer_id:
+        return jsonify([])
+    invoices = db.execute_query(
+        """SELECT id, invoice_no, invoice_date, grand_total
+           FROM invoices
+           WHERE buyer_id = ? AND invoice_no NOT LIKE '[CANCELLED]%'
+           ORDER BY id DESC""",
+        (buyer_id,), fetchall=True
+    ) or []
+    return jsonify([dict(r) for r in invoices])
+
+
+@app.route('/api/invoice-items/<int:invoice_id>')
+@login_required
+def api_invoice_items(invoice_id):
+    """Return items of an invoice (for CN auto-populate)."""
+    _, items = db.get_full_invoice_details(invoice_id)
+    result = []
+    for it in items:
+        result.append({
+            'product_id'      : it.get('product_id'),
+            'description'     : it.get('description', ''),
+            'hsn'             : it.get('hsn', ''),
+            'gst_rate'        : it.get('gst_rate', 0),
+            'quantity'        : it.get('quantity', 0),
+            'rate'            : it.get('rate', 0),
+            'discount_percent': it.get('discount_percent', 0),
+            'amount'          : it.get('amount', 0),
+        })
+    return jsonify(result)
+
+
+@app.route('/api/vendor-purchases')
+@login_required
+def api_vendor_purchases():
+    """Return purchases for a vendor (for DN smart load)."""
+    vendor_id = request.args.get('vendor_id', type=int)
+    if not vendor_id:
+        return jsonify([])
+    purchases = db.execute_query(
+        """SELECT id, bill_no, purchase_date, total_amount
+           FROM purchases WHERE vendor_id = ?
+           ORDER BY id DESC""",
+        (vendor_id,), fetchall=True
+    ) or []
+    return jsonify([dict(r) for r in purchases])
+
+
+@app.route('/api/purchase-items/<int:purchase_id>')
+@login_required
+def api_purchase_items(purchase_id):
+    """Return items of a purchase (for DN auto-populate)."""
+    items = db.get_purchase_items(purchase_id)
+    result = []
+    for it in items:
+        result.append({
+            'product_id' : it.get('product_id'),
+            'description': it.get('description') or it.get('product_name', ''),
+            'hsn'        : it.get('hsn', ''),
+            'gst_rate'   : it.get('gst_rate', 0),
+            'quantity'   : it.get('quantity', 0),
+            'rate'       : it.get('rate', 0),
+            'amount'     : it.get('total_amount') or it.get('amount', 0),
+        })
+    return jsonify(result)
+
+# ─────────────────────────────────────────────
+#  OUTSTANDING REPORTS
+# ─────────────────────────────────────────────
+@app.route('/reports/customer-outstanding')
+@login_required
+def customer_outstanding_report():
+    start    = request.args.get('start', '')
+    end      = request.args.get('end',   '')
+    only_due = request.args.get('only_due', '0') == '1'
+    fmt      = request.args.get('format', 'pdf')
+
+    size = request.args.get('size', 'A4').upper()
+    data = db.get_customer_outstanding(
+        start_date = start or None,
+        end_date   = end   or None,
+        only_due   = only_due
+    )
+    try:
+        if fmt == 'excel':
+            raw = rg.create_customer_outstanding_excel(
+                data, start, end, only_due)
+            return send_file(
+                io.BytesIO(raw),
+                mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                as_attachment=True,
+                download_name=f'Customer_Outstanding_{start or "All"}.xlsx'
+            )
+        else:
+            raw = rg.create_customer_outstanding_pdf(
+                data, start, end, only_due, page_size=size)
+            return send_file(
+                io.BytesIO(raw), mimetype='application/pdf',
+                as_attachment=True,
+                download_name=f'Customer_Outstanding_{start or "All"}_{size}.pdf'
+            )
+    except Exception as e:
+        log_error('CUSTOMER_OUTSTANDING_REPORT', str(e))
+        flash(f'Report error: {e}', 'danger')
+        return redirect(url_for('reports'))
+
+
+@app.route('/reports/vendor-outstanding')
+@login_required
+def vendor_outstanding_report():
+    start    = request.args.get('start', '')
+    end      = request.args.get('end',   '')
+    only_due = request.args.get('only_due', '0') == '1'
+    fmt      = request.args.get('format', 'pdf')
+
+    size = request.args.get('size', 'A4').upper()
+    data = db.get_vendor_outstanding(
+        start_date = start or None,
+        end_date   = end   or None,
+        only_due   = only_due
+    )
+    try:
+        if fmt == 'excel':
+            raw = rg.create_vendor_outstanding_excel(
+                data, start, end, only_due)
+            return send_file(
+                io.BytesIO(raw),
+                mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                as_attachment=True,
+                download_name=f'Vendor_Outstanding_{start or "All"}.xlsx'
+            )
+        else:
+            raw = rg.create_vendor_outstanding_pdf(
+                data, start, end, only_due, page_size=size)
+            return send_file(
+                io.BytesIO(raw), mimetype='application/pdf',
+                as_attachment=True,
+                download_name=f'Vendor_Outstanding_{start or "All"}_{size}.pdf'
+            )
+    except Exception as e:
+        flash(f'Report error: {e}', 'danger')
+        return redirect(url_for('reports'))
+
+
+# ─────────────────────────────────────────────
+#  CREDIT NOTES
+# ─────────────────────────────────────────────
+@app.route('/credit-notes')
+@login_required
+def credit_notes():
+    cns = db.get_all_credit_notes()
+    return mrender('credit_notes.html', credit_notes=cns)
+
+
+@app.route('/credit-notes/new', methods=['GET','POST'])
+@login_required
+def new_credit_note():
+    buyers   = db.get_all('buyers')
+    invoices = db.get_all('invoices')
+    if request.method == 'POST':
+        f = request.form
+        try:
+            descs   = f.getlist('description[]')
+            qtys    = f.getlist('quantity[]')
+            rates   = f.getlist('rate[]')
+            gsts    = f.getlist('gst_rate[]')
+            pids    = f.getlist('product_id[]')
+            items   = []
+            subtot  = 0
+            for i in range(len(descs)):
+                desc = descs[i].strip()
+                if not desc: continue
+                qty  = float(qtys[i]  or 0)
+                rate = float(rates[i] or 0)
+                gst  = float(gsts[i]  or 0)
+                if qty <= 0: continue
+                taxable = qty * rate
+                tax     = taxable * gst / 100
+                amount  = taxable + tax
+                subtot += taxable
+                pid_raw = pids[i] if i < len(pids) else ''
+                pid     = int(pid_raw) if pid_raw and pid_raw.isdigit() else None
+                items.append({
+                    'product_id' : pid,
+                    'description': desc,
+                    'hsn'        : f.getlist('hsn[]')[i] if i < len(f.getlist('hsn[]')) else '',
+                    'gst_rate'   : gst,
+                    'quantity'   : qty,
+                    'rate'       : rate,
+                    'amount'     : round(amount, 2),
+                })
+
+            company_state = get_company_state()
+            buyer_id  = int(f.get('buyer_id', 0) or 0) or None
+            buyer_obj = db.get_by_id('buyers', buyer_id) if buyer_id else None
+            buyer_state = buyer_obj.get('state','') if buyer_obj else ''
+            is_igst   = buyer_state.strip().lower() != company_state.strip().lower() if buyer_state else False
+
+            total_gst  = sum(it['amount'] - (it['quantity']*it['rate']) for it in items)
+            total_igst = round(total_gst, 2) if is_igst else 0
+            total_cgst = 0 if is_igst else round(total_gst/2, 2)
+            total_sgst = 0 if is_igst else round(total_gst/2, 2)
+            grand      = round(subtot + total_gst, 2)
+
+            cn_id = db.save_credit_note({
+                'cn_no'        : db.get_next_cn_number(),
+                'cn_date'      : f.get('cn_date', datetime.now().strftime('%Y-%m-%d')),
+                'invoice_id'   : int(f.get('invoice_id',0) or 0) or None,
+                'buyer_id'     : buyer_id,
+                'reason'       : f.get('reason',''),
+                'stock_return' : f.get('stock_return') == '1',
+                'subtotal'     : round(subtot, 2),
+                'total_gst'    : round(total_gst, 2),
+                'total_cgst'   : total_cgst,
+                'total_sgst'   : total_sgst,
+                'total_igst'   : total_igst,
+                'grand_total'  : grand,
+                'notes'        : f.get('notes',''),
+            }, items)
+            log_activity('CREDIT_NOTE_SAVE', f"CN_ID={cn_id}")
+            flash(f'Credit Note saved successfully!', 'success')
+            return redirect(url_for('credit_note_detail', cn_id=cn_id))
+        except Exception as e:
+            flash(f'Error: {e}', 'danger')
+
+    products = db.get_all('products')
+    return mrender('credit_note_form.html',
+                   buyers=buyers, invoices=invoices,
+                   products=products,
+                   today=datetime.now().strftime('%Y-%m-%d'),
+                   next_cn_no=db.get_next_cn_number())
+
+
+@app.route('/credit-notes/<int:cn_id>')
+@login_required
+def credit_note_detail(cn_id):
+    cn, items = db.get_credit_note(cn_id)
+    if not cn:
+        flash('Credit Note not found.', 'danger')
+        return redirect(url_for('credit_notes'))
+    return mrender('credit_note_detail.html', cn=cn, items=items)
+
+
+# ─────────────────────────────────────────────
+#  DEBIT NOTES
+# ─────────────────────────────────────────────
+@app.route('/debit-notes')
+@login_required
+def debit_notes():
+    dns = db.get_all_debit_notes()
+    return mrender('debit_notes.html', debit_notes=dns)
+
+
+@app.route('/debit-notes/new', methods=['GET','POST'])
+@login_required
+def new_debit_note():
+    vendors   = db.get_all('vendors')
+    purchases = db.get_all_purchases_with_vendor()
+    if request.method == 'POST':
+        f = request.form
+        try:
+            descs  = f.getlist('description[]')
+            qtys   = f.getlist('quantity[]')
+            rates  = f.getlist('rate[]')
+            gsts   = f.getlist('gst_rate[]')
+            pids   = f.getlist('product_id[]')
+            items  = []
+            subtot = 0
+            for i in range(len(descs)):
+                desc = descs[i].strip()
+                if not desc: continue
+                qty  = float(qtys[i]  or 0)
+                rate = float(rates[i] or 0)
+                gst  = float(gsts[i]  or 0)
+                if qty <= 0: continue
+                taxable = qty * rate
+                tax     = taxable * gst / 100
+                amount  = taxable + tax
+                subtot += taxable
+                pid_raw = pids[i] if i < len(pids) else ''
+                pid     = int(pid_raw) if pid_raw and pid_raw.isdigit() else None
+                items.append({
+                    'product_id' : pid,
+                    'description': desc,
+                    'hsn'        : f.getlist('hsn[]')[i] if i < len(f.getlist('hsn[]')) else '',
+                    'gst_rate'   : gst,
+                    'quantity'   : qty,
+                    'rate'       : rate,
+                    'amount'     : round(amount, 2),
+                })
+
+            total_gst  = sum(it['amount'] - (it['quantity']*it['rate']) for it in items)
+            total_cgst = round(total_gst/2, 2)
+            total_sgst = round(total_gst/2, 2)
+            grand      = round(subtot + total_gst, 2)
+
+            dn_id = db.save_debit_note({
+                'dn_no'       : db.get_next_dn_number(),
+                'dn_date'     : f.get('dn_date', datetime.now().strftime('%Y-%m-%d')),
+                'purchase_id' : int(f.get('purchase_id',0) or 0) or None,
+                'vendor_id'   : int(f.get('vendor_id',0) or 0) or None,
+                'reason'      : f.get('reason',''),
+                'stock_return': f.get('stock_return') == '1',
+                'subtotal'    : round(subtot,2),
+                'total_gst'   : round(total_gst,2),
+                'total_cgst'  : total_cgst,
+                'total_sgst'  : total_sgst,
+                'total_igst'  : 0,
+                'grand_total' : grand,
+                'notes'       : f.get('notes',''),
+            }, items)
+            log_activity('DEBIT_NOTE_SAVE', f"DN_ID={dn_id}")
+            flash('Debit Note saved successfully!', 'success')
+            return redirect(url_for('debit_note_detail', dn_id=dn_id))
+        except Exception as e:
+            flash(f'Error: {e}', 'danger')
+
+    return mrender('debit_note_form.html',
+                   vendors=vendors, purchases=purchases,
+                   today=datetime.now().strftime('%Y-%m-%d'),
+                   next_dn_no=db.get_next_dn_number())
+
+
+
+
+@app.route('/credit-notes/<int:cn_id>/pdf')
+@login_required
+def credit_note_pdf(cn_id):
+    cn, items = db.get_credit_note(cn_id)
+    if not cn:
+        flash('Credit Note not found.', 'danger')
+        return redirect(url_for('credit_notes'))
+    size     = request.args.get('size', 'A4').upper()
+    settings = load_settings()
+    raw      = rg.create_credit_note_pdf(cn, items, settings, page_size=size)
+    return send_file(io.BytesIO(raw), mimetype='application/pdf',
+                     as_attachment=False,
+                     download_name=f"{cn['cn_no']}_{size}.pdf")
+
+
+@app.route('/debit-notes/<int:dn_id>/pdf')
+@login_required
+def debit_note_pdf(dn_id):
+    dn, items = db.get_debit_note(dn_id)
+    if not dn:
+        flash('Debit Note not found.', 'danger')
+        return redirect(url_for('debit_notes'))
+    size     = request.args.get('size', 'A4').upper()
+    settings = load_settings()
+    raw      = rg.create_debit_note_pdf(dn, items, settings, page_size=size)
+    return send_file(io.BytesIO(raw), mimetype='application/pdf',
+                     as_attachment=False,
+                     download_name=f"{dn['dn_no']}_{size}.pdf")
+
+@app.route('/debit-notes/<int:dn_id>')
+@login_required
+def debit_note_detail(dn_id):
+    dn, items = db.get_debit_note(dn_id)
+    if not dn:
+        flash('Debit Note not found.', 'danger')
+        return redirect(url_for('debit_notes'))
+    return mrender('debit_note_detail.html', dn=dn, items=items)
 
 # ─────────────────────────────────────────────
 #  ENTRY POINT
