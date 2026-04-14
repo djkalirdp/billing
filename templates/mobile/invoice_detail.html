@@ -4,7 +4,9 @@
 
 {% block topbar_actions %}
 <a href="{{ url_for('invoices') }}" class="m-icon-btn"><i class="bi bi-arrow-left"></i></a>
-<a href="{{ url_for('download_invoice_pdf', invoice_id=invoice.id) }}" class="m-icon-btn accent">
+<a id="topPdfBtn"
+   href="{{ url_for('download_invoice_pdf', invoice_id=invoice.id) }}?size=A4"
+   class="m-icon-btn accent" target="_blank">
   <i class="bi bi-file-pdf"></i>
 </a>
 {% endblock %}
@@ -182,8 +184,33 @@
 
 <!-- Actions -->
 <div style="padding:0 14px 24px;display:flex;flex-direction:column;gap:10px;">
-  <a href="{{ url_for('download_invoice_pdf', invoice_id=invoice.id) }}"
-     class="m-btn m-btn-primary">
+
+  <!-- PDF Size Picker -->
+  <div>
+    <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;margin-bottom:6px;">PDF Size</div>
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:5px;margin-bottom:8px;" id="invSizeRow">
+      <button onclick="setInvSize('A4',this)"
+              style="padding:7px 2px;border:1.5px solid var(--accent);border-radius:8px;
+                     font-size:11px;font-weight:800;color:var(--accent);background:#eff6ff;cursor:pointer;">
+        A4<br><small style="font-weight:400;">Portrait</small></button>
+      <button onclick="setInvSize('A4L',this)"
+              style="padding:7px 2px;border:1.5px solid var(--border);border-radius:8px;
+                     font-size:11px;font-weight:800;color:#475569;background:white;cursor:pointer;">
+        A4<br><small style="font-weight:400;">Land.</small></button>
+      <button onclick="setInvSize('A5',this)"
+              style="padding:7px 2px;border:1.5px solid var(--border);border-radius:8px;
+                     font-size:11px;font-weight:800;color:#475569;background:white;cursor:pointer;">
+        A5<br><small style="font-weight:400;">Portrait</small></button>
+      <button onclick="setInvSize('A5L',this)"
+              style="padding:7px 2px;border:1.5px solid var(--border);border-radius:8px;
+                     font-size:11px;font-weight:800;color:#475569;background:white;cursor:pointer;">
+        A5<br><small style="font-weight:400;">Land.</small></button>
+    </div>
+  </div>
+
+  <a id="invPdfBtn"
+     href="{{ url_for('download_invoice_pdf', invoice_id=invoice.id) }}?size=A4"
+     class="m-btn m-btn-primary" target="_blank">
     <i class="bi bi-file-pdf"></i> Download PDF
   </a>
   <a href="{{ url_for('buyer_ledger', buyer_id=invoice.buyer_id) }}"
@@ -226,5 +253,18 @@ function openCancelSheet(){ document.getElementById('cancelSheet')?.classList.ad
 document.getElementById('cancelSheet')?.addEventListener('click',function(e){
   if(e.target===this)this.classList.remove('open');
 });
+function setInvSize(size, btn) {
+  document.getElementById('invSizeRow').querySelectorAll('button').forEach(b => {
+    b.style.borderColor = 'var(--border)';
+    b.style.color = '#475569';
+    b.style.background = 'white';
+  });
+  btn.style.borderColor = 'var(--accent)';
+  btn.style.color = 'var(--accent)';
+  btn.style.background = '#eff6ff';
+  const url = `{{ url_for('download_invoice_pdf', invoice_id=invoice.id) }}?size=${size}`;
+  document.getElementById('invPdfBtn').href = url;
+  document.getElementById('topPdfBtn').href = url;
+}
 </script>
 {% endblock %}

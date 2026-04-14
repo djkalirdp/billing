@@ -1251,6 +1251,65 @@ def add_buyer_payment(buyer_id):
                              start=f.get('start'), end=f.get('end')))
 
 
+
+@app.route('/buyers/<int:buyer_id>/add-sale', methods=['POST'])
+@login_required
+def add_manual_sale(buyer_id):
+    """Add a manual/kaccha sale entry directly to buyer ledger (debit)."""
+    buyer = db.get_by_id('buyers', buyer_id)
+    if not buyer:
+        flash('Buyer not found.', 'danger')
+        return redirect(url_for('buyers'))
+
+    f = request.form
+    try:
+        amount = float(f.get('amount', 0))
+        if amount <= 0:
+            flash('Amount must be greater than 0.', 'danger')
+            return redirect(url_for('buyer_ledger', buyer_id=buyer_id))
+
+        remark  = f.get('remark', '').strip() or 'Manual Sale Entry'
+        date    = f.get('sale_date', datetime.now().strftime('%Y-%m-%d'))
+
+        # Store as a negative payment (debit = reduces credit = increases outstanding)
+        # We use notes to mark it as a manual sale so it shows differently in ledger
+        db.add_manual_sale_entry(buyer_id, amount, date, remark)
+        log_activity('MANUAL_SALE', f"Buyer={buyer['name']} Amount={amount} Remark={remark}")
+        flash(f'Sale entry of ₹{amount:,.2f} added for {buyer["name"]}.', 'success')
+    except ValueError:
+        flash('Invalid amount.', 'danger')
+
+    return redirect(url_for('buyer_ledger', buyer_id=buyer_id,
+                             start=f.get('start'), end=f.get('end')))
+
+
+@app.route('/payments/<int:payment_id>/edit-sale', methods=['POST'])
+@login_required
+def edit_manual_sale(payment_id):
+    """Edit a manual sale entry."""
+    pay = db.get_customer_payment(payment_id)
+    if not pay or pay.get('payment_mode') != 'Manual Sale':
+        flash('Entry not found.', 'danger')
+        return redirect(url_for('buyers'))
+    buyer_id = pay['buyer_id']
+    f = request.form
+    try:
+        amount = float(f.get('amount', 0))
+        if amount <= 0:
+            flash('Amount must be greater than 0.', 'danger')
+        else:
+            db.update_customer_payment(payment_id, {
+                'payment_date': f.get('sale_date', pay['payment_date']),
+                'amount'      : -abs(amount),
+                'payment_mode': 'Manual Sale',
+                'notes'       : f.get('remark', pay.get('notes', '')),
+            })
+            flash('Sale entry updated.', 'success')
+    except ValueError:
+        flash('Invalid amount.', 'danger')
+    return redirect(url_for('buyer_ledger', buyer_id=buyer_id,
+                             start=f.get('start'), end=f.get('end')))
+
 # ─────────────────────────────────────────────
 #  VENDORS  (Admin only)
 # ─────────────────────────────────────────────
@@ -1974,15 +2033,17 @@ def stock_report():
 @app.route('/reports/gstr1')
 @login_required
 def gstr1_report():
-    start = request.args.get('start', '')
-    end   = request.args.get('end', '')
-    fmt   = request.args.get('format', 'pdf')
+    start     = request.args.get('start', '')
+    end       = request.args.get('end', '')
+    fmt       = request.args.get('format', 'pdf')
+    sales_hsn = request.args.get('sales_hsn', '')   # comma-separated HSN codes
 
     if not start or not end:
         flash('Please provide start and end dates.', 'danger')
         return redirect(url_for('reports'))
 
-    data = db.get_gstr1_data(start, end)
+    hsn_filter = [h.strip() for h in sales_hsn.split(',') if h.strip()] if sales_hsn else None
+    data = db.get_gstr1_data(start, end, sales_hsn_filter=hsn_filter)
 
     if fmt == 'excel':
         from flask import send_file
@@ -2007,16 +2068,21 @@ def gstr1_report():
 @app.route('/reports/gstr3b')
 @login_required
 def gstr3b_report():
-    start = request.args.get('start', '')
-    end   = request.args.get('end', '')
-    fmt   = request.args.get('format', 'pdf')
+    start        = request.args.get('start', '')
+    end          = request.args.get('end', '')
+    fmt          = request.args.get('format', 'pdf')
+    sales_hsn    = request.args.get('sales_hsn', '')
+    purchase_hsn = request.args.get('purchase_hsn', '')
 
     if not start or not end:
         flash('Please provide start and end dates.', 'danger')
         return redirect(url_for('reports'))
 
+    s_filter = [h.strip() for h in sales_hsn.split(',') if h.strip()] if sales_hsn else None
+    p_filter = [h.strip() for h in purchase_hsn.split(',') if h.strip()] if purchase_hsn else None
+
     data     = db.get_gstr3b_data(start, end)
-    itc_data = db.get_purchase_itc_summary(start, end)
+    itc_data = db.get_purchase_itc_summary(start, end, purchase_hsn_filter=p_filter)
     data['itc'] = itc_data
 
     if fmt == 'excel':
@@ -2153,6 +2219,22 @@ def api_purchase_items(purchase_id):
             'amount'     : it.get('total_amount') or it.get('amount', 0),
         })
     return jsonify(result)
+
+
+@app.route('/api/hsn-list')
+@login_required
+def api_hsn_list():
+    """Return distinct HSN codes for sales and purchases."""
+    start = request.args.get('start', '')
+    end   = request.args.get('end', '')
+    s = start or None
+    e = end   or None
+    sales_hsn    = db.get_all_sales_hsn_codes(s, e)
+    purchase_hsn = db.get_all_purchase_hsn_codes(s, e)
+    return jsonify({
+        'sales'    : [{'hsn': r['hsn'], 'product': r.get('product_name',''), 'gst_rate': r.get('gst_rate',0)} for r in sales_hsn],
+        'purchases': [{'hsn': r['hsn'], 'product': r.get('product_name',''), 'gst_rate': r.get('gst_rate',0)} for r in purchase_hsn],
+    })
 
 # ─────────────────────────────────────────────
 #  OUTSTANDING REPORTS

@@ -21,6 +21,25 @@
 .dl-btn:hover { opacity:.85; }
 .size-opt-btn{padding:5px 10px;border:1.5px solid var(--border);border-radius:7px;font-size:11.5px;font-weight:700;color:#475569;cursor:pointer;background:white;transition:all .15s;}
 .size-opt-btn.active,.size-opt-btn:hover{border-color:var(--accent);background:#eff6ff;color:var(--accent);}
+.hsn-dropdown{
+  position:absolute;z-index:999;background:white;border:1.5px solid var(--accent);
+  border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.12);
+  max-height:220px;overflow-y:auto;width:100%;top:calc(100% + 4px);left:0;
+}
+.hsn-opt{
+  padding:8px 14px;cursor:pointer;font-size:13px;border-bottom:1px solid #f1f5f9;
+  display:flex;justify-content:space-between;align-items:center;
+}
+.hsn-opt:hover{background:#eff6ff;}
+.hsn-opt.selected{background:#ecfdf5;color:#059669;}
+.hsn-opt:last-child{border-bottom:none;}
+.hsn-tags{display:flex;flex-wrap:wrap;gap:5px;}
+.hsn-tag{
+  padding:3px 10px;background:#eff6ff;color:#2563eb;border:1px solid #bfdbfe;
+  border-radius:99px;font-size:12px;font-weight:600;cursor:pointer;
+  display:inline-flex;align-items:center;gap:4px;
+}
+.hsn-tag:hover{background:#fee2e2;color:#dc2626;border-color:#fecaca;}
 </style>
 {% endblock %}
 
@@ -89,6 +108,22 @@
           <label class="m-label">To Date</label>
           <input type="date" id="gstr1End" class="form-control form-control-sm" />
         </div>
+      </div>
+      <!-- Sales HSN Filter -->
+      <div style="margin-bottom:10px;">
+        <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;margin-bottom:5px;">
+          Sales HSN Filter &nbsp;<span style="font-weight:400;text-transform:none;">(blank = sab include)</span>
+        </div>
+        <div style="position:relative;">
+          <input type="text" id="gstr1SalesSearch"
+                 style="width:100%;padding:8px 12px;border:1.5px solid var(--border);border-radius:8px;
+                        font-size:13px;font-family:var(--font-body);outline:none;"
+                 placeholder="HSN code ya product name search karein..."
+                 oninput="searchHsn('gstr1SalesSearch','gstr1SalesDrop','sales')"
+                 onfocus="openHsnDrop('gstr1SalesSearch','gstr1SalesDrop','sales')" />
+          <div id="gstr1SalesDrop" class="hsn-dropdown" style="display:none;"></div>
+        </div>
+        <div id="gstr1SalesTags" class="hsn-tags" style="margin-top:6px;"></div>
       </div>
       <div class="dl-btns">
         <a href="#" class="dl-btn dl-pdf" onclick="return dlReport('gstr1','pdf')">
@@ -171,6 +206,38 @@
           <label class="m-label">To Date</label>
           <input type="date" id="gstr3bEnd" class="form-control form-control-sm" />
         </div>
+      </div>
+      <!-- Sales HSN Filter (Outward) -->
+      <div style="margin-bottom:8px;">
+        <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;margin-bottom:4px;">
+          Sales HSN Filter (Outward Supply)
+        </div>
+        <div style="position:relative;">
+          <input type="text" id="gstr3bSalesSearch"
+                 style="width:100%;padding:7px 10px;border:1.5px solid var(--border);border-radius:8px;
+                        font-size:12.5px;font-family:var(--font-body);outline:none;"
+                 placeholder="Sales HSN search..."
+                 oninput="searchHsn('gstr3bSalesSearch','gstr3bSalesDrop','sales')"
+                 onfocus="openHsnDrop('gstr3bSalesSearch','gstr3bSalesDrop','sales')" />
+          <div id="gstr3bSalesDrop" class="hsn-dropdown" style="display:none;"></div>
+        </div>
+        <div id="gstr3bSalesTags" class="hsn-tags" style="margin-top:4px;"></div>
+      </div>
+      <!-- Purchase HSN Filter (ITC) -->
+      <div style="margin-bottom:10px;">
+        <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;margin-bottom:4px;">
+          Purchase HSN Filter (ITC Claim)
+        </div>
+        <div style="position:relative;">
+          <input type="text" id="gstr3bPurSearch"
+                 style="width:100%;padding:7px 10px;border:1.5px solid var(--border);border-radius:8px;
+                        font-size:12.5px;font-family:var(--font-body);outline:none;"
+                 placeholder="Purchase HSN search..."
+                 oninput="searchHsn('gstr3bPurSearch','gstr3bPurDrop','purchases')"
+                 onfocus="openHsnDrop('gstr3bPurSearch','gstr3bPurDrop','purchases')" />
+          <div id="gstr3bPurDrop" class="hsn-dropdown" style="display:none;"></div>
+        </div>
+        <div id="gstr3bPurTags" class="hsn-tags" style="margin-top:4px;"></div>
       </div>
       <div class="dl-btns">
         <a href="#" class="dl-btn dl-pdf" onclick="return dlReport('gstr3b','pdf')">
@@ -374,6 +441,79 @@ function dlOutstanding(type, fmt) {
   return false;
 }
 
+// ── HSN filter state ─────────────────────────────────────────────
+const _hsnSel = { gstr1Sales:{}, gstr3bSales:{}, gstr3bPur:{} };
+let _hsnData = { sales: [], purchases: [] };
+let _hsnLoaded = false;
+
+async function ensureHsnLoaded(start, end) {
+  if (_hsnLoaded) return;
+  try {
+    const r = await fetch(`/api/hsn-list?start=${start}&end=${end}`);
+    _hsnData = await r.json();
+    _hsnLoaded = true;
+  } catch(e) {}
+}
+
+function openHsnDrop(inputId, dropId, type) {
+  const startId = inputId.startsWith('gstr1') ? 'gstr1Start' : 'gstr3bStart';
+  const endId   = inputId.startsWith('gstr1') ? 'gstr1End'   : 'gstr3bEnd';
+  const s = document.getElementById(startId)?.value||'';
+  const e = document.getElementById(endId)?.value||'';
+  ensureHsnLoaded(s, e).then(() => renderDrop(inputId, dropId, type, ''));
+}
+
+function searchHsn(inputId, dropId, type) {
+  const q = document.getElementById(inputId)?.value||'';
+  renderDrop(inputId, dropId, type, q);
+}
+
+function renderDrop(inputId, dropId, type, q) {
+  const drop = document.getElementById(dropId);
+  if (!drop) return;
+  const prefix = dropId.replace('Drop','');
+  const items = (_hsnData[type]||[]).filter(h =>
+    !q || h.hsn.includes(q) || (h.product||'').toLowerCase().includes(q.toLowerCase())
+  );
+  if (!items.length) { drop.style.display='none'; return; }
+  drop.innerHTML = items.map(h => {
+    const sel = _hsnSel[prefix][h.hsn] ? 'selected' : '';
+    return `<div class="hsn-opt ${sel}"
+      onclick="toggleHsn('${prefix}','${h.hsn}','${type}','${dropId}','${inputId}')">
+      <span><b>${h.hsn}</b> <small style="color:#64748b;">${h.product||''}</small></span>
+      <span style="color:#94a3b8;font-size:11px;">GST ${h.gst_rate||0}%</span>
+    </div>`;
+  }).join('');
+  drop.style.display = 'block';
+}
+
+function toggleHsn(prefix, hsn, type, dropId, inputId) {
+  if (_hsnSel[prefix][hsn]) delete _hsnSel[prefix][hsn];
+  else _hsnSel[prefix][hsn] = true;
+  renderDrop(inputId, dropId, type, document.getElementById(inputId)?.value||'');
+  renderTags(prefix);
+}
+
+function renderTags(prefix) {
+  const el = document.getElementById(prefix+'Tags');
+  if (!el) return;
+  const keys = Object.keys(_hsnSel[prefix]);
+  el.innerHTML = keys.map(h =>
+    `<span class="hsn-tag" onclick="removeTag('${prefix}','${h}')">${h} <i class="bi bi-x"></i></span>`
+  ).join('') + (keys.length ? `<span style="font-size:11.5px;color:var(--text-muted);">&nbsp;${keys.length} selected</span>` : '');
+}
+
+function removeTag(prefix, hsn) {
+  delete _hsnSel[prefix][hsn];
+  renderTags(prefix);
+}
+
+document.addEventListener('click', e => {
+  document.querySelectorAll('.hsn-dropdown').forEach(d => {
+    if (!d.parentElement.contains(e.target)) d.style.display='none';
+  });
+});
+
 function dlReport(type, fmt) {
   const map = {
     stock : ['stockStart',  'stockEnd'],
@@ -392,8 +532,20 @@ function dlReport(type, fmt) {
     gstr2b: '{{ url_for("gstr2b_report") }}',
     gstr3b: '{{ url_for("gstr3b_report") }}',
   };
-  window.location.href = `${urls[type]}?start=${start}&end=${end}&format=${fmt}`;
+  let url = `${urls[type]}?start=${start}&end=${end}&format=${fmt}`;
+  if (type === 'gstr1') {
+    const s = Object.keys(_hsnSel.gstr1Sales);
+    if (s.length) url += '&sales_hsn=' + s.join(',');
+  }
+  if (type === 'gstr3b') {
+    const ss = Object.keys(_hsnSel.gstr3bSales);
+    const ps = Object.keys(_hsnSel.gstr3bPur);
+    if (ss.length) url += '&sales_hsn=' + ss.join(',');
+    if (ps.length) url += '&purchase_hsn=' + ps.join(',');
+  }
+  window.location.href = url;
   return false;
 }
 </script>
 {% endblock %}
+

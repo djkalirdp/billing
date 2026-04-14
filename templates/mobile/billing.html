@@ -192,6 +192,7 @@
         <option value="Bank Transfer">Bank Transfer</option>
         <option value="Cheque">Cheque</option>
       </select>
+        <input type="hidden" id="f_payment_mode" value="Cash" />
     </div>
     <div class="m-fg">
       <label class="m-label">Order Ref. (optional)</label>
@@ -238,7 +239,12 @@
           <label class="m-label">Freight / Extra (₹)</label>
           <input type="number" id="f_freight" class="m-input" value="0" step="0.01" min="0" oninput="recalc()" />
         </div>
+        <div class="rrow" style="color:#64748b;font-size:12px;">
+          <span class="rlbl">Round Off</span>
+          <span class="rval" id="rvRoundOff" style="color:#64748b;">+0.00</span>
+        </div>
         <div class="rrow grand"><span class="rlbl">Grand Total</span><span class="rval" id="rvGrand">₹0.00</span></div>
+        <input type="hidden" id="f_round_off" value="0" />
         <div class="m-fg" style="margin-top:12px;">
           <label class="m-label">Amount Paid Now (₹)</label>
           <input type="number" id="f_paid" class="m-input" value="0" step="0.01" min="0" />
@@ -736,12 +742,22 @@ function recalc() {
   });
   const freight = parseFloat(document.getElementById('f_freight')?.value) || 0;
   const taxable = sub - disc;
-  const grand   = taxable + gstTotal + freight;
+  const grandRaw  = taxable + gstTotal + freight;
+  const grandRound= Math.round(grandRaw);
+  const roundOff  = parseFloat((grandRound - grandRaw).toFixed(2));
 
-  _s('rvSub',  fmt(sub));
-  _s('rvDisc', fmt(disc));
-  _s('rvTax',  fmt(taxable));
-  _s('rvGrand',fmt(grand));
+  _s('rvSub',      fmt(sub));
+  _s('rvDisc',     fmt(disc));
+  _s('rvTax',      fmt(taxable));
+  _s('rvRoundOff', (roundOff >= 0 ? '+' : '') + roundOff.toFixed(2));
+  _s('rvGrand',    '₹' + grandRound.toFixed(2));
+  document.getElementById('f_round_off').value = roundOff.toFixed(2);
+
+  // Auto-fill paid if Cash/non-credit mode
+  const modeEl = document.getElementById('f_payment_mode');
+  if (modeEl && modeEl.value !== 'Credit') {
+    document.getElementById('f_paid').value = grandRound.toFixed(2);
+  }
 
   if (isIgst) {
     _show('rowIgst'); _hide('rowCgst'); _hide('rowSgst');
@@ -770,6 +786,12 @@ function onPayMode(m) {
   } else {
     document.getElementById('f_paid').value = '0';
   }
+}
+
+// Also update payment_mode hidden field
+function setPayMode(val) {
+  document.getElementById('f_payment_mode').value = val;
+  onPayMode(val);
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -864,6 +886,7 @@ function saveInvoice() {
   add('order_ref',    document.getElementById('f_orderRef')?.value || '');
   add('dispatch_info',document.getElementById('f_dispatch')?.value || '');
   add('freight',      document.getElementById('f_freight')?.value  || '0');
+  add('round_off',    document.getElementById('f_round_off')?.value || '0');
   add('paid_amount',  document.getElementById('f_paid')?.value     || '0');
 
   // Items

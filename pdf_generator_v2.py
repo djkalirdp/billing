@@ -339,7 +339,7 @@ def create_invoice_pdf(invoice_data, items, settings,
         # Row 3: COMPANY NAME (large, bold, centered) with optional logo
         logo_path = c_info.get('logo_path', '')
         logo_img  = None
-        _logo_w, _logo_h = 1.8 * W_SCALE * cm, 1.4 * W_SCALE * cm
+        _logo_w, _logo_h = 2.7 * W_SCALE * cm, 2.1 * W_SCALE * cm  # 1.5x bigger
         if logo_path and os.path.exists(logo_path):
             try:
                 logo_img = Image(logo_path, width=_logo_w, height=_logo_h)
@@ -348,16 +348,23 @@ def create_invoice_pdf(invoice_data, items, settings,
 
         company_name = c_info.get('name', '')
         if logo_img:
-            _name_cw = _full_w - 2.0 * W_SCALE
+            # 3-col: [logo | name (center) | empty same width as logo]
+            # This keeps name truly centered on the page
+            _logo_col_w = 2.7 * W_SCALE * cm
+            _name_col_w = (_full_w * cm) - (2 * _logo_col_w)
             t_name = Table(
-                [[logo_img, Paragraph(f"<b>{company_name}</b>", _s_name)]],
-                colWidths=[2.0 * W_SCALE * cm, _name_cw * cm]
+                [[logo_img,
+                  Paragraph(f"<b>{company_name}</b>", _s_name),
+                  '']],
+                colWidths=[_logo_col_w, _name_col_w, _logo_col_w]
             )
             t_name.setStyle(TableStyle([
-                ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
-                ('ALIGN',  (0,0), (0,0),   'RIGHT'),
+                ('VALIGN',        (0,0), (-1,-1), 'MIDDLE'),
+                ('ALIGN',         (0,0), (0,-1),  'LEFT'),
                 ('TOPPADDING',    (0,0), (-1,-1), 0),
                 ('BOTTOMPADDING', (0,0), (-1,-1), 0),
+                ('LEFTPADDING',   (0,0), (-1,-1), 0),
+                ('RIGHTPADDING',  (0,0), (-1,-1), 0),
             ]))
             elements.append(t_name)
         else:
@@ -442,7 +449,8 @@ def create_invoice_pdf(invoice_data, items, settings,
         elements.append(t_head)
 
         # ── Items Table — V2: Fixed 11 rows per page ─────────────
-        ROWS_PER_PAGE = 11
+        # A5 — fewer rows to fit on one page
+        ROWS_PER_PAGE = 8 if is_a5_portrait else (9 if is_a5_landscape else 11)
         col_headers = ['S.No.', 'Description', 'HSN', 'GST%', 'Qty', 'Rate', 'Unit', 'Disc%', 'Amount']
         _cw = [1.2, 6, 2.2, 1.4, 1.5, 2, 1.2, 1.2, 2.3]
         col_widths = [w * W_SCALE * cm for w in _cw]
@@ -780,16 +788,12 @@ def create_invoice_pdf(invoice_data, items, settings,
         ]))
         footer_group.append(t_sig)
 
-        # For A5/single-copy: wrap the ENTIRE invoice in KeepTogether
-        # so header+items+footer never split across pages
-        if is_a5 or is_proforma:
-            # Replace last elements (since the last append was t_head and t_items)
-            # We need to collect all elements for this copy into KeepTogether
-            # Find elements added in this copy iteration
-            copy_start_idx = _copy_start
-            copy_elements  = elements[copy_start_idx:]
+        # Wrap footer group always
+        # For A5: wrap ENTIRE copy (header + items + footer) in KeepTogether
+        if is_a5:
+            copy_elements = elements[_copy_start:]
             copy_elements.extend(footer_group)
-            del elements[copy_start_idx:]
+            del elements[_copy_start:]
             elements.append(KeepTogether(copy_elements))
         else:
             elements.append(KeepTogether(footer_group))

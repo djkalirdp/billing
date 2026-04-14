@@ -1119,9 +1119,11 @@ def cancel_invoice(invoice_id):
 
         # Restore stock — variations first, then parent products
         items = c.execute(
-            "SELECT product_id, quantity, variation_id FROM invoice_items WHERE invoice_id = ?",
+            """SELECT ii.id, ii.product_id, ii.quantity, ii.variation_id, ii.batch_no
+               FROM invoice_items ii WHERE ii.invoice_id = ?""",
             (invoice_id,)
         ).fetchall()
+
         for item in items:
             if item['variation_id']:
                 c.execute(
@@ -1133,6 +1135,27 @@ def cancel_invoice(invoice_id):
                     "UPDATE products SET stock_qty = stock_qty + ? WHERE id = ?",
                     (item['quantity'], item['product_id'])
                 )
+
+            # Reverse batch_tracking qty_out — try invoice_item_id first, fallback to invoice_id
+            if item['product_id']:
+                item_id = item['id']
+                # Method 1: by invoice_item_id (most precise)
+                c.execute("""
+                    UPDATE batch_tracking
+                    SET qty_out = MAX(0, qty_out - ?)
+                    WHERE invoice_item_id = ?
+                """, (item['quantity'], item_id))
+                # Method 2: by invoice_id + batch_no (for older records)
+                if item['batch_no']:
+                    c.execute("""
+                        UPDATE batch_tracking
+                        SET qty_out = MAX(0, qty_out - ?)
+                        WHERE product_id = ?
+                          AND batch_no   = ?
+                          AND invoice_id = ?
+                          AND invoice_item_id IS NULL
+                    """, (item['quantity'], item['product_id'],
+                           item['batch_no'], invoice_id))
 
         # Mark as cancelled
         c.execute('''
@@ -1169,6 +1192,23 @@ def add_customer_payment(payment_data):
 
 
 
+
+
+
+def add_manual_sale_entry(buyer_id, amount, date, remark):
+    """
+    Add a manual/kaccha sale debit entry to buyer ledger.
+    Stored in customer_payments with negative amount so it shows as DEBIT
+    in get_buyer_ledger (reduces credit / increases outstanding).
+    payment_mode = 'Manual Sale' to distinguish in ledger display.
+    """
+    return add_record('customer_payments', {
+        'buyer_id'    : buyer_id,
+        'payment_date': date,
+        'amount'      : -abs(amount),   # negative = debit in ledger
+        'payment_mode': 'Manual Sale',
+        'notes'       : remark,
+    })
 
 def delete_customer_payment(payment_id):
     """Delete a customer payment entry."""
@@ -1244,10 +1284,14 @@ def get_buyer_ledger(buyer_id, start_date=None, end_date=None):
     """
     p_inv = [buyer_id]
 
-    # Build payment query
+    # Build payment query — negative amount = Manual Sale (debit), positive = Payment (credit)
     q_pay = """
-        SELECT id, payment_date AS date, 'Payment' AS ref,
-               'Payment' AS type, 0 AS debit, amount AS credit, payment_mode
+        SELECT id, payment_date AS date,
+               CASE WHEN amount < 0 THEN COALESCE(notes, 'Manual Sale') ELSE 'Payment' END AS ref,
+               CASE WHEN amount < 0 THEN 'Manual Sale' ELSE 'Payment' END AS type,
+               CASE WHEN amount < 0 THEN ABS(amount) ELSE 0 END AS debit,
+               CASE WHEN amount >= 0 THEN amount ELSE 0 END AS credit,
+               payment_mode
         FROM customer_payments
         WHERE buyer_id = ?
     """
@@ -1267,14 +1311,18 @@ def get_buyer_ledger(buyer_id, start_date=None, end_date=None):
         row = c.fetchone()
         prev_debit = row[0] if row and row[0] else 0.0
 
+        # For manual sales (negative amount), they are debits not credits
         c.execute("""
-            SELECT SUM(amount) FROM customer_payments
+            SELECT COALESCE(SUM(CASE WHEN amount >= 0 THEN amount ELSE 0 END), 0),
+                   COALESCE(SUM(CASE WHEN amount < 0 THEN ABS(amount) ELSE 0 END), 0)
+            FROM customer_payments
             WHERE buyer_id = ? AND payment_date < ?
         """, (buyer_id, start_date))
         row = c.fetchone()
         prev_credit = row[0] if row and row[0] else 0.0
+        prev_manual_debit = row[1] if row and row[1] else 0.0
 
-        opening_balance += prev_debit - prev_credit
+        opening_balance += prev_debit + prev_manual_debit - prev_credit
 
     c.execute(q_inv, tuple(p_inv))
     invoices = rows_to_list(c.fetchall())
@@ -2680,49 +2728,92 @@ def get_expiring_batches(days_ahead=30):
         conn.close()
 
 
-def get_purchase_itc_summary(start_date, end_date):
+def get_purchase_itc_summary(start_date, end_date, purchase_hsn_filter=None):
     """
     ITC summary for GSTR-3B Table 4.
-    Returns total CGST, SGST, IGST from purchases in date range.
-    Excludes RCM purchases (they are reported separately).
+    purchase_hsn_filter: list of HSN codes to include for ITC. None = all.
     """
     conn = get_db_connection()
     c    = conn.cursor()
     try:
-        row = c.execute("""
-            SELECT
-              COALESCE(SUM(taxable_amount), 0) AS taxable,
-              COALESCE(SUM(cgst_amount),    0) AS cgst,
-              COALESCE(SUM(sgst_amount),    0) AS sgst,
-              COALESCE(SUM(igst_amount),    0) AS igst,
-              COALESCE(SUM(total_tax),      0) AS total_tax,
-              COUNT(*)                          AS purchase_count
-            FROM purchases
-            WHERE purchase_date BETWEEN ? AND ?
-              AND reverse_charge = 0
-        """, (start_date, end_date)).fetchone()
+        if purchase_hsn_filter:
+            # Filter purchases that have at least one item with matching HSN
+            placeholders = ','.join('?' * len(purchase_hsn_filter))
+            pur_ids = c.execute(f"""
+                SELECT DISTINCT pi.purchase_id
+                FROM purchase_items pi
+                JOIN purchases pu ON pi.purchase_id = pu.id
+                WHERE pu.purchase_date BETWEEN ? AND ?
+                  AND pi.hsn IN ({placeholders})
+            """, [start_date, end_date] + list(purchase_hsn_filter)).fetchall()
+            pur_id_list = [r[0] for r in pur_ids]
 
-        rcm_row = c.execute("""
-            SELECT
-              COALESCE(SUM(cgst_amount), 0) AS cgst,
-              COALESCE(SUM(sgst_amount), 0) AS sgst,
-              COALESCE(SUM(igst_amount), 0) AS igst,
-              COALESCE(SUM(total_tax),   0) AS total_tax,
-              COUNT(*)                       AS count
-            FROM purchases
-            WHERE purchase_date BETWEEN ? AND ?
-              AND reverse_charge = 1
-        """, (start_date, end_date)).fetchone()
+            if not pur_id_list:
+                return {'eligible_itc': {'taxable':0,'cgst':0,'sgst':0,'igst':0,'total_tax':0,'purchase_count':0},
+                        'rcm_itc': {'cgst':0,'sgst':0,'igst':0,'total_tax':0,'count':0},
+                        'start_date': start_date, 'end_date': end_date}
+
+            id_ph = ','.join('?' * len(pur_id_list))
+            row = c.execute(f"""
+                SELECT COALESCE(SUM(pi.cgst_amount),0) AS cgst,
+                       COALESCE(SUM(pi.sgst_amount),0) AS sgst,
+                       COALESCE(SUM(pi.igst_amount),0) AS igst,
+                       COALESCE(SUM(pi.taxable_amount),0) AS taxable,
+                       COALESCE(SUM(pi.cgst_amount+pi.sgst_amount+pi.igst_amount),0) AS total_tax,
+                       COUNT(DISTINCT pi.purchase_id) AS purchase_count
+                FROM purchase_items pi
+                JOIN purchases pu ON pi.purchase_id = pu.id
+                WHERE pi.purchase_id IN ({id_ph})
+                  AND pu.reverse_charge = 0
+                  AND pi.hsn IN ({placeholders})
+            """, pur_id_list + list(purchase_hsn_filter)).fetchone()
+
+            rcm_row = c.execute(f"""
+                SELECT COALESCE(SUM(pi.cgst_amount),0) AS cgst,
+                       COALESCE(SUM(pi.sgst_amount),0) AS sgst,
+                       COALESCE(SUM(pi.igst_amount),0) AS igst,
+                       COALESCE(SUM(pi.cgst_amount+pi.sgst_amount+pi.igst_amount),0) AS total_tax,
+                       COUNT(*) AS count
+                FROM purchase_items pi
+                JOIN purchases pu ON pi.purchase_id = pu.id
+                WHERE pi.purchase_id IN ({id_ph})
+                  AND pu.reverse_charge = 1
+                  AND pi.hsn IN ({placeholders})
+            """, pur_id_list + list(purchase_hsn_filter)).fetchone()
+        else:
+            row = c.execute("""
+                SELECT COALESCE(SUM(taxable_amount),0) AS taxable,
+                       COALESCE(SUM(cgst_amount),0) AS cgst,
+                       COALESCE(SUM(sgst_amount),0) AS sgst,
+                       COALESCE(SUM(igst_amount),0) AS igst,
+                       COALESCE(SUM(total_tax),0) AS total_tax,
+                       COUNT(*) AS purchase_count
+                FROM purchases
+                WHERE purchase_date BETWEEN ? AND ?
+                  AND reverse_charge = 0
+            """, (start_date, end_date)).fetchone()
+
+            rcm_row = c.execute("""
+                SELECT COALESCE(SUM(cgst_amount),0) AS cgst,
+                       COALESCE(SUM(sgst_amount),0) AS sgst,
+                       COALESCE(SUM(igst_amount),0) AS igst,
+                       COALESCE(SUM(total_tax),0) AS total_tax,
+                       COUNT(*) AS count
+                FROM purchases
+                WHERE purchase_date BETWEEN ? AND ?
+                  AND reverse_charge = 1
+            """, (start_date, end_date)).fetchone()
 
         return {
-            'eligible_itc' : dict(row),
-            'rcm_itc'      : dict(rcm_row),
-            'start_date'   : start_date,
-            'end_date'     : end_date,
+            'eligible_itc': dict(row),
+            'rcm_itc'     : dict(rcm_row),
+            'start_date'  : start_date,
+            'end_date'    : end_date,
         }
     except Exception as e:
         print(f"[get_purchase_itc_summary ERROR] {e}")
-        return {'eligible_itc': {}, 'rcm_itc': {}, 'start_date': start_date, 'end_date': end_date}
+        import traceback; traceback.print_exc()
+        return {'eligible_itc':{}, 'rcm_itc':{}, 'start_date':start_date, 'end_date':end_date}
     finally:
         conn.close()
 
@@ -2818,30 +2909,102 @@ def get_stock_report(start_date, end_date):
 # ─────────────────────────────────────────────
 #  GSTR REPORTS
 # ─────────────────────────────────────────────
-def get_gstr1_data(start_date, end_date):
+def get_all_sales_hsn_codes(start_date=None, end_date=None):
+    """Return distinct HSN codes from invoice_items for filter dropdown."""
+    q = """
+        SELECT DISTINCT ii.hsn, p.name AS product_name, ii.gst_rate
+        FROM invoice_items ii
+        LEFT JOIN products p ON ii.product_id = p.id
+        JOIN invoices i ON ii.invoice_id = i.id
+        WHERE ii.hsn IS NOT NULL AND ii.hsn != ''
+          AND i.invoice_no NOT LIKE '[CANCELLED]%'
+    """
+    params = []
+    if start_date and end_date:
+        q += " AND i.invoice_date BETWEEN ? AND ?"
+        params = [start_date, end_date]
+    q += " ORDER BY ii.hsn"
+    return execute_query(q, tuple(params), fetchall=True) or []
+
+
+def get_all_purchase_hsn_codes(start_date=None, end_date=None):
+    """Return distinct HSN codes from purchase_items for ITC filter dropdown."""
+    q = """
+        SELECT DISTINCT pi.hsn, p.name AS product_name, pi.gst_rate
+        FROM purchase_items pi
+        LEFT JOIN products p ON pi.product_id = p.id
+        JOIN purchases pu ON pi.purchase_id = pu.id
+        WHERE pi.hsn IS NOT NULL AND pi.hsn != ''
+    """
+    params = []
+    if start_date and end_date:
+        q += " AND pu.purchase_date BETWEEN ? AND ?"
+        params = [start_date, end_date]
+    q += " ORDER BY pi.hsn"
+    return execute_query(q, tuple(params), fetchall=True) or []
+
+
+def get_gstr1_data(start_date, end_date, sales_hsn_filter=None):
     """
     GSTR-1 data: B2B (with GSTIN), B2C (without), HSN summary.
-    Returns dict with b2b, b2c, hsn_summary, totals.
+    sales_hsn_filter: list of HSN codes to include. None = include all.
     """
     conn = get_db_connection()
     c    = conn.cursor()
     try:
-        invoices = c.execute("""
+        # Build HSN filter clause for invoice_items
+        hsn_clause = ""
+        hsn_params = []
+        if sales_hsn_filter:
+            placeholders = ','.join('?' * len(sales_hsn_filter))
+            hsn_clause = f"AND ii.hsn IN ({placeholders})"
+            hsn_params = list(sales_hsn_filter)
+
+        # Get invoice IDs that have at least one matching HSN item
+        if sales_hsn_filter:
+            inv_ids = c.execute(f"""
+                SELECT DISTINCT ii.invoice_id
+                FROM invoice_items ii
+                JOIN invoices i ON ii.invoice_id = i.id
+                WHERE i.invoice_date BETWEEN ? AND ?
+                  AND i.invoice_no NOT LIKE '[CANCELLED]%'
+                  AND ii.hsn IN ({placeholders})
+            """, [start_date, end_date] + hsn_params).fetchall()
+            inv_id_list = [r[0] for r in inv_ids]
+            if not inv_id_list:
+                return {'b2b':[], 'b2c':[], 'hsn_summary':[], 'totals':{},
+                        'start_date':start_date, 'end_date':end_date}
+            id_ph = ','.join('?' * len(inv_id_list))
+            inv_where = f"AND i.id IN ({id_ph})"
+            inv_extra_params = inv_id_list
+        else:
+            inv_where = ""
+            inv_extra_params = []
+
+        invoices = c.execute(f"""
             SELECT i.*, b.name AS buyer_name, b.gstin AS buyer_gstin,
                    b.state AS buyer_state
             FROM invoices i
             JOIN buyers b ON i.buyer_id = b.id
             WHERE i.invoice_date BETWEEN ? AND ?
               AND i.invoice_no NOT LIKE '[CANCELLED]%'
+              {inv_where}
             ORDER BY i.invoice_date
-        """, (start_date, end_date)).fetchall()
+        """, [start_date, end_date] + inv_extra_params).fetchall()
 
         b2b, b2c = [], []
         for inv in invoices:
             row = dict(inv)
-            items = c.execute(
-                "SELECT * FROM invoice_items WHERE invoice_id = ?", (row['id'],)
-            ).fetchall()
+            # Fetch only filtered items
+            if sales_hsn_filter:
+                items = c.execute(f"""
+                    SELECT * FROM invoice_items
+                    WHERE invoice_id = ? AND hsn IN ({placeholders})
+                """, [row['id']] + hsn_params).fetchall()
+            else:
+                items = c.execute(
+                    "SELECT * FROM invoice_items WHERE invoice_id = ?", (row['id'],)
+                ).fetchall()
             row['items'] = [dict(it) for it in items]
             gstin = (row.get('buyer_gstin') or '').strip()
             if gstin and len(gstin) == 15:
@@ -2849,34 +3012,45 @@ def get_gstr1_data(start_date, end_date):
             else:
                 b2c.append(row)
 
-        # HSN Summary
-        hsn_rows = c.execute("""
+        # HSN Summary — filtered
+        hsn_rows = c.execute(f"""
             SELECT ii.hsn, ii.gst_rate,
-                   SUM(ii.quantity)                     AS total_qty,
-                   SUM(ii.amount)                       AS taxable_value,
-                   SUM(ii.amount * ii.gst_rate / 100)  AS total_tax
+                   SUM(ii.quantity)                    AS total_qty,
+                   SUM(ii.amount)                      AS taxable_value,
+                   SUM(ii.amount * ii.gst_rate / 100) AS total_tax
             FROM invoice_items ii
             JOIN invoices i ON ii.invoice_id = i.id
             WHERE i.invoice_date BETWEEN ? AND ?
               AND i.invoice_no NOT LIKE '[CANCELLED]%'
               AND ii.hsn IS NOT NULL AND ii.hsn != ''
+              {hsn_clause}
             GROUP BY ii.hsn, ii.gst_rate
             ORDER BY ii.hsn
-        """, (start_date, end_date)).fetchall()
+        """, [start_date, end_date] + hsn_params).fetchall()
         hsn_summary = [dict(r) for r in hsn_rows]
 
-        # Totals
-        tot = c.execute("""
-            SELECT
-              COALESCE(SUM(taxable_value), 0) AS taxable,
-              COALESCE(SUM(total_cgst),    0) AS cgst,
-              COALESCE(SUM(total_sgst),    0) AS sgst,
-              COALESCE(SUM(total_igst),    0) AS igst,
-              COALESCE(SUM(grand_total),   0) AS grand
-            FROM invoices
-            WHERE invoice_date BETWEEN ? AND ?
-              AND invoice_no NOT LIKE '[CANCELLED]%'
-        """, (start_date, end_date)).fetchone()
+        # Totals from filtered invoices
+        if inv_extra_params:
+            id_ph2 = ','.join('?' * len(inv_extra_params))
+            tot = c.execute(f"""
+                SELECT COALESCE(SUM(taxable_value),0) AS taxable,
+                       COALESCE(SUM(total_cgst),0) AS cgst,
+                       COALESCE(SUM(total_sgst),0) AS sgst,
+                       COALESCE(SUM(total_igst),0) AS igst,
+                       COALESCE(SUM(grand_total),0) AS grand
+                FROM invoices WHERE id IN ({id_ph2})
+            """, inv_extra_params).fetchone()
+        else:
+            tot = c.execute("""
+                SELECT COALESCE(SUM(taxable_value),0) AS taxable,
+                       COALESCE(SUM(total_cgst),0) AS cgst,
+                       COALESCE(SUM(total_sgst),0) AS sgst,
+                       COALESCE(SUM(total_igst),0) AS igst,
+                       COALESCE(SUM(grand_total),0) AS grand
+                FROM invoices
+                WHERE invoice_date BETWEEN ? AND ?
+                  AND invoice_no NOT LIKE '[CANCELLED]%'
+            """, (start_date, end_date)).fetchone()
 
         return {
             'b2b'        : b2b,
@@ -2888,6 +3062,7 @@ def get_gstr1_data(start_date, end_date):
         }
     except Exception as e:
         print(f"[get_gstr1_data ERROR] {e}")
+        import traceback; traceback.print_exc()
         return {'b2b':[], 'b2c':[], 'hsn_summary':[], 'totals':{}, 'start_date':start_date, 'end_date':end_date}
     finally:
         conn.close()

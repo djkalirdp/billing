@@ -1,5 +1,16 @@
 {% extends 'mobile/base_mobile.html' %}
-{% block title %}{{ dn.dn_no }}{% endblock %}
+{% block title %}{{ dn.dn_no }}{% block scripts %}
+<script>
+function setDnSize(size, btn) {
+  document.getElementById('dnSizeRow').querySelectorAll('button').forEach(b => {
+    b.style.background = 'white'; b.style.borderColor = 'var(--border)'; b.style.color = '#475569';
+  });
+  btn.style.background = '#fffbeb'; btn.style.borderColor = '#d97706'; btn.style.color = '#d97706';
+  document.getElementById('dnPdfBtn').href = `/debit-notes/{{ dn.id }}/pdf?size=${size}`;
+}
+</script>
+{% endblock %}
+{% endblock %}
 {% block page_title %}Debit Note{% endblock %}
 {% block topbar_actions %}
 <a href="{{ url_for('debit_notes') }}" class="m-icon-btn"><i class="bi bi-arrow-left"></i></a>
@@ -28,6 +39,25 @@
   </div>
 </div>
 <div style="padding:0 14px 24px;">
-  <a href="{{ url_for('debit_notes') }}" class="m-btn m-btn-outline w-100" style="justify-content:center;"><i class="bi bi-list-ul"></i> All Debit Notes</a>
+  <div style="margin-bottom:10px;">
+    <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;margin-bottom:6px;">PDF Size</div>
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:5px;" id="dnSizeRow">
+      <button type="button" onclick="setDnSize('A4',this)"
+              style="padding:8px 2px;border:1.5px solid #d97706;border-radius:8px;font-size:11px;font-weight:700;background:#fffbeb;color:#d97706;cursor:pointer;">A4</button>
+      <button type="button" onclick="setDnSize('A4L',this)"
+              style="padding:8px 2px;border:1.5px solid var(--border);border-radius:8px;font-size:11px;font-weight:700;color:#475569;cursor:pointer;background:white;">A4L</button>
+      <button type="button" onclick="setDnSize('A5',this)"
+              style="padding:8px 2px;border:1.5px solid var(--border);border-radius:8px;font-size:11px;font-weight:700;color:#475569;cursor:pointer;background:white;">A5</button>
+      <button type="button" onclick="setDnSize('A5L',this)"
+              style="padding:8px 2px;border:1.5px solid var(--border);border-radius:8px;font-size:11px;font-weight:700;color:#475569;cursor:pointer;background:white;">A5L</button>
+    </div>
+  </div>
+  <a id="dnPdfBtn" href="{{ url_for('debit_note_pdf', dn_id=dn.id) }}?size=A4"
+     class="m-btn m-btn-danger" target="_blank" style="justify-content:center;margin-bottom:10px;">
+    <i class="bi bi-file-pdf"></i> Download PDF
+  </a>
+  <a href="{{ url_for('debit_notes') }}" class="m-btn m-btn-outline w-100" style="justify-content:center;">
+    <i class="bi bi-list-ul"></i> All Debit Notes
+  </a>
 </div>
 {% endblock %}

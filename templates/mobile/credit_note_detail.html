@@ -1,5 +1,16 @@
 {% extends 'mobile/base_mobile.html' %}
-{% block title %}{{ cn.cn_no }}{% endblock %}
+{% block title %}{{ cn.cn_no }}{% block scripts %}
+<script>
+function setCnSize(size, btn) {
+  document.getElementById('cnSizeRow').querySelectorAll('button').forEach(b => {
+    b.style.background = 'white'; b.style.borderColor = 'var(--border)'; b.style.color = '#475569';
+  });
+  btn.style.background = '#f5f3ff'; btn.style.borderColor = '#7c3aed'; btn.style.color = '#7c3aed';
+  document.getElementById('cnPdfBtn').href = `/credit-notes/{{ cn.id }}/pdf?size=${size}`;
+}
+</script>
+{% endblock %}
+{% endblock %}
 {% block page_title %}Credit Note{% endblock %}
 {% block topbar_actions %}
 <a href="{{ url_for('credit_notes') }}" class="m-icon-btn"><i class="bi bi-arrow-left"></i></a>
@@ -28,6 +39,26 @@
   </div>
 </div>
 <div style="padding:0 14px 24px;">
-  <a href="{{ url_for('credit_notes') }}" class="m-btn m-btn-outline w-100" style="justify-content:center;"><i class="bi bi-list-ul"></i> All Credit Notes</a>
+  <!-- PDF Size Picker -->
+  <div style="margin-bottom:10px;">
+    <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;margin-bottom:6px;">PDF Size</div>
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:5px;" id="cnSizeRow">
+      <button type="button" onclick="setCnSize('A4',this)"
+              style="padding:8px 2px;border:1.5px solid #7c3aed;border-radius:8px;font-size:11px;font-weight:700;background:#f5f3ff;color:#7c3aed;cursor:pointer;">A4</button>
+      <button type="button" onclick="setCnSize('A4L',this)"
+              style="padding:8px 2px;border:1.5px solid var(--border);border-radius:8px;font-size:11px;font-weight:700;color:#475569;cursor:pointer;background:white;">A4L</button>
+      <button type="button" onclick="setCnSize('A5',this)"
+              style="padding:8px 2px;border:1.5px solid var(--border);border-radius:8px;font-size:11px;font-weight:700;color:#475569;cursor:pointer;background:white;">A5</button>
+      <button type="button" onclick="setCnSize('A5L',this)"
+              style="padding:8px 2px;border:1.5px solid var(--border);border-radius:8px;font-size:11px;font-weight:700;color:#475569;cursor:pointer;background:white;">A5L</button>
+    </div>
+  </div>
+  <a id="cnPdfBtn" href="{{ url_for('credit_note_pdf', cn_id=cn.id) }}?size=A4"
+     class="m-btn m-btn-danger" target="_blank" style="justify-content:center;margin-bottom:10px;">
+    <i class="bi bi-file-pdf"></i> Download PDF
+  </a>
+  <a href="{{ url_for('credit_notes') }}" class="m-btn m-btn-outline w-100" style="justify-content:center;">
+    <i class="bi bi-list-ul"></i> All Credit Notes
+  </a>
 </div>
 {% endblock %}

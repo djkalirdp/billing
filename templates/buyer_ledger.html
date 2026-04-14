@@ -73,17 +73,19 @@
   .ledger-table tbody tr:hover { background: #fafafa; }
 
   /* Row type colours */
-  .row-invoice  td { border-left: 3px solid #2563eb; }
-  .row-payment  td { border-left: 3px solid #059669; }
-  .row-opening  td { border-left: 3px solid #d97706; background: #fffbeb; }
+  .row-invoice      td { border-left: 3px solid #2563eb; }
+  .row-payment      td { border-left: 3px solid #059669; }
+  .row-opening      td { border-left: 3px solid #d97706; background: #fffbeb; }
+  .row-manual_sale  td { border-left: 3px solid #7c3aed; background: #faf5ff; }
 
   .type-chip {
     padding: 3px 10px; border-radius: 99px;
     font-size: 11.5px; font-weight: 700;
   }
-  .type-invoice { background: #eff6ff; color: #1d4ed8; }
-  .type-payment { background: #ecfdf5; color: #065f46; }
-  .type-opening { background: #fef3c7; color: #78350f; }
+  .type-invoice     { background: #eff6ff; color: #1d4ed8; }
+  .type-payment     { background: #ecfdf5; color: #065f46; }
+  .type-opening     { background: #fef3c7; color: #78350f; }
+  .type-manual_sale { background: #f5f3ff; color: #6d28d9; }
 
   .debit-val  { color: #dc2626; font-weight: 700; }
   .credit-val { color: #059669; font-weight: 700; }
@@ -310,6 +312,7 @@
                 <span class="type-chip
                   {% if row.type == 'Opening Balance' %}type-opening
                   {% elif row.type == 'Payment' %}type-payment
+                  {% elif row.type == 'Manual Sale' %}type-manual_sale
                   {% else %}type-invoice{% endif %}">
                   {{ row.type }}
                 </span>
@@ -342,14 +345,27 @@
 
               <!-- Action column -->
               <td style="text-align:center;">
-                {% if row.type == 'Payment' and row.id %}
+                {% if row.type == 'Manual Sale' and row.id %}
+                  <div style="display:flex;gap:5px;justify-content:center;">
+                    <button class="tbl-btn" style="background:#f5f3ff;color:#7c3aed;font-size:11px;padding:4px 8px;"
+                      onclick="openEditSale({{ row.id }},'{{ row.date }}',{{ row.debit }},'{{ row.ref|replace("'","\\'")|e }}')">
+                      <i class="bi bi-pencil"></i>
+                    </button>
+                    <form method="POST" action="{{ url_for('delete_payment', payment_id=row.id) }}"
+                          onsubmit="return confirm('Sale entry delete karein?')">
+                      <button type="submit" class="tbl-btn" style="background:#fef2f2;color:#dc2626;font-size:11px;padding:4px 8px;">
+                        <i class="bi bi-trash3"></i>
+                      </button>
+                    </form>
+                  </div>
+                {% elif row.type == 'Payment' and row.id %}
                   <div style="display:flex;gap:5px;justify-content:center;">
                     <button class="tbl-btn" style="background:#eff6ff;color:#2563eb;font-size:11px;padding:4px 8px;"
                       onclick="openEditPayment({{ row.id }}, '{{ row.date }}', {{ row.credit }}, '{{ row.payment_mode or '' }}')">
                       <i class="bi bi-pencil"></i>
                     </button>
                     <form method="POST" action="{{ url_for('delete_payment', payment_id=row.id) }}"
-                          onsubmit="return confirm('Is payment entry ko delete karein?\n₹{{ "%.2f"|format(row.credit) }} — {{ row.date }}')">
+                          onsubmit="return confirm('Is payment entry ko delete karein?')">
                       <button type="submit" class="tbl-btn" style="background:#fef2f2;color:#dc2626;font-size:11px;padding:4px 8px;">
                         <i class="bi bi-trash3"></i>
                       </button>
@@ -357,8 +373,7 @@
                   </div>
                 {% elif row.type == 'Invoice' and row.id %}
                   <a href="{{ url_for('view_invoice', invoice_id=row.id) }}"
-                     class="tbl-btn" style="background:#f8fafc;color:#475569;font-size:11px;padding:4px 8px;text-decoration:none;"
-                     title="Invoice dekhein">
+                     class="tbl-btn" style="font-size:11px;padding:4px 8px;text-decoration:none;" title="Invoice dekhein">
                     <i class="bi bi-eye"></i>
                   </a>
                 {% endif %}
@@ -485,6 +500,37 @@
 
 </div>
 
+<!-- ── Edit Sale Modal ──────────────────────────────── -->
+<div class="ep-overlay" id="editSaleModal">
+  <div class="ep-box">
+    <div class="ep-head">
+      <i class="bi bi-pencil-square" style="color:#7c3aed;font-size:18px;"></i>
+      <span style="font-weight:800;font-size:15px;flex:1;">Sale Entry Edit Karein</span>
+      <button onclick="closeEditSale()" style="background:none;border:none;cursor:pointer;color:#94a3b8;font-size:20px;">
+        <i class="bi bi-x"></i>
+      </button>
+    </div>
+    <div class="ep-body">
+      <form method="POST" id="editSaleForm">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+          <div class="ep-fg"><label>Date</label><input type="date" name="sale_date" id="esDat" required /></div>
+          <div class="ep-fg"><label>Amount (₹)</label><input type="number" name="amount" id="esAmt" step="0.01" min="0.01" required /></div>
+        </div>
+        <div class="ep-fg" style="margin-bottom:0;">
+          <label>Remark</label><input type="text" name="remark" id="esRmk" placeholder="Sale description..." required />
+        </div>
+      </form>
+    </div>
+    <div class="ep-foot">
+      <button onclick="closeEditSale()" class="btn-outline-custom" style="padding:8px 16px;font-size:13px;">Cancel</button>
+      <button onclick="document.getElementById('editSaleForm').submit()" class="btn-primary-custom"
+              style="padding:8px 16px;font-size:13px;background:#7c3aed;border-color:#7c3aed;">
+        <i class="bi bi-check-circle"></i> Save
+      </button>
+    </div>
+  </div>
+</div>
+
 <!-- ── Edit Payment Modal ───────────────────────────── -->
 <div class="ep-overlay" id="editPayModal">
   <div class="ep-box">
@@ -558,6 +604,18 @@ function closeEditPayment() {
 // Close on backdrop click
 document.getElementById('editPayModal').addEventListener('click', function(e) {
   if (e.target === this) closeEditPayment();
+});
+
+function openEditSale(payId, date, amount, remark) {
+  document.getElementById('editSaleForm').action = `/payments/${payId}/edit-sale`;
+  document.getElementById('esDat').value = date;
+  document.getElementById('esAmt').value = amount;
+  document.getElementById('esRmk').value = remark;
+  document.getElementById('editSaleModal').classList.add('open');
+}
+function closeEditSale() { document.getElementById('editSaleModal').classList.remove('open'); }
+document.getElementById('editSaleModal').addEventListener('click', function(e) {
+  if (e.target === this) closeEditSale();
 });
 
 function setLedSize(size, el) {

@@ -1,0 +1,159 @@
+{% extends 'mobile/base_mobile.html' %}
+{% block title %}Rate List{% endblock %}
+{% block page_title %}Rate List{% endblock %}
+
+{% block head %}
+<style>
+.rate-card {
+  background: white;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  margin: 0 14px 10px;
+  overflow: hidden;
+}
+.rate-card-head {
+  padding: 11px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid #f1f5f9;
+  background: #f8fafc;
+}
+.rate-name { font-weight: 800; font-size: 14px; }
+.rate-hsn  { font-size: 11.5px; color: var(--text-muted); margin-top: 2px; }
+.gst-chip  {
+  padding: 3px 9px; border-radius: 99px;
+  font-size: 11px; font-weight: 700;
+  background: #eff6ff; color: #2563eb;
+  white-space: nowrap;
+}
+.rate-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 0;
+}
+.rate-cell {
+  padding: 10px 12px;
+  border-right: 1px solid #f1f5f9;
+  font-size: 12px;
+}
+.rate-cell:last-child { border-right: none; }
+.rate-cell-lbl { color: var(--text-muted); font-size: 10.5px; font-weight: 700; text-transform: uppercase; margin-bottom: 3px; }
+.rate-cell-val { font-weight: 800; font-size: 14px; }
+.stock-badge {
+  display: inline-block;
+  padding: 2px 8px; border-radius: 99px;
+  font-size: 11px; font-weight: 700;
+  margin-top: 3px;
+}
+.stock-ok  { background: #ecfdf5; color: #059669; }
+.stock-low { background: #fef2f2; color: #dc2626; }
+.var-row {
+  padding: 8px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-top: 1px solid #f1f5f9;
+  background: #fafafa;
+}
+.var-name { font-size: 12.5px; color: #475569; }
+</style>
+{% endblock %}
+
+{% block content %}
+
+<!-- Search -->
+<form method="GET" action="{{ url_for('product_rate_list') }}">
+  <div style="padding:14px 14px 10px;display:flex;gap:8px;">
+    <input type="text" name="q" class="m-input" value="{{ q }}"
+           placeholder="Product ya HSN search..." style="flex:1;" />
+    <button type="submit" class="m-icon-btn accent"><i class="bi bi-search"></i></button>
+    {% if q %}
+    <a href="{{ url_for('product_rate_list') }}" class="m-icon-btn"><i class="bi bi-x"></i></a>
+    {% endif %}
+  </div>
+</form>
+
+<!-- Stats -->
+<div style="display:flex;gap:10px;padding:0 14px 12px;">
+  <div style="background:white;border:1px solid var(--border);border-radius:10px;padding:10px 14px;flex:1;text-align:center;">
+    <div style="font-size:11px;color:var(--text-muted);font-weight:700;text-transform:uppercase;">Products</div>
+    <div style="font-size:18px;font-weight:800;color:var(--accent);">{{ products|length }}</div>
+  </div>
+  {% set low_stock = products|selectattr('stock_qty','le', 5)|list|length %}
+  {% if low_stock > 0 %}
+  <div style="background:#fef2f2;border:1px solid #fecaca;border-radius:10px;padding:10px 14px;flex:1;text-align:center;">
+    <div style="font-size:11px;color:#dc2626;font-weight:700;text-transform:uppercase;">Low Stock</div>
+    <div style="font-size:18px;font-weight:800;color:#dc2626;">{{ low_stock }}</div>
+  </div>
+  {% endif %}
+</div>
+
+<div class="m-section-lbl">
+  {% if q %}Results for "{{ q }}"{% else %}All Products{% endif %}
+</div>
+
+{% if products %}
+  {% for p in products %}
+  <div class="rate-card">
+    <div class="rate-card-head">
+      <div>
+        <div class="rate-name">{{ p.name }}</div>
+        <div class="rate-hsn">HSN: {{ p.hsn or '—' }} · {{ p.unit or 'Pcs' }}</div>
+      </div>
+      <span class="gst-chip">GST {{ p.gst_rate or 0 }}%</span>
+    </div>
+
+    <div class="rate-grid">
+      <div class="rate-cell">
+        <div class="rate-cell-lbl">Cost</div>
+        <div class="rate-cell-val" style="color:#64748b;">₹{{ "%.2f"|format(p.rate or 0) }}</div>
+      </div>
+      <div class="rate-cell">
+        <div class="rate-cell-lbl">Retail</div>
+        <div class="rate-cell-val" style="color:#2563eb;">₹{{ "%.2f"|format(p.selling_price or 0) }}</div>
+      </div>
+      <div class="rate-cell">
+        <div class="rate-cell-lbl">Stock</div>
+        <div class="rate-cell-val">{{ p.stock_qty or 0 }}</div>
+        {% set rl = p.reorder_level if p.reorder_level is defined and p.reorder_level else 5 %}
+        {% if (p.stock_qty or 0) <= rl %}
+          <span class="stock-badge stock-low">⚠ Low</span>
+        {% else %}
+          <span class="stock-badge stock-ok">OK</span>
+        {% endif %}
+      </div>
+    </div>
+
+    {% if p.wholesale_price and p.wholesale_price > 0 %}
+    <div style="padding:6px 14px;background:#f8fafc;border-top:1px solid #f1f5f9;font-size:12px;color:var(--text-muted);">
+      Wholesale: <strong style="color:#059669;">₹{{ "%.2f"|format(p.wholesale_price) }}</strong>
+      &nbsp;·&nbsp; MRP (incl. GST): <strong>₹{{ "%.2f"|format(p.price_with_gst or 0) }}</strong>
+    </div>
+    {% endif %}
+
+    {% if p.variations %}
+      {% for v in p.variations %}
+      <div class="var-row">
+        <span class="var-name">↳ {{ v.variation_name }}</span>
+        <div style="text-align:right;font-size:12.5px;">
+          <span style="color:#2563eb;font-weight:700;">₹{{ "%.2f"|format(v.selling_price or 0) }}</span>
+          {% if v.wholesale_price and v.wholesale_price > 0 %}
+          <span style="color:var(--text-muted);margin-left:6px;">W: ₹{{ "%.2f"|format(v.wholesale_price) }}</span>
+          {% endif %}
+          <span style="color:var(--text-muted);margin-left:6px;">Qty: {{ v.stock_qty or 0 }}</span>
+        </div>
+      </div>
+      {% endfor %}
+    {% endif %}
+  </div>
+  {% endfor %}
+{% else %}
+  <div class="m-empty">
+    <i class="bi bi-tag"></i>
+    <p>Koi product nahi mila.</p>
+  </div>
+{% endif %}
+
+<div style="height:20px;"></div>
+{% endblock %}

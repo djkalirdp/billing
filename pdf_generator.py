@@ -719,10 +719,38 @@ def create_ledger_pdf(buyer_details, ledger_data, start_date, end_date,
     style_td_rb = ParagraphStyle('TDB', parent=base['Normal'], fontName=FONT_BOLD, fontSize=9,  alignment=TA_RIGHT)
     style_addr  = ParagraphStyle('A',   parent=base['Normal'], fontName=FONT_REG,  fontSize=9,  alignment=TA_CENTER)
 
-    psize = resolve_pagesize(page_size)
+    # ── Page size + usable width ─────────────────────────────────
+    _ps = (page_size or 'A4').upper()
+    psize = resolve_pagesize(_ps)
+    if _ps == 'A5':
+        usable_w = 12.8 * cm
+        lm = 8*mm
+        fs_scale = 0.82
+    elif _ps == 'A5L':
+        usable_w = 19.0 * cm
+        lm = 8*mm
+        fs_scale = 1.0
+    elif _ps == 'A4L':
+        usable_w = 27.7 * cm
+        lm = 10*mm
+        fs_scale = 1.0
+    else:  # A4
+        usable_w = 19.0 * cm
+        lm = 12*mm
+        fs_scale = 1.0
+
+    # Scale font sizes for A5 portrait
+    if fs_scale < 1.0:
+        style_title = ParagraphStyle('T',   parent=base['Normal'], fontName=FONT_BOLD, fontSize=round(16*fs_scale), alignment=TA_CENTER, spaceAfter=6)
+        style_th    = ParagraphStyle('TH',  parent=base['Normal'], fontName=FONT_BOLD, fontSize=round(8*fs_scale),  alignment=TA_CENTER)
+        style_td    = ParagraphStyle('TD',  parent=base['Normal'], fontName=FONT_REG,  fontSize=round(7*fs_scale),  alignment=TA_CENTER)
+        style_td_l  = ParagraphStyle('TDL', parent=base['Normal'], fontName=FONT_REG,  fontSize=round(7*fs_scale),  alignment=TA_LEFT)
+        style_td_r  = ParagraphStyle('TDR', parent=base['Normal'], fontName=FONT_REG,  fontSize=round(7*fs_scale),  alignment=TA_RIGHT)
+        style_td_rb = ParagraphStyle('TDB', parent=base['Normal'], fontName=FONT_BOLD, fontSize=round(7*fs_scale),  alignment=TA_RIGHT)
+
     doc = _build_doc(buffer, pagesize=psize, margins=dict(
-        leftMargin=12*mm, rightMargin=12*mm,
-        topMargin=12*mm,  bottomMargin=12*mm
+        leftMargin=lm, rightMargin=lm,
+        topMargin=10*mm, bottomMargin=10*mm
     ))
     elements = []
 
@@ -732,21 +760,22 @@ def create_ledger_pdf(buyer_details, ledger_data, start_date, end_date,
         f"{c_info.get('address_line1', '')} {c_info.get('address_line2', '')}",
         style_addr
     ))
-    elements.append(Spacer(1, 0.5*cm))
+    elements.append(Spacer(1, 0.3*cm))
     elements.append(Paragraph(f"<b>{ledger_title.upper()}</b>", style_title))
 
     # ── Party Info Header ─────────────────────────────────────────
     period = f"Period: {start_date} to {end_date}" if start_date else "All Time"
+    _hw = usable_w / 2
     info_data = [
         [Paragraph(f"Party: <b>{buyer_details['name']}</b>", base['Normal']),
          Paragraph(period, base['Normal'])],
         [Paragraph(f"Address: {buyer_details.get('address', '')}", base['Normal']),
          Paragraph(f"GSTIN: {buyer_details.get('gstin', '')}", base['Normal'])],
     ]
-    elements.append(Table(info_data, colWidths=[10*cm, 9*cm]))
-    elements.append(Spacer(1, 0.5*cm))
+    elements.append(Table(info_data, colWidths=[_hw, _hw]))
+    elements.append(Spacer(1, 0.3*cm))
 
-    # ── Ledger Table ──────────────────────────────────────────────
+    # ── Ledger Table — auto-scale columns to usable width ────────
     headers = ['Date', 'Particulars', 'Vch Type', 'Debit', 'Credit', 'Balance']
     table_data = [[Paragraph(h, style_th) for h in headers]]
 
@@ -785,11 +814,11 @@ def create_ledger_pdf(buyer_details, ledger_data, start_date, end_date,
         Paragraph(f"<b>{closing_bal:.2f}</b>",  style_td_rb),
     ])
 
-    t = Table(
-        table_data,
-        colWidths=[2.5*cm, 6.5*cm, 2.5*cm, 2.5*cm, 2.5*cm, 2.5*cm],
-        repeatRows=1
-    )
+    # Auto-scale: date, vch, debit, credit, balance fixed proportions, particulars fills rest
+    _raw = [2.3, 6.0, 2.3, 2.3, 2.3, 2.3]
+    _scale = usable_w / (sum(_raw) * cm)
+    _cw = [w * _scale * cm for w in _raw]
+    t = Table(table_data, colWidths=_cw, repeatRows=1)
     t.setStyle(TableStyle([
         ('GRID',           (0,0), (-1,-1), 0.5, colors.black),
         ('BACKGROUND',     (0,0), (-1,0),  colors.lightgrey),
